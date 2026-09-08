@@ -1,12 +1,12 @@
 {
   "$schema_note": "Machine-readable manifest of SparkX AI MCP official skills. Version fields must stay in sync with each skill's SKILL.md frontmatter (`metadata.version`).",
   "manifest_version": 1,
-  "updated_at": "2026-08-27",
-  "release": "v1.1.1",
+  "updated_at": "2026-09-07",
+  "release": "v1.2.0",
   "skills": [
     {
       "name": "sparkx-query-ads-performance",
-      "version": "1.2.1",
+      "version": "1.3.0",
       "required": true,
       "mcp_tools": ["get_ads_perf"],
       "scopes": ["amazon_sa_performance_data:read"],
@@ -15,7 +15,7 @@
     },
     {
       "name": "sparkx-query-entity-metadata",
-      "version": "1.2.1",
+      "version": "1.3.0",
       "required": true,
       "mcp_tools": ["get_entity_metadata"],
       "scopes": ["amazon_sa_ads_configuration:read"],
@@ -24,7 +24,7 @@
     },
     {
       "name": "sparkx-query-operation-log",
-      "version": "1.2.1",
+      "version": "1.3.0",
       "required": true,
       "mcp_tools": ["get_operation_log"],
       "scopes": ["amazon_sa_ads_logs:read"],
@@ -42,7 +42,7 @@
     },
     {
       "name": "sparkx-edit-ai-group",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "required": true,
       "mcp_tools": ["edit_sd_ai_managed_group", "save_sp_sb_ai_managed_group", "save_sp_sb_ai_group_schedule", "get_ai_group_template"],
       "scopes": ["amazon_sa_managed_group:write"],
@@ -59,8 +59,17 @@
       "description": "Delete an AI managed group and explicitly release or migrate its campaigns."
     },
     {
+      "name": "sparkx-edit-ads",
+      "version": "1.0.0",
+      "required": true,
+      "mcp_tools": ["batch_update_ads"],
+      "scopes": ["amazon_sa_campaign_edit:write"],
+      "path": "sparkx-edit-ads",
+      "description": "Edit live ad entities in bulk via batch_update_ads: campaign daily budget / state / bidding strategy, keyword and target status and bids, promoted products, negative keywords and negative product targets. 18 routes, 9 requiring two-phase confirmation."
+    },
+    {
       "name": "sparkx-weekly-ads-report",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "required": false,
       "mcp_tools": ["get_ads_perf", "get_entity_metadata", "get_operation_log"],
       "scopes": ["amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read"],
@@ -69,7 +78,7 @@
     },
     {
       "name": "sparkx-monthly-ads-report",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "required": false,
       "mcp_tools": ["get_ads_perf", "get_entity_metadata", "get_operation_log"],
       "scopes": ["amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read"],
@@ -78,7 +87,7 @@
     },
     {
       "name": "sparkx-ads-structure-analysis",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "required": false,
       "mcp_tools": ["get_ads_perf", "get_entity_metadata"],
       "scopes": ["amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read"],
@@ -87,7 +96,7 @@
     },
     {
       "name": "sparkx-product-diagnosis",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "required": false,
       "mcp_tools": ["get_ads_perf", "get_entity_metadata", "get_operation_log"],
       "scopes": ["amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read"],

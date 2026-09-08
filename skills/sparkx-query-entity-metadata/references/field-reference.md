@@ -9,12 +9,61 @@
 | `adGroup` | AdsListMetadataProvider | Ad group list |
 | `target` | AdsListMetadataProvider | Targeting list |
 | `productAd` | AdsListMetadataProvider | Product ad list |
+| `keyword` | AdsListMetadataProvider | Keyword list - includes keyword groups and SB themes; see `matchType` |
+| `negativeKeyword` | AdsListMetadataProvider | Negative keyword list, campaign-level and ad-group-level (see `businessType`) |
+| `negativeTarget` | AdsListMetadataProvider | Negative product-target list (negative ASIN / negative brand) |
 | `portfolio` | AdsListMetadataProvider | Portfolio list |
 | `placement` | AdsListMetadataProvider | Placement list |
 | `aiGroup` | AiGroupMetadataProvider | AI managed group list. Response is a **projection of the currently effective config** — see SKILL.md |
 | `aiGroup_schedule` | AiGroupScheduleMetadataProvider | Schedules of **one** managed group — **requires exactly one `profileId` and `filters.aiGroupId` only**, ignores pagination/sorting |
 | `asin` | AsinMetadataProvider | ASIN product info (child ASIN + parent ASIN + product line, nested) |
 | `automationRule` | AutomationRuleMetadataProvider | Enabled rule-type codes/names for given campaign(s) — **requires `amazonCampaignId` in filters; does not return template configuration** |
+
+### `currency` - a per-row field, plus an envelope fallback
+
+A row's **`currency`** field holds that row's store currency. **It is emitted whenever the
+underlying row carries one - it is not conditional on profile count**, so a single-profile
+read can return it too (verified in the `asin` provider, whose row mapping adds it
+unconditionally; the value is *omitted* rather than set to null when absent).
+
+What *is* conditional is the envelope: on a **multi**-profile query `meta.currency` is
+omitted, on a **single**-profile query it holds that store's code.
+
+**So: always prefer the row's own `currency`; fall back to `meta.currency` only when the row
+has none.**
+
+It is not listed in the per-entity tables below because it is not an entity field - treat it
+as always available on multi-profile reads. **`select` does not strip it**: the server re-adds
+`currency` after applying your projection, so you never have to list it. `asin` has behaved
+this way all along.
+**This currency rule covers the AdsList entities and `asin` only.** `aiGroup`,
+`aiGroup_schedule` and `automationRule` come from different providers, carry no currency
+indicator, and their currency semantics have **not** been confirmed - do not infer them, and
+do not assume a row's `profileId` settles the question (`automationRule` does not even return
+one). If a customer needs the currency of an `aiGroup` budget, say it is not established
+rather than guessing.
+
+### Money value types (string vs number - not uniform)
+
+**Money types are not uniform across entities - check the per-entity table.**
+
+- **Decimal strings** such as `"100.00"`: `dailyBudget`, `currentBudget`, `defaultBid`,
+  `targetBid`, `portfolioBudget`, `profileDailyBudgetCap`, and `placement.multiplier` (which
+  is a **percentage ratio, not an amount**).
+- **Numbers**: the `keyword` entity's `keywordBid` and `keywordCurrentBid`. These are the
+  exception - do not assume the string form just because every other money field uses it.
+
+MCP does not coerce either way. Parse the string form before doing arithmetic, and never
+compare those as strings (`"9.00" > "10.00"` is true as text).
+
+Internal ids are numbers (`campaignId`, `adGroupId`, `targetId`, `keywordId`, `portfolioId`,
+`aiGroupId`, `productAdId`); Amazon-side ids and `profileId` are strings - except on the
+`profile` entity itself, where `profileId` comes back as a number.
+
+Dates are inconsistent: campaign dates are strings and may be `YYYYMMDD` or `YYYY-MM-DD` or
+empty; portfolio dates are numbers (`YYYYMMDD`, `0` when unset). Build a date filter in the
+shape a read of that same entity actually returned. `profileUseBudgetCap` can be `null` -
+**null is not `false`**.
 
 ## Fields by Entity
 
@@ -28,15 +77,17 @@
 
 **Every campaign return field is filterable** - per the sparkxads API, for the campaign
 entity the filterable set = **all return fields, no exceptions** (so `aiGroupId`,
-`portfolioId`, `campaignStartDate`/`campaignEndDate`, and the `campaignAi*Date` fields can
-all be used in `filters`, not just the core fields below). The two tables are split for
+`portfolioId` and `campaignStartDate`/`campaignEndDate` can all be used in `filters`, not
+just the core fields below; the `campaignAi*Date` fields are placeholders and not worth
+filtering on). The two tables are split for
 readability only.
 
 **Core fields:**
 
 | Field | Type | Enum |
 |---|---|---|
-| campaignId | int | SparkX AI internal auto-increment campaign ID; use this value for managed-group write-tool `campaignIds` |
+| campaignId | number | Internal auto-increment campaign ID; use this value for managed-group write-tool `campaignIds` and for every write route |
+| profileId | string | Store profile ID. Required alongside the internal ID on every write |
 | amazonCampaignId | string | Amazon campaign ID; use this value to link performance/log data, not as a managed-group write ID |
 | campaignName | string | — |
 | campaignType | string | `sponsoredProducts` / `sponsoredBrands` / `sponsoredDisplay` |
@@ -45,8 +96,8 @@ readability only.
 | targetingType | string | `auto` / `manual` |
 | costType | string | `cpc` / `vcpm` |
 | isAiCreate | int | `1` / `0` |
-| dailyBudget | number | — |
-| currentBudget | number | — |
+| dailyBudget | string | Local-currency **decimal string**, e.g. `"100.00"` |
+| currentBudget | string | Decimal string. **Not the same field the write path adjusts** — budget writes and their previews are based on `dailyBudget` |
 
 **Campaign ID contract:** `campaignId` and `amazonCampaignId` are different identifiers.
 Managed-group create/edit tools accept the internal integer `campaignId`. When starting
@@ -60,15 +111,15 @@ coerce a long Amazon ID into the write field or infer one identifier from the ot
 
 | Field | Type | Enum |
 |---|---|---|
-| campaignStartDate | string (Ymd) | — |
-| campaignEndDate | string (Ymd) | — |
-| portfolioId | string | — |
-| aiGroupId | string | — |
+| campaignStartDate | **see date note below** | Ymd, e.g. `20260101` |
+| campaignEndDate | **see date note below** | Ymd, e.g. `20260131` |
+| portfolioId | number | **This is the AMAZON portfolio ID, not the internal one** — see "Joining campaigns to portfolios" below |
+| aiGroupId | number | — |
 | campaignAiFirstOnDate | string | — |
 | campaignAiLastOnDate | string | — |
 | campaignAiLastOffDate | string | — |
 
-**⚠️ `campaignStartDate`/`campaignEndDate` use `YYYYMMDD` (Ymd) format — e.g. `"20260101"`, not `"2026-01-01"`.** This is different from the `dateStart`/`dateEnd` request parameters on the other two tools, which use `YYYY-MM-DD`. This tool has no `dateStart`/`dateEnd` params of its own — these are just two ordinary campaign config fields that happen to hold dates, in Ymd format.
+**⚠️ Date fields: the `YYYYMMDD` (Ymd) *format* is certain, the JSON *type* is not.** `campaignStartDate` / `campaignEndDate` / `portfolioStartDate` / `portfolioEndDate` are `20260101`-style, never `"2026-01-01"`. But the two sources disagree on whether the value comes back as a **number** or a **string**: the downstream interface contract says number, while an actual TEST response was observed returning a string. **So do not hard-code either type.** If you need to filter on a date field, read one row of that entity first and build the filter value in **the same JSON type the response actually gave you**. If you cannot read first, say the filter may not match rather than presenting an empty result as "none found". (`campaignAiFirstOnDate` / `campaignAiLastOnDate` / `campaignAiLastOffDate` are placeholder fields with no settled type at all - do not filter on them.) This is different from the `dateStart`/`dateEnd` request parameters on the other two tools, which use `YYYY-MM-DD`. This tool has no `dateStart`/`dateEnd` params of its own — these are just two ordinary campaign config fields that happen to hold dates, in Ymd format.
 
 **Filter examples** (each is a standalone example of a `filters` value — not one combined call):
 ```json
@@ -87,7 +138,8 @@ coerce a long Amazon ID into the write field or infer one identifier from the ot
 {"amazonCampaignId": {"in": ["298539385213868"]}}
 ```
 ```json
-{"campaignStartDate": {">=": "20260101", "<=": "20260131"}}
+{"campaignStartDate": {">=": 20260101, "<=": 20260131}}
+// or the quoted form, matching whatever type a read of this entity returns — see the date note above
 ```
 ```json
 {"biddingStrategy": "autoForSales"}
@@ -97,49 +149,197 @@ coerce a long Amazon ID into the write field or infer one identifier from the ot
 
 | Field | Type | Enum |
 |---|---|---|
-| adGroupId | string | — |
-| campaignId | string | — |
+| adGroupId | number | — (internal ID) |
+| amazonAdGroupId | string | Amazon ad group ID — the bridge from `get_ads_perf` / `get_operation_log` back to the internal `adGroupId` |
+| profileId | string | — |
+| campaignType | string | `sponsoredProducts` / `sponsoredBrands` / `sponsoredDisplay` — required on writes |
+| campaignId | number | — (this entity returns no `amazonCampaignId`) |
 | adGroupName | string | — |
 | adGroupState | string | `enabled` / `paused` / `archived` |
-| defaultBid | number | — |
+| defaultBid | string | Local-currency **decimal string**, e.g. `"0.50"` |
 | sdBidOptimization | string | `clicks` / `conversions` / `reach` (SD only) |
 
 ### target
 
 | Field | Type | Enum |
 |---|---|---|
-| targetId | string | — |
-| adGroupId | string | — |
-| campaignId | string | — |
+| targetId | number | — (internal ID) |
+| amazonTargetId | string | Amazon target ID — the bridge from `get_ads_perf` / `get_operation_log` back to the internal `targetId` |
+| profileId | string | — |
+| campaignType | string | `sponsoredProducts` / `sponsoredBrands` / `sponsoredDisplay` |
+| adGroupId | number | — |
+| campaignId | number | — |
 | targetText | string | — |
-| targetMatchType | string | Keyword: `exact`/`phrase`/`broad`. Product: `asinSameAs`/`asinExpandedFrom`/`asinCategorySameAs`. Auto: `queryHighRelMatches`/`queryBroadRelMatches`/`asinSubstituteRelated`/`asinAccessoryRelated`/`similarProduct` |
+| targetMatchType | string | Product: `asinSameAs` / `asinExpandedFrom` / `asinCategorySameAs`. Automatic: `queryHighRelMatches` / `queryBroadRelMatches` / `asinSubstituteRelated` / `asinAccessoryRelated`. Audience / SD expressions: `similarProduct` / `exactProduct` / `relatedProduct` / `audienceSameAs`. **Keyword match types (`exact`/`phrase`/`broad`) are NOT values of this entity** - see the note below |
 | targetState | string | `enabled` / `paused` / `archived` |
-| **targetBid** | number | Current bid — use this for "bid > $X" filters |
+| **targetBid** | string | Current bid, **decimal string** e.g. `"1.20"` — the field to filter on for bid ranges. `>` / `<` are rejected; use `>=` / `<=` |
 
-**⚠️ No documented way to query the current list of negative keywords/ASINs/brands.** None of `targetMatchType`'s enum values above represent a negative-targeting variant, on this tool or on `get_ads_perf`'s equivalent field. `get_operation_log` can tell you *when* a negative target was added/removed (via its `targetTypes` filter values `negativeKeyword`/`negativeAsin`/`negativeBrand`), but that's change history, not a queryable current snapshot. If a customer asks "show me my negative keywords," this is a genuine tool capability gap, not something to work around with a clever filter — say so, don't guess at an undocumented field or match-type value.
+**Keywords and negatives are separate entities - do not look for them here.** None of `targetMatchType`'s enum values represent a keyword or a negative-targeting variant. Use `entity: "keyword"`, `entity: "negativeKeyword"` or `entity: "negativeTarget"` instead (documented below). Querying `target` with `targetMatchType in ["exact","phrase","broad"]` returns **zero rows** - keywords are not in this entity.
+
+`get_operation_log` still only tells you *when* a negative was added or removed; the three entities below are the queryable current snapshot.
+
+**Careful with `similarProduct` and its siblings.** `EnumTranslator` gives them display labels like *"Auto-Similar Product" / "自动-相似商品"*, but the data layer classifies `similarProduct` / `exactProduct` / `relatedProduct` / `audienceSameAs` as **audience** expressions (Sponsored Display), not automatic targeting. **A display label containing "Auto-" does not mean the write tool's `targetType=auto`** - `targetType=auto` accepts Sponsored Products only, so these values go to `targetType=product`. Only `queryHighRelMatches`, `queryBroadRelMatches`, `asinAccessoryRelated` and `asinSubstituteRelated` map to `auto`.
 
 ### productAd
 
 | Field | Type | Enum |
 |---|---|---|
-| amazonAdId | string | — |
-| adGroupId | string | — |
-| campaignId | string | — |
+| **productAdId** | number | — (internal id — this is the one write tools need) |
+| amazonAdId | string | — (Amazon-side id, 15-19 digits — not usable for writes) |
+| profileId | string | — |
+| campaignType | string | `sponsoredProducts` / `sponsoredBrands` / `sponsoredDisplay` |
+| adGroupId | number | — |
+| campaignId | number | — |
 | asin | string | — |
 | sku | string | — |
 | productAdState | string | `enabled` / `paused` / `archived` |
+
+### keyword
+
+| Field | Type | Enum |
+|---|---|---|
+| **keywordId** | number | — (internal id) |
+| profileId | string | — |
+| campaignType | string | `sponsoredProducts` / `sponsoredBrands` / `sponsoredDisplay` |
+| amazonKeywordId | string | — (Amazon-side id) |
+| adGroupId | number | — |
+| campaignId | number | — |
+| keywordText | string | — (see the `group` note below) |
+| matchType | string | `exact` / `phrase` / `broad` / `group` / `theme` |
+| keywordState | string | `enabled` / `paused` / `archived` |
+| keywordBid | number | Configured bid — a **number** here, unlike most money fields |
+| **keywordCurrentBid** | number | Currently effective bid (a **number**, unlike most money fields) — use this as the basis for a bid change |
+
+- When `matchType = "group"`, `keywordText` is **not plain text**: it is a JSON string of the
+  form `[{"type":"keywordGroupSameAs","value":"..."}]`. Don't show it raw to a customer and
+  don't substring-match it as a keyword.
+- When `matchType = "theme"` (SB only), `keywordText` is an enum-like value such as
+  `KEYWORDS_RELATED_TO_YOUR_LANDING_PAGES`.
+
+### negativeKeyword
+
+| Field | Type | Enum |
+|---|---|---|
+| **negativeKeywordId** | number | — (internal id) |
+| profileId | string | — |
+| campaignType | string | `sponsoredProducts` / `sponsoredBrands` / `sponsoredDisplay` |
+| **businessType** | string | `campaign` / `adgroup` — note the lowercase `g`, unlike the `adGroup` entity name |
+| tableType | string | `campaign_negative_keyword` / `negative_keyword` — the raw source column `businessType` is derived from |
+| amazonKeywordId | string | — |
+| adGroupId | number | — (meaningless on campaign-level rows) |
+| campaignId | number | — |
+| keywordText | string | — |
+| matchType | string | `negativeExact` / `negativePhrase` |
+| negativeKeywordState | string | `enabled` / `paused` / `archived` |
+
+Campaign-level and ad-group-level negatives live in two different tables, so `businessType`
+is part of the row's identity, not decoration.
+
+### negativeTarget
+
+| Field | Type | Enum |
+|---|---|---|
+| **negativeTargetId** | number | — (internal id) |
+| profileId | string | — |
+| campaignType | string | `sponsoredProducts` / `sponsoredBrands` / `sponsoredDisplay` |
+| amazonTargetId | string | — |
+| adGroupId | number | — |
+| campaignId | number | — |
+| negativeTargetText | string | — (the ASIN, or the brand id) |
+| negativeTargetType | string | `asinSameAs` / `asinExpandedFrom` / `asinBrandSameAs` |
+| negativeTargetState | string | `enabled` / `paused` / `archived` |
+
+There is no `matchType` and no `businessType` on this entity. `negativeTargetState` (this
+entity's status) is unrelated to `negativeTargetStatus`, which is a managed-group on/off
+setting.
+
+### Filtering and id types on these three entities
+
+- **Every returned field is filterable** on `keyword`, `negativeKeyword` and `negativeTarget`.
+- Internal ids (`keywordId`, `adGroupId`, `campaignId`, ...) come back as **numbers**;
+  `profileId` and the Amazon-side ids (`amazonKeywordId`, `amazonTargetId`) are **strings**.
+  Write tools want the numeric ids as numbers and `profileId` quoted.
+- When reading rows for a write, filter on **that entity's own state field** -
+  `keywordState`, `negativeKeywordState`, `negativeTargetState` (there is no generic `state`,
+  and an unknown filter field is a hard error) - e.g.
+  `{"keywordState": {"in": ["enabled", "paused"]}}`. This surfaces archived rows up front;
+  the write side refuses the whole batch for an archived object, and refuses it again if it
+  cannot verify the state.
+
+### Joining campaigns to portfolios
+
+`portfolioId` means **different things on different entities**, and joining them naively
+matches an unrelated row or nothing at all, with no error:
+
+- `campaign.portfolioId` = the **Amazon** portfolio ID
+- `portfolio.portfolioId` = the **internal** ID; its Amazon ID is `portfolio.amazonPortfolioId`
+
+**Correct join:** `campaign.portfolioId` -> `portfolio.amazonPortfolioId`, **and constrain both
+queries to the same `profileId`** (Amazon IDs are only unique within a store).
+
+**The two sides also have different JSON types.** `campaign.portfolioId` comes back as a
+**number** while `portfolio.amazonPortfolioId` comes back as a **string**, even though they
+hold the same id. Convert before comparing - matching `123` against `"123"` fails silently.
+(The "Amazon ids are returned as strings" rule is applied by field *name*, and this field is
+not named `amazon*`, so it escapes it.)
+
+### Field-name traps across these entities
+
+- The match column is `matchType` on `keyword` / `negativeKeyword`, but **`targetMatchType`**
+  on `target`. `negativeTarget` uses `negativeTargetType`. A wrong name fails the downstream
+  field whitelist, so it errors rather than silently returning nothing — but it does fail.
+- Each of these entities has its own state column name (`keywordState`,
+  `negativeKeywordState`, `negativeTargetState`) — there is no generic `state`.
+
+### Performance data lives under a different entity
+
+These three entities are **metadata only**. `get_ads_perf` does not accept `keyword`,
+`negativeKeyword` or `negativeTarget` as a `factEntity`:
+
+- **Keyword performance** -> `get_ads_perf(factEntity="target", queryType="keyword")`. In the
+  performance tool keywords sit under `target`; in *this* tool they do not (`target` returns
+  zero rows for `exact`/`phrase`/`broad`). The two tools split the same objects differently -
+  do not carry one tool's entity layout into the other.
+- **Keyword x placement, hourly** -> `factEntity="keywordPlacement"` (AMS, SP only, max 7-day
+  span).
+- **Negative keywords and negative targets have no performance data at all**, and that is
+  inherent rather than a gap: a negative blocks traffic, it never serves. What you *can* do is
+  list the current negatives here and compare them against wasteful search terms from
+  `get_ads_perf(factEntity="searchTerm")`.
+
+### If these ids are headed for a write
+
+An internal id **does not uniquely identify a row on its own.** Several of these entities are
+stored across multiple physical tables with independent id spaces, and the write path also
+needs the store and the ad type for routing and authorization. So carry the whole set:
+
+| Entity | Fields a write needs alongside the id |
+|---|---|
+| `campaign` | internal `campaignId` + `profileId` + `campaignType` |
+| `adGroup` | internal `adGroupId` + `profileId` + `campaignType` |
+| `keyword` | `keywordId` + `profileId` + `campaignType` + **`matchType`** |
+| `negativeKeyword` | `negativeKeywordId` + `profileId` + `campaignType` + **`businessType`** |
+| `negativeTarget` | `negativeTargetId` + `profileId` + `campaignType` |
+| `target`, `productAd` | internal id + `profileId` + `campaignType` |
+
+The bold fields select the physical table; the rest route the call and scope authorization.
+
+So when you read rows that a write will act on, **return the discriminator fields together
+with the id, and pass them through verbatim** — don't normalise the case and don't infer
+them. See the `sparkx-edit-ads` skill.
 
 ### portfolio
 
 | Field | Type | Enum |
 |---|---|---|
-| portfolioId | string | — |
+| portfolioId | number | — **internal** portfolio ID |
+| amazonPortfolioId | string | Amazon portfolio ID — this is what `campaign.portfolioId` holds |
 | portfolioName | string | — |
 | portfolioState | string | `enabled` / `paused` / `archived` |
 | portfolioServingStatus | string | `IN_BUDGET` / `OUT_OF_BUDGET` / `PORTFOLIO_ENDED` |
-| portfolioStartDate | string | — |
-| portfolioEndDate | string | — |
-| **portfolioBudget** | number | Budget amount — use this for "which portfolios have a budget set" (filter `{"portfolioBudget": {">": 0}}`) |
+| portfolioStartDate | **see date note below** | Ymd |
+| portfolioEndDate | **see date note below** | Ymd |
+| **portfolioBudget** | string | Budget amount as a decimal string, e.g. `"20.00"`. **`{">": 0}` is rejected** — strict comparison is not supported. To find "has a budget set", filter `{">=": 0}` and drop the rows equal to 0 yourself |
 | portfolioBudgetType | string | `dateRange` / `monthlyRecurring` |
 
 ### placement
@@ -148,9 +348,12 @@ One row per campaign × placement combination.
 
 | Field | Type | Enum |
 |---|---|---|
-| campaignId | string | — |
+| campaignId | number | — internal campaign ID |
+| amazonCampaignId | string | Amazon campaign ID |
+| profileId | string | returned, but **not filterable** |
+| campaignType | string | returned, but **not filterable** |
 | placement | string | `topOfSearch` / `productPage` / `restOfSearch` |
-| multiplier | number | Bid adjustment % |
+| multiplier | string | Bid-adjustment **percentage** as a decimal string, e.g. `"1.00"` — **it is a ratio, not a money amount** |
 
 ### aiGroup (AI Managed Group)
 
@@ -303,8 +506,8 @@ Single query returns **child ASIN + parent ASIN + product line info nested toget
 
 | Scenario | Outer `currency` | Per-row `currency` field | Notes |
 |---|---|---|---|
-| Single profile | Local currency code | none | `asinPrice`/`parentAsinPrice` in local currency |
-| Multi profile | **not present** | **each row carries a `currency` field** | Product pricing is not FX-converted; each row's currency is identified individually |
+| Single profile | Local currency code | **may also be present** | `asinPrice`/`parentAsinPrice` in local currency |
+| Multi profile | **not present** | present **only when the row has one** (key omitted, not `null`) | Product pricing is not FX-converted. Same rule as the AdsList entities, except those always emit the key and may set it to `null` |
 
 Multi-profile example:
 ```json
@@ -317,7 +520,7 @@ Multi-profile example:
   ]
 }
 ```
-This is the one entity where multi-profile does NOT mean USD — check each row's `currency` field individually.
+Multi-profile does not mean USD here — check each row's `currency` field individually. `asin` was the first entity to behave this way; every AdsList entity now does.
 
 **Filterable fields**:
 

@@ -250,10 +250,11 @@ Amount fields carry a `currency` indicator, but the exact mechanism differs by t
 
 | Entity | Scenario | Outer `currency` | Per-row `currency` field | Notes |
 |---|---|---|---|---|
-| campaign/adGroup/portfolio/etc | Single profile | Local currency code | none | `dailyBudget` etc in local currency |
-| campaign/adGroup/portfolio/etc | Multi profile | `"USD"` | none | Amount fields pre-converted to USD by backend |
-| **asin** | Single profile | Local currency code | none | `asinPrice`/`parentAsinPrice` in local currency |
-| **asin** | Multi profile | **not present** | **each row carries a `currency` field** | Product pricing is not FX-converted; each row's currency is identified individually |
+| campaign/adGroup/portfolio/etc | Single profile | Local currency code | **may also be present** | `dailyBudget` etc in local currency |
+| campaign/adGroup/portfolio/etc | any | single: that store's code; multi: **not present** | **always present**, value may be `null` if the profile currency could not be resolved | Config amounts stay in each store's own currency — **not** FX-converted. A `null` here also raises a `meta.hint`; never fall back to USD |
+| **asin** | Single profile | Local currency code | **may also be present** | `asinPrice`/`parentAsinPrice` in local currency — the row field is emitted whenever the underlying row has one, regardless of profile count |
+| **asin** | Multi profile | **not present** | present **only when the row has one** — the key is omitted rather than set to `null` | Same rule; `asin` was the first entity to work this way. Note the difference from AdsList above, where the key is always present and may be `null` |
+| aiGroup / aiGroup_schedule / automationRule | any | **not present** | **none** | Other providers, no currency handling. Currency semantics for these are **not established** — do not infer them (`automationRule` returns no `profileId` at all) |
 
 `asin` multi-profile example:
 ```json
@@ -267,7 +268,7 @@ Amount fields carry a `currency` indicator, but the exact mechanism differs by t
 }
 ```
 
-**Rule of thumb**: outer `currency` present → all rows share that currency. Outer `currency` absent → check each row's own `currency` field.
+**Rule of thumb**: **prefer a row's own `currency` whenever it is present** — it is emitted independently of profile count. Fall back to the outer `currency` only when the row has none. Outer present → all rows share it; outer absent **and** row absent → currency is undetermined, see the handling rule in the skill.
 
 ### get_operation_log
 
@@ -360,7 +361,7 @@ These are semantic mappings the agent should apply automatically when translatin
 | User says | Inferred filter (ads_perf form) |
 |---|---|
 | AI-managed / AI ads | `{"aiGroup.aiStatus_": 1}` |
-| Ads without AI enabled | `{"OR": [{"aiGroup.aiStatus_": 0}, {"aiGroup.aiStatus_": 2}]}` |
+| Ads without AI enabled | `{"OR": [{"aiGroup.aiStatus_": 0}, {"aiGroup.aiStatus_": 2}]}` — **`OR` works on `get_ads_perf` only**; `get_entity_metadata` has no logical nodes, use `{"aiStatus": [0, 2]}` there |
 | Active / running ads | `{"campaign.campaignState_": "enabled"}` |
 | Paused keywords | `{"target.targetState_": "paused"}` |
 | "By portfolio" analysis | add `{"portfolio.portfolioId_": {">": 0}}` (exclude campaigns with no portfolio) |
@@ -403,7 +404,7 @@ See the dedicated Period-over-Period and Top Movers example for the full procedu
 ## Common Pitfalls
 
 - **`like` wildcard handling**: any `%` you include in a `like` pattern is stripped and replaced with an automatic leading+trailing `%` (case-insensitive substring match). Writing `{"like": "%test%"}` and `{"like": "test"}` behave the same — always effectively "contains", not prefix/suffix match.
-- **Multi-profile amounts are USD** (except `asin.asinPrice_`/`asin` entity pricing, which stays local — see Currency Rules) — when you report numbers from a multi-profile `get_ads_perf`/`get_entity_metadata` call, say "in USD" explicitly so the user doesn't assume local currency.
+- **Multi-profile `get_ads_perf` metrics are USD** (except `asin.asinPrice_`, which stays local). **`get_entity_metadata` is the opposite** — its config amounts stay in each store's currency and every row carries its own `currency`; see Currency Rules. When reporting a multi-profile **`get_ads_perf`** figure, say "in USD" explicitly so the user doesn't assume local currency. When reporting **`get_entity_metadata`** amounts, present each row with its own `currency` and **never label the combined result as USD** — group by currency, or convert explicitly and say so.
 - **Multi-profile rows need store attribution** — see Multi-Profile Row Attribution above; don't merge same-named campaigns across stores without labeling which store each row belongs to.
 - **`get_operation_log` pagination depends on `entities`**: a single non-`aiGroup` entity paginates for real (loop `page` until `hasNextPage=false`); multi-entity or `aiGroup`-only is limit-only. In limit-only mode with `truncated=true`, first prefer steering the user to a single entity (real pagination), otherwise split into non-overlapping date sub-windows until each returns `truncated=false`; if a single day alone is still truncated, say so rather than reporting a partial count as complete.
 - **Query-param dates (`dateStart`/`dateEnd`) are `YYYY-MM-DD`; data-field dates (`date`, `campaignStartDate`, `campaignEndDate`) are `YYYYMMDD`** — see Date Format above. These are NOT interchangeable.

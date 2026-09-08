@@ -7,7 +7,7 @@ description: >-
   Not for monthly/quarterly reports (use sparkx-monthly-ads-report / quarterly-ads-report, not yet built),
   nor for deep-dive analysis on a specific question (use the relevant analysis skill instead).
 metadata:
-  version: 1.0.2
+  version: 1.0.3
 ---
 
 # Weekly Ads Report

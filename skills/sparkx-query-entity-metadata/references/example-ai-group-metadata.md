@@ -18,10 +18,8 @@ List currently-running AI managed groups.
   "profileIds": [4404871489220462],
   "entity": "aiGroup",
   "filters": {
-    "AND": [
-      {"aiGroupName": {"like": "%growth%"}},
-      {"aiStatus": 1}
-    ]
+    "aiGroupName": {"like": "%growth%"},
+    "aiStatus": 1
   },
   "orderBy": [{"field": "aiGroupName", "direction": "ASC"}],
   "userContext": "AI groups matching 'growth'"
@@ -91,3 +89,7 @@ store currency rather than placing them in this percentage matrix.
 
 Do not add `(aiActionSettings)`, `(aiAutomation)`, raw status fields, or `Rule 17` unless the user
 explicitly asks for technical details.
+
+> `filters` on this tool is a **flat field map** - multiple fields are implicitly ANDed.
+> There are no `AND` / `OR` nodes; an `AND` key would be sent downstream as a field name
+> and rejected.

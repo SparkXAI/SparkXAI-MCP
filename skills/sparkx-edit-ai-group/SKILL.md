@@ -9,7 +9,7 @@ description: >-
   save_sp_sb_ai_managed_group (edit mode). Not for creating a group (use sparkx-create-ai-group)
   or deleting one (use sparkx-delete-ai-group).
 metadata:
-  version: 1.1.1
+  version: 1.1.2
 ---
 
 # Edit AI Managed Group
@@ -61,8 +61,11 @@ one, and whether it's a **target value** or an **increase**:
   daily budgets. Editing it **proportionally rescales every enabled campaign's daily
   budget** to the new total (`totalBudget` / `totalDailyBudget` on read reflect this sum).
 - **单个 campaign 的日预算 / a campaign's daily budget** - campaign-level, and
-  **cannot be modified through the managed-group tools** (tell the user to use the platform
-  / campaign edit).
+  **cannot be modified through the managed-group tools**. It *can* be changed with the
+  `sparkx-edit-ads` skill (`batch_update_ads`, `entity=campaign` +
+  `action=updateBudget`); route the user there rather than telling them to use the platform
+  UI. Warn them that editing this group's **total** budget afterwards rescales every enabled
+  campaign's daily budget proportionally, which would overwrite that change.
 - **按表现调预算 / performance (dynamic) budget** (`DYNAMIC_BUDGET`) - the value is an
   **increase cap on top of the current budget, NOT a target** (fixed `+$num` or `+num%`;
   e.g. $100 with 20 -> up to $120). **Its scope depends on 预算重新分配**: OFF = per enabled

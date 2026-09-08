@@ -288,13 +288,6 @@ All are `0`/`1` except `targetPausedAddStatus` and `targetHarvestStatus` which a
 | `0` | Active | 正常 | 有効 |
 | `1` | Deleted | 已删除 | 削除済み |
 
-## isAiCreate (`campaign.isAiCreate_`)
-
-| API value | EN | ZH | JA |
-|---|---|---|---|
-| `0` | Not AI Created | 非AI创建 | AI未作成 |
-| `1` | AI Created | AI创建 | AI作成 |
-
 ## profileUseBudgetCap (`profile.profileUseBudgetCap_`)
 
 | API value | EN | ZH | JA |

@@ -7,7 +7,7 @@ description: >-
   budget adjustment, AI auto-adjustment, pause/enable records, operation audit,
   modification timeline, ad adjustment log
 metadata:
-  version: 1.2.1
+  version: 1.3.0
 ---
 
 # Query Operation Log Skill
@@ -78,7 +78,7 @@ See the Tool Selection Decision Tree above if the user's ask might belong to `ge
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| profileIds | array[long] | **Yes** | — | Profile IDs from `get_user_authorized_context.profileIds`. Intersected with token's authorized set |
+| profileIds | array[long] | **Yes** | — | Profile IDs from `get_user_authorized_context` -> `profiles[].profileId`. **All must be authorized** — one unauthorized value fails the whole call; there is no silent intersection |
 | dateStart | string | **Yes** | — | Start date `YYYY-MM-DD`. Max span vs `dateEnd` is 90 inclusive calendar days (see platform-notes.md for the precise off-by-one-safe definition); cannot be more than 15 months before today |
 | dateEnd | string | **Yes** | — | End date `YYYY-MM-DD` |
 | userContext | string | **Yes** | — | User's original query + reason, max 100 chars |
@@ -105,37 +105,47 @@ See the Tool Selection Decision Tree above if the user's ask might belong to `ge
 {
   "isError": false,
   "toolName": "get_operation_log",
-  "rows": [
-    {
-      "entity": "campaign",
-      "entityName": "Brand-SP-Auto-US",
-      "amazonEntityId": 298539385213868,
-      "entityId": 298539385213868,
-      "operationType": "DailyBudget Increased",
-      "profileId": 4404871489220462,
-      "aiGroupName": "Growth-Group-1",
-      "amazonCampaignId": 298539385213868,
-      "campaignName": "Brand-SP-Auto-US",
-      "campaignType": "sponsoredProducts",
-      "amazonAdGroupId": null,
-      "adGroupName": null,
-      "changeField": "dailyBudget",
-      "previousValue": "50.0",
-      "newValue": "65.0",
-      "countryCode": "US",
-      "currencyCode": "USD",
-      "createdDate": "2024-06-15 14:30:00",
-      "changedBy": "ai"
-    }
-  ],
-  "rowCount": 1,
-  "limit": 100,
-  "truncated": false,
-  "effectiveProfileIds": [4404871489220462]
+  "data": {
+    "rows": [
+      {
+        "entity": "campaign",
+        "entityName": "Brand-SP-Auto-US",
+        "amazonEntityId": 298539385213868,
+        "entityId": 298539385213868,
+        "operationType": "DailyBudget Increased",
+        "profileId": 4404871489220462,
+        "aiGroupName": "Growth-Group-1",
+        "amazonCampaignId": 298539385213868,
+        "campaignName": "Brand-SP-Auto-US",
+        "campaignType": "sponsoredProducts",
+        "amazonAdGroupId": null,
+        "adGroupName": null,
+        "changeField": "dailyBudget",
+        "previousValue": "50.0",
+        "newValue": "65.0",
+        "countryCode": "US",
+        "currencyCode": "USD",
+        "createdDate": "2024-06-15 14:30:00",
+        "changedBy": "ai"
+      }
+    ],
+    "rowCount": 1
+  },
+  "meta": {
+    "limit": 100,
+    "truncated": false,
+    "effectiveProfileIds": [4404871489220462]
+  },
+  "requestId": "a1b2c3d4e5f6"
 }
 ```
 
-The pagination fields differ by mode: **Mode A (real pagination)** returns `page`, `pageSize`, `hasNextPage`; **Mode B (limit-only)** returns `limit`, `truncated` (as shown above).
+**Everything is nested.** `rows` and `rowCount` live under **`data`**; pagination, currency and
+hints live under **`meta`**. Only `isError`, `toolName` and `requestId` are top level. Reading
+`response.rows` returns nothing - it is `response.data.rows`. `meta` keys are **omitted when
+they do not apply** (not set to null), and `meta` itself is omitted when entirely empty.
+
+The pagination fields differ by mode, and they all live under **`meta`**: **Mode A (real pagination)** gives `meta.page`, `meta.pageSize`, `meta.hasNextPage`; **Mode B (limit-only)** gives `meta.limit`, `meta.truncated` (as shown above). Rows are always `data.rows` and `data.rowCount`.
 
 ## ⚠️ `createdDate` Timezone (depends on entity + profileIds count)
 
@@ -168,18 +178,18 @@ The MCP layer does no conversion; this is how the log data itself is returned.
 
 | Field | Type | Description |
 |---|---|---|
-| `isError` | boolean | Whether the call errored — check this before reading `rows` |
-| `toolName` | string | Tool name |
-| `rows` | array[ChangeLogVO] | Log entries, time-descending |
-| `rowCount` | int | Number of rows returned on this page/call |
-| `page` / `pageSize` | int | **Mode A only.** Current page and page size |
-| `hasNextPage` | boolean | **Mode A only.** `true` → fetch `page+1` to continue; loop until `false` for the complete set. (Semantically equivalent to Mode B's `truncated`) |
-| `limit` | int | **Mode B only.** The `pageSize` cap actually applied |
-| `truncated` | boolean | **Mode B only. `true` means more matched than `limit` could return.** You cannot page — steer the user to a single entity (→ Mode A), else split the date range into non-overlapping sub-windows, else add filters as a last resort (flagging the result as partial) |
-| `hint` | string | Guidance message, present when `truncated=true` |
-| `effectiveProfileIds` | array[long] | Profile IDs the query ran against — an echo of your request (unauthorized IDs fail the call outright) |
-| `requestId` | string | Trace ID — quote it when reporting a failure to the user. May be absent locally |
-| `currency` | string | Optional roll-up of the rows' currencies: a single code if all rows agree, the literal **`"mixed"`** if they don't, absent if no row carries one. **`"mixed"` is not a currency** — fall back to each row's `currencyCode`, and never sum or format amounts across a mixed result |
+| `isError` | boolean | Top level. Whether the call errored — check this before reading `rows` |
+| `toolName` | string | Top level |
+| `data.rows` | array[ChangeLogVO] | Log entries, time-descending |
+| `data.rowCount` | int | Number of rows returned on this page/call |
+| `meta.page` / `meta.pageSize` | int | **Mode A only.** Current page and page size |
+| `meta.hasNextPage` | boolean | **Mode A only.** `true` → fetch `page+1` to continue; loop until `false` for the complete set. (Semantically equivalent to Mode B's `truncated`) |
+| `meta.limit` | int | **Mode B only.** The `pageSize` cap actually applied |
+| `meta.truncated` | boolean | **Mode B only. `true` means more matched than `limit` could return.** You cannot page — steer the user to a single entity (→ Mode A), else split the date range into non-overlapping sub-windows, else add filters as a last resort (flagging the result as partial) |
+| `meta.hint` | string | Guidance message, present when `truncated=true` |
+| `meta.effectiveProfileIds` | array[long] | Profile IDs the query ran against — an echo of your request (unauthorized IDs fail the call outright) |
+| `requestId` | string | **Top level.** Trace ID — quote it when reporting a failure to the user. May be absent locally |
+| `meta.currency` | string | Optional roll-up of the rows' currencies: a single code if all rows agree, the literal **`"mixed"`** if they don't, absent if no row carries one. **`"mixed"` is not a currency** — fall back to each row's `currencyCode`, and never sum or format amounts across a mixed result |
 
 On error, the response instead follows the shared error envelope described in Platform-Wide Rules above (all errors use a single top-level `errorType`, tool and pipeline alike, e.g. `rate_limited`).
 

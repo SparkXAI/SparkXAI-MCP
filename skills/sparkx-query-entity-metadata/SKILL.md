@@ -8,7 +8,7 @@ description: >-
   which ads, enabled/paused status, budget settings, bidding strategy, automation rules,
   managed group schedule, flight, seasonal plan, rule mode config, RBA rule conditions
 metadata:
-  version: 1.2.1
+  version: 1.3.0
 ---
 
 # Query Entity Metadata Skill
@@ -37,7 +37,9 @@ Use this tool when the user needs any of the following:
 - Search entities by condition (name fuzzy match, status filter, bid/budget threshold filter)
 - Count entities (e.g. how many campaigns, how many portfolios have a budget)
 
-**⚠️ Counting entities requires paging through all results, not just reading page 1's `rowCount`.** `rowCount` is the number of rows on the *current page only* — it is not a total count. To answer "how many X are there", loop `page` (incrementing each call) while `hasNextPage` is `true`, summing each page's `rowCount` as you go; the running total once `hasNextPage` is `false` is the real count. Consider raising `pageSize` to the max (500) first to reduce the number of round trips. Do not report a page-1 `rowCount` as if it were the full answer.
+**✅ To count matching rows, read `meta.total` - do not page.** `total` is the exact number of rows matching your filters, independent of `pageSize`. `data.rowCount` is only the current page's length and is never a total.
+
+`total` is **omitted** when the downstream cannot supply one (notably `asin`, and `aiGroup` when its total is missing). In that case say the count is not available rather than summing pages, or narrow `filters` until everything fits one page (`pageSize` max 500) and use `rowCount` for that filtered set. Entities that suppress pagination (`automationRule`, `aiGroup_schedule`) return every requested row and carry no `total` / `page` / `hasNextPage` at all.
 
 **Note**: This tool does NOT involve time range or performance metrics. For spend, clicks, ACOS etc, use `get_ads_perf`.
 
@@ -66,12 +68,12 @@ Unlike `get_ads_perf` (which infers tables from `select`), `get_entity_metadata`
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| profileIds | array[long] | **Yes** | — | Profile IDs from `get_user_authorized_context.profileIds`. **All must be authorized**; `aiGroup_schedule` needs exactly one |
-| entity | string | **Yes** | — | Entity type to query. Enum: `profile` / `campaign` / `adGroup` / `target` / `productAd` / `portfolio` / `placement` / `aiGroup` / `aiGroup_schedule` / `asin` / `automationRule`. Note: productLine info is nested inside `asin` entity results, not a separate `entity` value |
+| profileIds | array[long] | **Yes** | — | Profile IDs from `get_user_authorized_context` -> `profiles[].profileId`. **All must be authorized**; `aiGroup_schedule` needs exactly one |
+| entity | string | **Yes** | — | Entity type to query. Enum: `profile` / `campaign` / `adGroup` / `target` / `keyword` / `negativeKeyword` / `negativeTarget` / `productAd` / `portfolio` / `placement` / `aiGroup` / `aiGroup_schedule` / `asin` / `automationRule`. Note: productLine info is nested inside `asin` entity results, not a separate `entity` value |
 | userContext | string | **Yes** | — | User's original query + reason, max 100 chars |
 | filters | object | No | {} | Filter conditions. Field names are **camelCase**, no `entity.` prefix, no `_` suffix (e.g. `campaignState`, not `campaign.campaignState_`) |
 | orderBy | array[object] | No | [] | `[{"field": "fieldName", "direction": "DESC"}]` |
-| select | array[string] | No | all fields | Return **only** these top-level fields (no nested paths), in the given order. Unknown fields are ignored (reported via `meta.hint`). Does not affect pagination. See "Trimming fields with `select`" below |
+| select | array[string] | No | all fields | Return **only** these top-level fields (no nested paths), in the given order — **plus `currency`, which is always kept when the row has one**. Unknown fields are ignored (reported via `meta.hint`). Does not affect pagination. See "Trimming fields with `select`" below |
 | page | int | No | 1 | Page number (1-based). **`page` ≤ 0 is an error**, not a fallback to 1. Ignored for `automationRule` and `aiGroup_schedule` |
 | pageSize | int | No | 100 | Rows per page, max 500. **Out of range (≤0 or >500) is an error**, not clamped — floor any computed value at 1 |
 
@@ -83,6 +85,8 @@ When you only need a few fields, pass `select` to return just those — it notic
 - **Top-level fields only** — nested paths are not supported.
 - Output order follows `select`; fields absent from a row are simply omitted; unknown field names are ignored and surfaced in `meta.hint` (with the first row's available fields).
 - `select` **does not affect pagination** (`page`/`pageSize`/`hasNextPage` behave the same).
+- ✅ **`currency` is the one field `select` never drops.** On a multi-profile read the server re-adds each row's `currency` after applying your projection, so you cannot accidentally strip the only thing that makes the amounts interpretable.
+- ⚠️ **`profileId` is NOT preserved that way — list it yourself.** On any multi-profile query with `select`, always include `profileId`; without it two stores on the same currency produce rows you cannot tell apart, and you lose the only handle for attributing a row back to a store.
 - ⚠️ **The `{field}Text` companion fields are NOT auto-included under `select`.** `select` is a strict projection: only the fields you list come back. If you still need the human-readable enum label (or will translate enums), you **must list both** the field and its `Text` companion, e.g. `["campaignState", "campaignStateText"]`. Selecting only `campaignState` returns the raw value `"paused"` — you won't get `"Paused"`.
 
 ## ⚠️ Field Naming Differs From `get_ads_perf`
@@ -201,6 +205,116 @@ When a managed group runs an action space in **Rule mode**, its effective config
 - The same raw value can mean different things in different rules (e.g. `amount` under rule 17 is a budget action, under rule 19 it's a placement bid action). Never carry a label across rule types.
 - **This is read-only.** There is no MCP tool that writes RBA rule configuration — see `sparkx-edit-ai-group`. You can show a user their rule setup and explain it; you cannot offer to change it here. Also note the direction constraint: a rule-based group can be switched to AI, but not the reverse.
 
+## AdsList filter and sort rules (enforced - you get an error, not a silent fallback)
+
+**Scope: the AdsList entities only** - `profile`, `campaign`, `adGroup`, `target`, `keyword`,
+`negativeKeyword`, `negativeTarget`, `productAd`, `portfolio`, `placement`. `aiGroup`,
+`aiGroup_schedule`, `asin` and `automationRule` come from other providers and **do not share
+these validations**: `aiGroup`, for instance, silently takes only the first `orderBy` rule and
+treats any direction other than `ASC` as descending, with no whitelist check at all. Do not
+assume an error will catch a bad sort there.
+
+The AdsList service used to fail silently on several of these. **It now rejects them**, so a
+request that would once have quietly returned the wrong rows returns an error instead. Build
+requests to these rules rather than discovering them at runtime.
+
+**1. Paging and `total` (this one applies to every paginated entity).** `meta.total` is the
+exact number of matching rows - use it directly, **do not page through results to count
+anything.** `meta.hasNextPage` is derived from `total` when the downstream supplies one; when
+it does not, `total` is omitted and `hasNextPage` falls back to "this page came back full", so
+a completely full last page can report `hasNextPage: true` and cost one extra empty request.
+`automationRule` and `aiGroup_schedule` are not paginated at all and carry none of these.
+
+**2. Only `>=` and `<=` exist.** `>` and `<` are **rejected**:
+`Strict comparison operators > and < are not supported ... do not substitute them unless
+intended.` If you need a strict bound, use the inclusive one and drop the boundary rows
+yourself.
+
+**3. One operator per field**, except the `>=` + `<=` pair, which may be combined into a
+range. Anything else is rejected (`supports only one operator, except the combined inclusive
+>= and <= range`).
+
+**4. The operator set is exactly** `in`, `notin`, `like`, `!=`, `ne`, `>=`, `<=`. Anything else
+is rejected, including **`eq`** - equality is expressed by assigning the value directly
+(`{"campaignState": "enabled"}`), not by `{"eq": ...}`. An empty operator object and a `null`
+operator value are both rejected too.
+
+**5. `orderBy` is validated.** It throws on: more than one rule (`AdsList supports exactly one
+orderBy rule`), any sort on `placement`, a field that is not sortable for that entity, or a
+direction other than `ASC` / `DESC`. So a bad sort field no longer silently degrades to the
+default order - the call fails, which is what you want before reporting a "Top N".
+
+**6. `like` is always "contains".** Every `%` you write is stripped. A literal `%` cannot be
+matched. **Exact matching is still available** - pass the bare value, which maps to equality:
+`{"campaignName": "Exact Campaign Name"}` (a bare array maps to `in`).
+
+**7. `placement` has no sorting and an unstable page order.** `orderBy` on it is rejected, and
+`meta.hint` says `Page order is not stable.` Never take "Top N placements" from its page order.
+(The earlier gap where Sponsored Brands adjustments were not returned **has been fixed**: SB
+now expands to `topOfSearch` / `home` / `detailPage` / `other`, SP to `topOfSearch` /
+`productPage` / `restOfSearch`. Rows with no adjustment value are still skipped.)
+
+## Money is per store
+
+Monetary fields returned by the **AdsList entities** - campaign daily budget, ad group
+default bid, target/keyword bid, portfolio budget, profile budget cap - are **configuration**
+values set per marketplace, so **they stay in each profile's local currency and are not
+FX-converted.**
+
+(This covers the **AdsList entities and `asin`** only. `aiGroup`, `aiGroup_schedule` and
+`automationRule` come from different providers and their currency semantics are **not
+established** - do not infer them either way.)
+
+- **Always prefer a row's own `currency` when it is present** - it is emitted whenever the
+  underlying row has one, on single- and multi-profile reads alike. `meta.currency` is only a
+  fallback for rows that carry none.
+- **Single profile**: `meta.currency` is that store's currency code and covers rows that have
+  no `currency` of their own.
+- **Multiple profiles**: `meta.currency` is **omitted**, and each row is **expected** to carry
+  its own `currency` - use the row's own value. `meta.hint` says the same thing.
+- **On AdsList entities the key is always present, but the value may be `null`** when the profile or its currency could not be resolved (a `meta.hint` says so too). On `asin` the key is
+  simply omitted in that case. Then look the row's `profileId` up in `get_user_authorized_context`. **If it is
+  still unknown, stop**: do not assume USD, do not compare or total that amount against
+  another row, and do not reuse it as the basis of a write. Say the currency could not be
+  determined.
+- **Never compare or sum amounts across currencies.** Group by currency, or convert
+  explicitly and say that you did. A single "total budget" spanning a EUR store and a USD
+  store is not a number you can state.
+- *Transitional*: an older build labelled the whole multi-profile result `USD` **without**
+  converting these config amounts. If you meet that, ignore the envelope label and attribute
+  per row.
+- **Before writing an amount, re-read it with a single `profileId`.** That is the only form
+  where the value and its currency are unambiguous. This applies to `previousBid`, to a
+  `set to` amount, and to the base of any percentage change.
+
+**`get_ads_perf` is deliberately different.** Its money is *performance* (`Spend`, `Sales`,
+`CPC`, `CPA` ...) and multi-profile queries **do** normalise it to USD so stores can be
+compared. So a `dailyBudget` from this tool and a `Spend` from that one are **not
+comparable across stores** without converting one of them. (Within a single store both are
+that store's currency and compare fine.)
+
+A multi-profile read looks like this - note there is **no `meta.currency`**:
+
+```json
+{
+  "isError": false,
+  "toolName": "get_entity_metadata",
+  "data": {
+    "rows": [
+      {"profileId": "111", "campaignId": 1, "dailyBudget": "100.00", "currency": "USD"},
+      {"profileId": "222", "campaignId": 2, "dailyBudget": "10000", "currency": "JPY"}
+    ],
+    "rowCount": 2
+  },
+  "meta": {
+    "effectiveProfileIds": [111, 222],
+    "hint": "Amounts remain in each profile's local currency. Use each row's currency and do not compare or sum across currencies without explicit conversion."
+  }
+}
+```
+
+$100.00 and ¥10,000 are **not** addable, and the larger number is not the larger budget.
+
 ## Filter Syntax
 
 Field names are **camelCase, no prefix/suffix** (different from `get_ads_perf`!).
@@ -209,17 +323,27 @@ Field names are **camelCase, no prefix/suffix** (different from `get_ads_perf`!)
 {
   "campaignState": "enabled",
   "campaignId": [123, 456],
-  "campaignName": {"like": "%test%"},
-  "AND": [
-    {"campaignState": "enabled"},
-    {"campaignName": {"like": "%brand%"}}
-  ],
-  "OR": [
-    {"campaignState": "enabled"},
-    {"campaignState": "paused"}
-  ]
+  "campaignName": {"like": "%test%"}
 }
 ```
+
+**There are no `AND` / `OR` nodes on this tool.** `filters` is a flat field map: every key is
+treated as a field name, so an `AND` or `OR` key is sent downstream as a field and rejected
+(`filters field not in whitelist`). Consequences:
+
+- **Multiple fields are implicitly ANDed** - just list them, as above.
+- **`OR` across different fields cannot be expressed.** Run one query per branch and merge the
+  rows yourself. **Do not de-duplicate on the internal id alone** - it is not unique across
+  stores, ad types or the physical tables behind some entities. De-duplicate using **that
+  entity's documented identity fields**. For entities that have an internal id, use at least
+  `profileId` + that internal id, adding `campaignType` and the entity's own discriminator
+  (`matchType`, `businessType`) where the entity returns them. Exceptions:
+  - `profile` - identity is `profileId` (no internal id of its own)
+  - `asin` - `profileId` + `asin` + `sku` (no internal id; one ASIN can have several SKUs)
+  - `placement` - `profileId` + `campaignId` + `placement`
+  - `automationRule` - `amazonCampaignId` (it returns no `profileId`)
+- `OR` over *one* field's values is just `in`: `{"campaignState": ["enabled", "paused"]}`.
+- (`get_ads_perf` *does* support `AND` / `OR` nodes. Do not carry its filter shape over here.)
 
 **Supported operators**:
 
@@ -230,8 +354,8 @@ Field names are **camelCase, no prefix/suffix** (different from `get_ads_perf`!)
 | `like` | Fuzzy match | like (case-insensitive) | `{"campaignName": {"like": "%test%"}}` |
 | `in` | In list | in | `{"campaignState": {"in": ["enabled", "paused"]}}` |
 | `notin` | Not in list | notin | `{"campaignState": {"notin": ["archived"]}}` |
-| `>=`, `<=` | Range | between | `{"dailyBudget": {">=": 10, "<=": 100}}` |
-| `>`, `<` | Range | between | `{"defaultBid": {">": 0.5, "<": 2}}` |
+| `>=`, `<=` | Range | between | `{"dailyBudget": {">=": 10, "<=": 100}}` — may be combined; this is the **only** legal two-operator combination |
+| `>`, `<` | **Rejected** | — | Strict comparison is not supported; use `>=` / `<=` and drop boundary rows yourself. See "Filter, sort and paging rules" |
 
 **Note on `like`**: any `%` you include is stripped and replaced with an automatic leading+trailing `%` — the match is always "contains" regardless of where you place `%`.
 
@@ -249,7 +373,12 @@ For enum-valued fields, the response **automatically appends a human-readable `{
 }
 ```
 
-Fields that get this treatment: all `*State` fields (campaignState/adGroupState/targetState/portfolioState/productAdState), all `*ServingStatus` fields, `campaignType`, `biddingStrategy`, `targetingType`/`targetMatchType`/`matchType`, `placement`, `costType`/`budgetType`/`portfolioBudgetType`, `aiStatus`/`aiTargetType`/`aiPersonality`, `asinInventoryStatus`/`asinSpEligibilityStatus`/`asinIsDelete`, generic `xxxStatus` (0/1) flags, `countryCode`, `isAiCreate`/`sdBidOptimization`/`profileUseBudgetCap`.
+Fields that get this treatment: all `*State` fields (campaignState/adGroupState/targetState/portfolioState/productAdState/keywordState/negativeKeywordState/negativeTargetState), all `*ServingStatus` fields, `campaignType`, `biddingStrategy`, `targetingType`/`targetMatchType`/`matchType`, `placement`, `costType`/`budgetType`/`portfolioBudgetType`, `aiStatus`/`aiTargetType`/`aiPersonality`, `asinInventoryStatus`/`asinSpEligibilityStatus`/`asinIsDelete`, generic `xxxStatus` (0/1) flags, `countryCode`, `isAiCreate`/`sdBidOptimization`/`profileUseBudgetCap`, `negativeTargetType`.
+
+**Never require a `Text` companion to exist.** `businessType` and `tableType` are *not*
+translated — there is no `businessTypeText`. And the set of `Text` columns for a page is
+decided from the **first row only**: if row 0 happens to omit a key, no row in that page
+gets its `Text` column. Render the values you actually received.
 
 Customer-display exception: for managed-group `aiPersonality`, keep the raw numeric level `1`-`5`
 as the displayed value. Do not substitute its `Text` companion; see the managed-group display guide.
@@ -262,48 +391,61 @@ as the displayed value. Do not substitute its `Text` companion; see the managed-
 {
   "isError": false,
   "toolName": "get_entity_metadata",
-  "rows": [
-    {
-      "campaignId": 826117,
-      "amazonCampaignId": "298539385213868",
-      "campaignName": "Brand-SP-Auto-US",
-      "campaignType": "sponsoredProducts",
-      "campaignState": "enabled",
-      "biddingStrategy": "autoForSales",
-      "targetingType": "auto",
-      "dailyBudget": 50.0,
-      "currentBudget": 50.0,
-      "portfolioId": "12345",
-      "aiGroupId": "501"
-    }
-  ],
-  "rowCount": 1,
-  "page": 1,
-  "pageSize": 100,
-  "hasNextPage": false,
-  "effectiveProfileIds": [4404871489220462],
+  "data": {
+    "rows": [
+      {
+        "campaignId": 826117,
+        "amazonCampaignId": "298539385213868",
+        "campaignName": "Brand-SP-Auto-US",
+        "campaignType": "sponsoredProducts",
+        "campaignState": "enabled",
+        "biddingStrategy": "autoForSales",
+        "targetingType": "auto",
+        "dailyBudget": "50.00",
+        "currentBudget": "0.00",
+        "profileId": "4404871489220462",
+        "portfolioId": 12345,
+        "aiGroupId": 501
+      }
+    ],
+    "rowCount": 1
+  },
+  "meta": {
+    "page": 1,
+    "pageSize": 100,
+    "hasNextPage": false,
+    "effectiveProfileIds": [4404871489220462],
+    "currency": "USD"
+  },
   "requestId": "a1b2c3d4e5f6"
 }
 ```
 
+**Everything is nested.** `rows` and `rowCount` live under **`data`**; pagination, currency and
+hints live under **`meta`**. Only `isError`, `toolName` and `requestId` are top level. Reading
+`response.rows` returns nothing - it is `response.data.rows`. `meta` keys are **omitted when
+they do not apply** (not set to null), and `meta` itself is omitted when entirely empty.
+
 | Field | Type | Description |
 |---|---|---|
-| `isError` | boolean | Whether the call errored — check this before reading `rows` |
-| `toolName` | string | Tool name |
-| `requestId` | string | Trace ID — quote it when reporting a failure to the user. May be absent locally |
-| `rows` | array[object] | Result rows — fields depend on `entity` |
-| `rowCount` | int | Row count on current page |
-| `page` / `pageSize` | int | Pagination state. **Absent** for `aiGroup_schedule` (non-paginated) |
-| `hasNextPage` | boolean | Whether more pages exist. **Absent** for `aiGroup_schedule` |
-| `effectiveProfileIds` | array[long] | Profile IDs the query ran against — an echo of your request (unauthorized IDs fail the call outright) |
-| `meta.hint` | string | Present when something was adjusted silently, e.g. `Unknown select fields ignored: [...]` — read it |
+| `isError` | boolean | Top level. Whether the call errored — check this before reading rows |
+| `toolName` | string | Top level |
+| `requestId` | string | **Top level.** Trace ID — quote it when reporting a failure to the user. May be absent locally |
+| `data.rows` | array[object] | Result rows — fields depend on `entity` |
+| `data.rowCount` | int | Row count **on the current page**, never a total |
+| `meta.page` / `meta.pageSize` | int | Pagination state, echoing your request (they echo it even on a zero-row response). **Absent** for `aiGroup_schedule` and `automationRule`, which are non-paginated |
+| `meta.total` | int | **Exact** number of matching rows - use this to count, never page for it. **Omitted** when the downstream supplies none (`asin`; `aiGroup` when unknown) and on non-paginated entities |
+| `meta.hasNextPage` | boolean | Whether more pages exist. **Absent** for the non-paginated entities |
+| `meta.effectiveProfileIds` | array[long] | Profile IDs the query ran against — an echo of your request (unauthorized IDs fail the call outright), minus duplicates |
+| `meta.currency` | string | **Single**-profile query only — that store's resolved currency code. **Omitted on a multi-profile query** (and whenever a row's currency is unresolved); use each row's own `currency`. See "Money is per store" |
+| `meta.hint` | string | Read it. May contain **several sentences joined together** - e.g. the multi-profile currency notice, `Page order is not stable.` for `placement`, an unresolved-currency warning, and `Unknown select fields ignored: [...]` |
 
 On error, the response instead follows the shared error envelope described in Platform-Wide Rules above (all errors use a single top-level `errorType`, tool and pipeline alike). A missing `entity` param surfaces as `errorType: invalid_params`.
 
 ## Notes
 
 - `entity` is **required** — this is the #1 cause of failed calls. Do not call this tool without it. Enum includes `aiGroup_schedule` (managed-group schedules)
-- Each page returns up to `pageSize` rows (max 500); use `page` for pagination and check `hasNextPage`. Exceptions: `automationRule` and `aiGroup_schedule` ignore pagination entirely. An out-of-range `pageSize`/`page` is an **error**, not clamped
+- Each page returns up to `pageSize` rows (max 500); use `page` to page and `meta.hasNextPage` to continue. **To count rows use `meta.total`, not paging** — see "Filter, sort and paging rules". Exceptions: `automationRule` and `aiGroup_schedule` ignore pagination entirely. An out-of-range `pageSize`/`page` is an **error**, not clamped
 - `profileIds` is **required**. Always call `get_user_authorized_context` first. If the user doesn't name a store, pass all authorized `profileIds`
 - **Every requested `profileId` must be authorized** — one bad value fails the whole call. `aiGroup_schedule` additionally requires exactly one
 - `aiGroup` results are a **projection of the currently effective config** (trimmed by ad type, then reduced to what's actually in effect) — an absent field means "not in effect", not "unset" and not "write failed". See the dedicated section above
@@ -317,7 +459,7 @@ On error, the response instead follows the shared error envelope described in Pl
 - Product inventory rules are associated at SKU/product level and are not exposed by the campaign-scoped `automationRule` entity or managed-group `aiAutomation`; do not report them as absent based on either query
 - `campaignStartDate`/`campaignEndDate` use `YYYYMMDD` (Ymd) — different from the `YYYY-MM-DD` used by `dateStart`/`dateEnd` on the other two tools
 - For campaign rows, `campaignId` is the internal integer ID used by managed-group write tools; `amazonCampaignId` is the Amazon ID used to link performance/log data. Never substitute one for the other
-- `asin` entity's currency handling is the one exception to "multi-profile = USD" — check each row's `currency` field
+- `asin` was the first entity to carry a per-row `currency`; multi-profile reads now follow that same pattern across entities — always prefer a row's own `currency` over any envelope-level value
 - When querying across multiple `profileIds`, verify whether the entity's rows carry a `profileId` field (e.g. `asin` does); if not, query per-profile or cross-reference before merging
 - `targetAcos` (aiGroup entity) is confirmed ×100/percentage, same as performance `ACOS` — don't re-scale, but append `%` when presenting it
 - Only use field names listed in this doc's per-entity tables; never invent field names

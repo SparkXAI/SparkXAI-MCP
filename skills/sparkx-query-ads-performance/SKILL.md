@@ -9,7 +9,7 @@ description: >-
   hourly data, by hour, intraday, AMS, Amazon Marketing Stream, keyword placement,
   vendor, seller, distributorView, sellingProgram, shipped revenue, ordered revenue, TACOS
 metadata:
-  version: 1.2.1
+  version: 1.3.0
 ---
 
 # Query Ads Performance Skill
@@ -84,7 +84,7 @@ Auxiliary tables for joining and aggregating — referenced via `select`/`filter
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| profileIds | array[long] | **Yes** | — | Profile IDs from `get_user_authorized_context.profileIds`. **All must be authorized** — one unauthorized value fails the whole call |
+| profileIds | array[long] | **Yes** | — | Profile IDs from `get_user_authorized_context` -> `profiles[].profileId`. **All must be authorized** — one unauthorized value fails the whole call |
 | factEntity | string | **Yes** | — | Fact entity type. Enum: `campaign` / `adGroup` / `target` / `searchTerm` / `placement` / `productAd` / `asin` / `keywordPlacement` |
 | dateStart | string | **Yes** | — | Start date `YYYY-MM-DD`. Max span vs `dateEnd` is 90 inclusive calendar days (see platform-notes.md for the precise off-by-one-safe definition) — **7 days for hourly/AMS queries**; cannot be more than 15 months before today |
 | dateEnd | string | **Yes** | — | End date `YYYY-MM-DD`. Default to yesterday if user gives no end date (T+2 data delay) |
@@ -233,40 +233,50 @@ Dimension-field filters run in `WHERE`; metric-field filters run in `HAVING`.
 {
   "isError": false,
   "toolName": "get_ads_perf",
-  "rows": [
-    {
-      "campaign.campaignName_": "Brand-SP-Auto",
-      "date": "20240601",
-      "Impressions": 12500,
-      "Clicks": 320,
-      "Spend": 156.80,
-      "Sales": 890.50,
-      "ACOS": 17.61,
-      "ROAS": 5.68
-    }
-  ],
-  "rowCount": 1,
-  "page": 1,
-  "pageSize": 100,
-  "hasNextPage": false,
-  "effectiveProfileIds": [4404871489220462],
-  "requestId": "a1b2c3d4e5f6",
-  "currency": "USD"
+  "data": {
+    "rows": [
+      {
+        "campaign.campaignName_": "Brand-SP-Auto",
+        "date": "20240601",
+        "Impressions": 12500,
+        "Clicks": 320,
+        "Spend": 156.80,
+        "Sales": 890.50,
+        "ACOS": 17.61,
+        "ROAS": 5.68
+      }
+    ],
+    "rowCount": 1
+  },
+  "meta": {
+    "page": 1,
+    "pageSize": 100,
+    "hasNextPage": false,
+    "effectiveProfileIds": [4404871489220462],
+    "currency": "USD"
+  },
+  "requestId": "a1b2c3d4e5f6"
 }
 ```
 
+**Everything is nested.** `rows` and `rowCount` live under **`data`**; pagination, currency and
+hints live under **`meta`**. Only `isError`, `toolName` and `requestId` are top level. Reading
+`response.rows` returns nothing - it is `response.data.rows`. `meta` keys are **omitted when
+they do not apply** (not set to null), and `meta` itself is omitted when entirely empty.
+
 | Field | Type | Description |
 |---|---|---|
-| `isError` | boolean | Whether the call errored — check this before reading `rows` |
-| `toolName` | string | Tool name |
-| `requestId` | string | Trace ID for this call. **Quote it when reporting a failure to the user** so the platform team can trace it. May be absent in local/dev environments |
-| `rows` | array[object] | Result rows — each row has the select dimension fields + metric fields |
-| `rowCount` | int | Row count on current page |
-| `page` | int | Current page number |
-| `pageSize` | int | Rows per page |
-| `hasNextPage` | boolean | Whether more pages exist — loop `page` while true |
-| `effectiveProfileIds` | array[long] | Profile IDs the query actually ran against — an echo of your request (unauthorized IDs fail the call outright rather than being dropped here). Verify it's the store the user meant |
-| `currency` | string | Currency of monetary metrics: the profile's local code for a single profile, `USD` for multiple |
+| `isError` | boolean | Top level. Whether the call errored — check this before reading rows |
+| `toolName` | string | Top level |
+| `requestId` | string | **Top level.** Trace ID for this call. **Quote it when reporting a failure to the user** so the platform team can trace it. May be absent in local/dev environments |
+| `data.rows` | array[object] | Result rows — each row has the select dimension fields + metric fields |
+| `data.rowCount` | int | Row count on the current page |
+| `meta.page` | int | Current page number |
+| `meta.pageSize` | int | Rows per page |
+| `meta.hasNextPage` | boolean | Whether more pages exist — loop `page` while true |
+| `meta.effectiveProfileIds` | array[long] | Profile IDs the query actually ran against — an echo of your request (unauthorized IDs fail the call outright rather than being dropped here). Verify it's the store the user meant |
+| `meta.currency` | string | Currency of monetary metrics: the profile's local code for a single profile, `USD` for multiple |
+| `meta.hint` | string | Present when something was adjusted silently — read it |
 
 On error, the response instead follows the shared error envelope described in Platform-Wide Rules above — all errors use a single top-level `errorType` (tool and pipeline alike, e.g. `rate_limited` / auth failures).
 
@@ -284,6 +294,7 @@ On error, the response instead follows the shared error envelope described in Pl
 - Always mind data volume to avoid query timeout
 - `groupBy` is auto-filled from raw dimension fields in `select`; only pass it explicitly when `select` contains a custom aggregate expression
 - Multi-profile queries auto-normalize monetary metrics to USD, **except** `asin.asinPrice_` which stays local currency
+- **`get_entity_metadata` is deliberately different**: its money is configuration (budgets, bids, caps) and stays in each store's own currency, never normalized. So do not compare a budget from there with a `Spend` from here across stores without converting one side
 - When `profileIds` has more than one entry, add `profile.profileId_`/`profile.profileName_` to `select` so rows can be attributed to a store
 - Only request metrics valid for the chosen `factEntity` — check the support matrix above
 - `ACOS`/`CTR`/`CVR` (confirmed Tier 1) are pre-scaled ×100 — don't re-scale, but append `%` when presenting to the user; filters use the raw ×100 number with no `%`. `TACOS`/`*Rate` fields (Tier 2) are unconfirmed — relay as-is with no `%`

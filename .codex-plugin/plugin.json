@@ -1,7 +1,7 @@
 {
   "name": "sparkx-ai-mcp",
-  "version": "1.1.1",
-  "description": "Amazon Sponsored Ads intelligence for AI agents: query advertising data and manage AI managed groups.",
+  "version": "1.2.0",
+  "description": "Amazon Sponsored Ads intelligence for AI agents: query advertising data, manage AI managed groups, and edit supported live ad entities.",
   "author": {
     "name": "SparkX AI"
   },
@@ -28,8 +28,8 @@
   },
   "interface": {
     "displayName": "SparkX AI MCP",
-    "shortDescription": "Analyze Amazon Sponsored Ads data with SparkX AI.",
-    "longDescription": "Query Amazon Sponsored Ads performance, entity metadata, and operation logs, and create, edit, or delete AI managed groups through SparkX AI MCP.",
+    "shortDescription": "Analyze and manage Amazon Sponsored Ads with SparkX AI.",
+    "longDescription": "Query Amazon Sponsored Ads performance, entity metadata, and operation logs; manage AI managed groups; and edit supported live campaign, keyword, target, and product-ad settings through SparkX AI MCP.",
     "developerName": "SparkX AI",
     "category": "Data & Analytics",
     "capabilities": [
@@ -42,7 +42,8 @@
       "Show my stores and summarize yesterday's ad performance.",
       "Rank last week's campaigns by spend and include ACOS.",
       "Find recent AI bid changes.",
-      "Create an AI managed group for these campaigns after showing me the full configuration."
+      "Create an AI managed group for these campaigns after showing me the full configuration.",
+      "Change this campaign's daily budget after showing me the current and new values."
     ]
   }
 }

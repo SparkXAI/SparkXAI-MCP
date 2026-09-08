@@ -56,7 +56,7 @@
 | `target.targetServingStatus_` | Serving status | — |
 | `target.targetBid_` | Set bid | — |
 
-**⚠️ No negative-targeting variant exists in `targetMatchType_`'s enum above.** There is no documented way to query the current list of negative keywords/ASINs/brands via this tool or `get_entity_metadata`. `get_operation_log` only tells you *when* a negative target was added/removed (`targetTypes`: `negativeKeyword`/`negativeAsin`/`negativeBrand`), not a queryable current snapshot. Treat "show me my negative keywords" as a genuine tool capability gap, not something to route around with an undocumented filter.
+**⚠️ No negative-targeting variant exists in `targetMatchType_`'s enum above.** There is no negative-target performance data in this tool. `get_operation_log` only tells you *when* a negative target was added/removed (`targetTypes`: `negativeKeyword`/`negativeAsin`/`negativeBrand`), not a queryable current snapshot. For a **current snapshot** of negatives, use `get_entity_metadata(entity='negativeKeyword')` and `get_entity_metadata(entity='negativeTarget')` - those entities exist and are filterable by `campaignId` / `adGroupId`. What does not exist is negative-target *performance*, and that is inherent: a negative blocks traffic, it never serves. So answer "what am I negating in this campaign?" from metadata, and never claim spend/clicks for a negative.
 | `target.targetCurrentBid_` | Live current bid (real-time value, may differ from `target.targetBid_` if adjusted by rules/AI) | — |
 | `target.targetPreCurrentBid_` | Previous day's bid | — |
 | `target.targetingType_` | Targeting category | `keyword` / `target` / `auto` / `audience` |

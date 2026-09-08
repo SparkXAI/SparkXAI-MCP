@@ -4,8 +4,11 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-08
+
 ### 新增
 
+- **线上广告实体编辑**：新增必装 Skill `sparkx-edit-ads` `1.0.0`，对应 `batch_update_ads`（`amazon_sa_campaign_edit:write`）。覆盖 Campaign、关键词、Target、推广商品、否定关键词和否定 Target 的 18 条操作路由，其中 9 条受保护路由采用明确的两阶段确认。写操作会直接影响线上账号；整批校验不接受部分成功，归档对象按 fail-closed 处理，下游结果不明确时不得向用户报告成功。
 - **Vendor ASIN 指标口径**（`sparkx-query-ads-performance` `1.1.0` → `1.2.0`，关联工单 BC-9770）：`TotalSalesAmount`/`OrderCount`/`UnitCount`/`TACOS` 在 Vendor 行取 shipped 口径（而非 ordered），与 Seller 行统一，可在混合查询中直接聚合。新增 `OrderedRevenue`/`OrderedTACOS`（仅 `distributorView_=MANUFACTURING` 下有值）与 `ShippedRevenue`/`ShippedTACOS`（两个视图均有值）的适用范围说明。新增 Vendor 维度自动锁定说明：底表每个 `(profileId, date, ASIN)` 最多 4 行（`distributorView_` × `sellingProgram_`），不锁维度会导致广告指标和 `GlanceViews` 膨胀最多 4 倍；服务端默认锁定 `MANUFACTURING` + `RETAIL`，`meta.appliedDefaults` 声明实际生效的默认值。补充混合 Seller+Vendor 查询时统一指标可直接聚合、Vendor 专属指标需按 `storeType_` 分组的说明。
 
 ### 修正
