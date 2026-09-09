@@ -141,7 +141,7 @@ Never report AI performance from this entity or divide by those values; use `fac
 | `asin.asinCategoryInfo_` | Category info |
 | `asin.asinBsr_` | Best Seller Rank |
 | `asin.asinPrice_` | Price — **always local currency, even in a multi-profile USD-normalized query** |
-| `asin.asinFbaQunatity_` | FBA inventory quantity |
+| `asin.asinFbaQuantity_` | FBA inventory quantity |
 | `asin.asinInventoryStatus_` | `Active` / `Inactive` / `Incomplete` |
 | `asin.asinSpEligibilityStatus_` / `asin.asinSbEligibilityStatus_` / `asin.asinSdEligibilityStatus_` | Ad-type eligibility, `ELIGIBLE` / `INELIGIBLE` |
 | `asin.asinIsDelete_` | `0` (active) / `1` (deleted) |

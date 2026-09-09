@@ -75,7 +75,7 @@
 - **sparkx-create-ai-group** `1.0.2` → `1.0.3`：增加 Strict ACOS / ACOS 优先模式 指引（`bidPerformanceStrictAcosStatus` —— 仅 SP；前置 `targetType=2` + `bidPerformanceStatus=1` + `aiPersonality>=3`；Auto Pacing 优先；取舍需确认），并在消歧中与"设置目标 ACOS"区分开。
 - **sparkx-edit-ai-group** `1.0.2` → `1.0.3`：同样的 Strict ACOS 指引，外加消歧交叉引用。
 - **sparkx-edit-ai-group** `1.0.3` → `1.0.4`：预算上限预览查询启用 Campaign 改为服务端按 `aiGroupId` 过滤（campaign 支持），替代原先"拉全量 + 本地过滤"。
-- **sparkx-delete-ai-group** `1.0.1` → `1.0.2`：删前抓取 Campaign 列表改为服务端按 `aiGroupId` 过滤 —— **撤销 1.0.1 的本地过滤做法**，因为按 sparkxads API，campaign 支持 `aiGroupId` 过滤。
+- **sparkx-delete-ai-group** `1.0.1` → `1.0.2`：删前抓取 Campaign 列表改为服务端按 `aiGroupId` 过滤 —— **撤销 1.0.1 的本地过滤做法**，因为按 underlying ads API，campaign 支持 `aiGroupId` 过滤。
 - **sparkx-query-entity-metadata** `1.1.2` → `1.1.3`：明确 campaign 实体**全部返回字段均可筛选**（无例外 —— 含 `aiGroupId`、`portfolioId`、`campaign*Date` 等）。
 - 增加 Skill 版本检查指引：AI Agent 在安装或更新时对比本地 `SKILL.md` 与远端 `manifest.json`，发现本地版本较低时提醒用户更新。
 - 增加 OAuth 请求前校验要求：AI Agent 必须按 MCP 授权流程完成 discovery，并在发送请求前校验协议要求的全部必填字段。

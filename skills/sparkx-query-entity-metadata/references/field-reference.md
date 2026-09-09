@@ -75,7 +75,7 @@ shape a read of that same entity actually returned. `profileUseBudgetCap` can be
 
 ### campaign
 
-**Every campaign return field is filterable** - per the sparkxads API, for the campaign
+**Every campaign return field is filterable** - per the underlying ads API, for the campaign
 entity the filterable set = **all return fields, no exceptions** (so `aiGroupId`,
 `portfolioId` and `campaignStartDate`/`campaignEndDate` can all be used in `filters`, not
 just the core fields below; the `campaignAi*Date` fields are placeholders and not worth
