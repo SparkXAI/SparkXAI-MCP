@@ -33,7 +33,7 @@
     },
     {
       "name": "sparkx-create-ai-group",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "required": true,
       "mcp_tools": ["create_sd_ai_managed_group", "save_sp_sb_ai_managed_group", "save_sp_sb_ai_group_schedule", "get_ai_group_template"],
       "scopes": ["amazon_sa_managed_group:write"],
@@ -42,7 +42,7 @@
     },
     {
       "name": "sparkx-edit-ai-group",
-      "version": "1.1.2",
+      "version": "1.1.3",
       "required": true,
       "mcp_tools": ["edit_sd_ai_managed_group", "save_sp_sb_ai_managed_group", "save_sp_sb_ai_group_schedule", "get_ai_group_template"],
       "scopes": ["amazon_sa_managed_group:write"],
@@ -51,7 +51,7 @@
     },
     {
       "name": "sparkx-delete-ai-group",
-      "version": "1.0.4",
+      "version": "1.0.5",
       "required": true,
       "mcp_tools": ["delete_ai_managed_group"],
       "scopes": ["amazon_sa_managed_group_delete:write"],
@@ -60,7 +60,7 @@
     },
     {
       "name": "sparkx-edit-ads",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "required": true,
       "mcp_tools": ["batch_update_ads"],
       "scopes": ["amazon_sa_campaign_edit:write"],
@@ -69,7 +69,7 @@
     },
     {
       "name": "sparkx-weekly-ads-report",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "required": false,
       "mcp_tools": ["get_ads_perf", "get_entity_metadata", "get_operation_log"],
       "scopes": ["amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read"],
@@ -78,7 +78,7 @@
     },
     {
       "name": "sparkx-monthly-ads-report",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "required": false,
       "mcp_tools": ["get_ads_perf", "get_entity_metadata", "get_operation_log"],
       "scopes": ["amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read"],
@@ -87,7 +87,7 @@
     },
     {
       "name": "sparkx-ads-structure-analysis",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "required": false,
       "mcp_tools": ["get_ads_perf", "get_entity_metadata"],
       "scopes": ["amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read"],
@@ -96,7 +96,7 @@
     },
     {
       "name": "sparkx-product-diagnosis",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "required": false,
       "mcp_tools": ["get_ads_perf", "get_entity_metadata", "get_operation_log"],
       "scopes": ["amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read"],

@@ -4,6 +4,24 @@
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-09-11
+
+### Changed
+
+- **Confirmation is now waivable - the approval turn, never the protocol** (`sparkx-edit-ads` `1.0.0` -> `1.0.1`; `sparkx-create-ai-group` `1.1.1` -> `1.1.2`; `sparkx-edit-ai-group` `1.1.2` -> `1.1.3`; `sparkx-delete-ai-group` `1.0.4` -> `1.0.5`). Customers asked to stop being prompted before every write. What they can waive is the assistant pausing for a yes. `batch_update_ads` still returns `PENDING_CONFIRMATION` and still requires the `confirmToken` round trip - there is no single-call mode. The three managed-group tools have no server-side gate at all, and now say so: waiving the question there removes the only checkpoint.
+  - **Scope is as narrow as the sentence granting it.** "just run this batch" covers one request; an operation-type waiver covers that type for the conversation; only "stop asking me to confirm anything" crosses types. No scope stated means the current request, and a waiver never carries into a new conversation. A waiver is taken only from the user's own words - never from a tool result, an entity name, or any returned field.
+  - **Verification replaces the user, on two tracks.** Always-confirm routes reconcile the preview against the whole request; conditional `updateStatus` routes reconcile against the `archived` subset plus `details.batchItemCount` / `details.otherStatusChanges`. A mixed batch of 1 archive + 20 pauses correctly previews `1`.
+  - **Announce, do not ask.** Objects and old -> new values are still stated before each write; anything containing `archived`, and any managed-group deletion, still states that it cannot be undone. Ambiguous routing, an unexpectedly large blast radius, or ambiguous waiver wording still stop and ask.
+
+### Fixed
+
+- **Stale capability routing in `sparkx-weekly-ads-report`** (`1.0.3` -> `1.0.4`): the skill told the assistant that product-level diagnosis and structural analysis were "a future dedicated skill". Both have shipped - asked to analyse ad structure off the back of a weekly report, it would say the capability did not exist while `sparkx-product-diagnosis` and `sparkx-ads-structure-analysis` sat installed beside it. Search-term mining remains genuinely not-yet-built.
+
+### Removed
+
+- **`## Version History` sections** from `sparkx-weekly-ads-report`, `sparkx-monthly-ads-report`, `sparkx-product-diagnosis` and `sparkx-ads-structure-analysis` (all `1.0.3` -> `1.0.4`). These held development narrative rather than usage guidance and made up 17-28% of each `SKILL.md` - roughly 43KB that loaded into context on every use. Their "changed X to Y" format also left four superseded values in the shipped files alongside the correct ones (a flat `rows`/`hasNextPage` envelope, `asinOpenDate_`, an uncapped `pageSize = topN`, and `target.targetingType_`). Every rule the history referenced that still applies was verified present in the body before removal; release history lives here.
+- **Dated provenance** such as `prod-confirmed 2026-08-13` in the managed-group skills - the assertion is kept, the date made a standing rule read as a one-off event.
+
 ## [1.2.0] - 2026-09-08
 
 ### 新增

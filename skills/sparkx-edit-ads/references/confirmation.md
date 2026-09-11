@@ -53,9 +53,12 @@ Rules:
   do not log it, do not show it to the user.
 - **TTL is 5 minutes**, single use, bound to the user who ran Phase 1. Another user's token
   will not work.
-- **Never call Phase 2 on your own.** The user must say yes to the specific preview you
-  showed. If they decline or go quiet, stop - do not call again, and do not re-preview
-  hoping for a different answer.
+- **By default, do not call Phase 2 until the user says yes to the specific preview you
+  showed.** If they decline or go quiet, stop - do not call again, and do not re-preview
+  hoping for a different answer. If the user has explicitly waived confirmation under the
+  rules in SKILL.md, verify the preview yourself (see "Running Phase 2 unattended" below)
+  and proceed without waiting for another reply. Either way the `confirmToken` round trip
+  still happens - there is no way to skip it.
 - Do not run two Phase 2 calls for the same token concurrently.
 
 ### When the user changes the scope after seeing the preview
@@ -188,3 +191,40 @@ never on a whole sentence.
 
 If the confirmation service itself is unavailable, no token is issued and nothing is
 written - fail-closed. Report it and stop; do not try to write without a token.
+
+
+## Running Phase 2 unattended
+
+Only after the user has explicitly waived confirmation - see the SKILL.md section "When the
+user waives confirmation" for what counts as a waiver and what it does not cover.
+
+A waiver removes the approval turn, not the protocol. Phase 1 still returns
+`PENDING_CONFIRMATION` with a token, and Phase 2 is still a second call carrying it. Nothing
+here lets you write in one call.
+
+Unattended, the preview is checked by you instead of by the user. Before sending Phase 2:
+
+**The preview's scope differs by route - check against the right baseline.**
+
+Always-confirm routes (`campaign + updateBudget`, `keyword + updateBid`,
+`target + updateBid`, `productAd + archive`) preview the whole request. Conditional routes
+(the five `updateStatus` routes) preview **only the `archived` items** while Phase 2 executes
+the whole batch, so a batch of 1 archive + 20 pauses correctly previews `1` - comparing that
+against `21` would reject every mixed batch.
+
+| Check | Baseline on always-confirm routes | Baseline on conditional routes |
+|---|---|---|
+| Affected count | every item you sent | only the `archived` items you sent |
+| Object identity | exactly the ids you sent | exactly the `archived` ids you sent |
+| Rest of the batch | n/a - there is no unpreviewed remainder | `details.batchItemCount` / `details.otherStatusChanges` must reconcile with the non-`archived` items; **absent or not adding up -> stop** |
+| Null fields | any `null` other than `campaign + updateStatus`'s `currentState: "unknown"` means the lookup failed -> stop | same |
+
+Any mismatch: stop and ask, waiver or not.
+
+The token rules are unchanged, and unforgiving when nobody is watching the clock: bare UUID,
+**5 minutes**, single use, bound to the previewing user, fingerprint over `entity` + `action`
++ `request`. Send Phase 2 in the same turn - do not do other work in between. If the token
+expired, re-run Phase 1 and re-check; never reuse a stale token or retry blindly.
+
+State what you did after the write, including how many objects actually changed. A waived
+confirmation still leaves a record in the conversation.
