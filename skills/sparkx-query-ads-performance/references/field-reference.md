@@ -153,7 +153,7 @@ Never report AI performance from this entity or divide by those values; use `fac
 | Field | Description |
 |---|---|
 | `parentAsin.parent_asin_` | Parent ASIN |
-| `parentAsin.parentAsinTitle_` / `parentAsin.parentAsinBrand_` / `parentAsin.parentAsinOpenDate_` / `parentAsin.parentAsinCategoryInfo_` / `parentAsin.parentAsinBsr_` / `parentAsin.parentAsinPrice_` / `parentAsin.parentAsinFbaQunatity_` / `parentAsin.parentAsinInventoryStatus_` / `parentAsin.parentAsinIsDelete_` | Same semantics as ASIN, rolled up to parent |
+| `parentAsin.parentAsinTitle_` / `parentAsin.parentAsinBrand_` / `parentAsin.parentAsinOpenDate_` / `parentAsin.parentAsinCategoryInfo_` / `parentAsin.parentAsinBsr_` / `parentAsin.parentAsinPrice_` / `parentAsin.parentAsinFbaQuantity_` / `parentAsin.parentAsinInventoryStatus_` / `parentAsin.parentAsinIsDelete_` | Same semantics as ASIN, rolled up to parent |
 
 ### ProductLine
 
