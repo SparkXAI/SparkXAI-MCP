@@ -126,18 +126,18 @@ Payload: `request.data[]`:
 | `matchType` | string | **send it** | row resolution |
 | `bid.type` | string | yes | see below |
 | `bid.previousBid` | number | yes | `>= 0`; read it from metadata immediately before |
-| `bid.amount` | number | yes | must be **> 0** for every type, including `set to` |
+| `bid.amount` | number | yes | must be **> 0** for every type, including `setTo` |
 
 ### The five `bid.type` values
 
 ```
-set to
-increase amount        decrease amount
-increase percent       decrease percent
+setTo
+increaseAmount        decreaseAmount
+increasePercent       decreasePercent
 ```
 
-- `increase percent` <= 10000, `decrease percent` <= 99.
-- **`set to` with `amount: 0` is rejected.** Older docs said 0 was allowed; it is not. To
+- `increasePercent` <= 10000, `decreasePercent` <= 99.
+- **`setTo` with `amount: 0` is rejected.** Older docs said 0 was allowed; it is not. To
   stop spend on a keyword, pause it instead.
 - `previousBid` is forwarded raw - the server does no arithmetic with it and **does not
   verify it**. A stale value is not detected. Re-read the current bid rather than reusing a

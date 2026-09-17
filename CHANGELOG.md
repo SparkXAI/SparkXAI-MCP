@@ -4,7 +4,21 @@
 
 ## [Unreleased]
 
-### Fixed
+## [1.3.0] - 2026-09-17
+
+### 新增
+
+- 新增必装 Skill `sparkx-create-campaign` `1.0.0`，对应 `create_sp_sb_campaign`（`amazon_sa_campaign_create:write`）。当前支持创建 SP Campaign，可配置广告组、推广商品、自动/关键词/商品投放、否定投放、广告位和可选 AMC 受众；暂不支持创建 SB/SD Campaign。
+- `sparkx-edit-ads` `1.0.1` → `1.1.0`：新增广告位加价与 AMC 受众加价编辑，现覆盖 20 条操作路由，其中 11 条使用服务端两阶段确认。
+
+### 变更
+
+- 查询 Skills 按当前工具契约更新 Campaign 受众、实体 ID、日期形态、币种和聚合口径；`sparkx-query-ads-performance`、`sparkx-query-entity-metadata` 升至 `1.4.0`，`sparkx-query-operation-log` 升至 `1.3.1`。
+- 托管组 Skills 与当前创建、编辑、删除行为对齐：`sparkx-create-ai-group` 升至 `1.1.3`，`sparkx-edit-ai-group` 升至 `1.1.4`，`sparkx-delete-ai-group` 升至 `1.0.6`。
+- 周报、月报、广告结构分析和商品诊断 Skills 升至 `1.0.5`，统一沿用当前查询边界与金额、日期、分页规则。
+- 必装 Skills 从 7 个增加到 8 个；Plugin 共包含 12 个 Skills。
+
+### 修复
 
 - **`parentAsinFbaQunatity_` -> `parentAsinFbaQuantity_`** in `sparkx-query-ads-performance`'s field reference. The child-ASIN spelling was corrected on 2026-09-09; the parent-ASIN field on the same line carried the same typo and was missed. `query-entity-metadata` spells both correctly.
 

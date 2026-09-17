@@ -1,6 +1,6 @@
 # Route matrix
 
-18 registered `entity` + `action` routes. An unregistered pair throws
+20 registered `entity` + `action` routes. An unregistered pair throws
 `Batch update route is not implemented` (the message lists what is registered).
 
 `entity` values that have routes here: `campaign`, `keyword`, `target`, `productAd`,
@@ -8,7 +8,7 @@
 vocabulary, so sending e.g. `adGroup` is refused by the route registry rather than by
 parameter validation - the error says the route is not implemented.)
 `action` values: `create`, `updateStatus`, `updateBudget`, `updateBiddingStrategy`,
-`updateBid`, `archive`, `copy`.
+`updateAudienceBid`, `updatePlacementBid`, `updateBid`, `archive`, `copy`.
 
 ## The payload array name differs per route
 
@@ -36,6 +36,8 @@ that points at the field you thought you sent.
 | 16 | `negativeTarget` + `create` | `request.businessType` + `request.target` | SP / SB | - |
 | 17 | `negativeTarget` + `updateStatus` | `request.data` | SP / SB | if `archived` |
 | 18 | `negativeTarget` + `copy` | `request.businessType` + `request.target` | SP / SB | - |
+| 19 | `campaign` + `updateAudienceBid` | `request.data` | SP / SB, one profile and campaignType | always |
+| 20 | `campaign` + `updatePlacementBid` | `request.data` | SP / SB, one campaignType and one verified marketplace | always |
 
 `request.profileIds` is required on **every** route.
 
@@ -56,7 +58,7 @@ the destination rather than moving anything.
 Routes 1-2, 4, 7, 10 are "internal" routes; the rest are "page" routes. For a Skill the
 only observable differences are:
 
-| | Internal (1-2, 4, 7, 10) | Page (the other 13) |
+| | Internal (1-2, 4, 7, 10) | Page (the other 15) |
 |---|---|---|
 | Invalid item | whole batch refused, **message lists every bad item** ("N of M items are invalid") | whole batch refused, **message names only the first** |
 | Success payload | `{total, successCount, failCount, results[{id, success, message}]}` — `results[].id` is the **outer item's** key (`campaignId` at campaign level, `adGroupId` at ad-group level), not a created child id; `message` is `success` or the failure reason | `{code, message, data}` on success only |

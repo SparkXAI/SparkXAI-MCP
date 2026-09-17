@@ -39,10 +39,12 @@ write tool for that ad type actually has a field for it. Two layers must both ho
 make a valid call: **platform supports it** AND **the tool exposes a field for it**.
 
 The gap that matters most: **the SD tools (`create_sd_ai_managed_group` /
-`edit_sd_ai_managed_group`) expose only a small set** - `status`, `optimizeType`, `acos`
-(edit adds `acosType`/`roasType`/`budgetType` + values), `budgetDynamicStatus`/
-`numType`/`num`, `budgetRedistributeStatus`, `targetHarvestStatus`, `aiPersonality`,
-`campaignNameSign` (edit: `campaignNameRecoveryType`, `remark`). They do **not** expose
+`edit_sd_ai_managed_group`) expose only a small set** - `status`, `optimizeType`, `acos`,
+`budgetRedistributeStatus`, `targetHarvestStatus`, `aiPersonality`, and `campaignNameSign`
+(edit adds `acosType`/`roasType`/`budgetType` + values, plus edit-only fields documented in
+the edit Skill). Although the SD create schema still contains `budgetDynamicStatus` /
+`numType` / `num`, creation rejects a non-zero dynamic-budget switch, so do not use those
+fields here. The SD tools do **not** expose
 the full `aiActionSettings`/`aiAutomation` action space (bid daypart / placement /
 struct pause / etc.). Those fields exist **only on the SP/SB tool**
 (`save_sp_sb_ai_managed_group`). **Exception - the SP/SB word-list modules are not writable via MCP:** on `save_sp_sb_ai_managed_group`, the `targetOptimization` module (negative target, target-harvest details, target pause) and `brandOptimization` module (branded / competitor) are removed from the write path - the SP/SB tool hard-rejects them; create defaults them closed and they are managed in the platform UI (read-only via MCP). **This does not affect SD:** the SD tools' own `targetHarvestStatus` (`0`/`1`/`2`) remains writable.

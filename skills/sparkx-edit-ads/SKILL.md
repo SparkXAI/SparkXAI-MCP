@@ -4,19 +4,23 @@ description: >-
   Edit live Amazon Sponsored ad entities in bulk through the single tool
   `batch_update_ads` - campaign daily budget / state / bidding strategy, keyword and target
   status and bids, promoted products (product ads), negative keywords and negative product
-  targets. 18 entity+action routes; 9 of them run a two-phase platform confirmation. Use when the user wants to change / pause / enable / archive / raise / lower
+  targets. 20 entity+action routes; 11 of them run a two-phase platform confirmation. Use when the user wants to change / pause / enable / archive / raise / lower
   / add / copy something on the ads themselves - 改预算 / 暂停广告 / 调价 / 加词 / 加否定词 /
   投放商品 / 复制否定词. Not for AI managed groups (托管组) - creating, editing or deleting
   those uses sparkx-create-ai-group / sparkx-edit-ai-group / sparkx-delete-ai-group. Not for
   reading data (use sparkx-query-ads-performance / sparkx-query-entity-metadata).
 metadata:
-  version: 1.0.1
+  version: 1.1.0
 ---
 
 # Edit Ads
 
 One tool, `batch_update_ads(entity, action, request, userContext)`, covers every write.
-`entity` + `action` select one of **18 registered routes**; an unregistered pair is refused.
+Use the exact camelCase `budget.type` and `bid.type` values from the tool schema
+(for example, `setTo` or `increasePercent`), without spaces. Percent modes use
+`amount: 10` for 10%, not `0.1`. Legacy space-separated inputs are accepted for
+compatibility; use camelCase when constructing new requests.
+`entity` + `action` select one of **20 registered routes**; an unregistered pair is refused.
 
 Read [`references/platform-notes.md`](references/platform-notes.md) once first - scope,
 the response envelope, the full `errorType` list, rate limits, and how to tell
@@ -33,7 +37,8 @@ targets just as much as to campaigns.
 
 Do not confuse "irreversible" with "always confirms" - they are different sets:
 
-- **Always confirms, on every call** (4 routes): `campaign + updateBudget`,
+- **Always confirms, on every call** (6 routes): `campaign + updateBudget`,
+  `campaign + updateAudienceBid`, `campaign + updatePlacementBid`,
   `keyword + updateBid`, `target + updateBid`, `productAd + archive`.
 - **Confirms only when the payload contains `archived`** (5 routes): the `updateStatus`
   routes of `campaign`, `keyword`, `target`, `negativeKeyword`, `negativeTarget`.
@@ -132,6 +137,8 @@ distinct rejection messages: [`references/archived-guard.md`](references/archive
 | add negative ASIN / brand targets | `negativeTarget` + `create` | - |
 | enable / pause / archive negative targets | `negativeTarget` + `updateStatus` | if `archived` |
 | copy negative targets | `negativeTarget` + `copy` | - |
+| change an AMC audience bid uplift | `campaign` + `updateAudienceBid` | always |
+| change placement bid adjustments | `campaign` + `updatePlacementBid` | always |
 
 Per-route payloads, enums and limits live in the four write references:
 [campaign](references/write-campaign.md) - [keyword & negative keyword](references/write-keyword.md) -
@@ -164,7 +171,7 @@ Step 8 is not optional for anything irreversible or bid/budget related.
 
 ## Two-phase confirmation
 
-Nine routes return a preview instead of writing. Full protocol, preview field meanings and
+Eleven routes return a preview instead of writing. Full protocol, preview field meanings and
 failure modes: [`references/confirmation.md`](references/confirmation.md). The parts you
 cannot get wrong:
 
@@ -182,6 +189,13 @@ cannot get wrong:
 - **Do not auto-confirm unless the user has waived it.** By default Phase 2 needs the user
   actually saying yes to the preview, and a decline means you do not call again. The single
   exception is an explicit waiver - see the next section.
+- **Translate ids to names before showing a preview.** `details.items` echoes the
+  **internal** ids you sent. A user cannot approve a budget change to "41398" - resolve the
+  names first (`get_entity_metadata`, selecting `campaignName` alongside the id) and present
+  `Summer Tent SP - Exact (ID: ...)`. When an id is wanted in the answer, it is the
+  **Amazon** one (`amazonCampaignId`); the internal id stays inside the request. Full
+  convention: [`references/platform-notes.md`](references/platform-notes.md) -> "Naming
+  things in your answer".
 - A null field in the preview means the lookup failed or matched nothing - **not** "the
   value is empty". Never present it as fact. `campaign + updateStatus` previews always show
   `currentState: "unknown"` by design.
@@ -307,7 +321,7 @@ the id, and the lookup is fuzzier than it looks:
 
 ## Confirm it yourself when the platform does not
 
-Nine entity+action pairs **can** require a preview - four always, five only when the
+Eleven entity+action pairs **can** require a preview - six always, five only when the
 payload contains `archived`. The other nine write **immediately**, with no preview and
 no undo:
 
@@ -356,7 +370,7 @@ These words map to different routes, and choosing wrong changes live spend:
 - **"加词"** - a positive keyword (`keyword + create`) or a negative one
   (`negativeKeyword + create`)? Opposite effects.
 - **"+10"** - +10 currency units or +10 percent? Budget and bid both support both, and
-  **neither is idempotent** - running "increase amount 10" twice adds 20.
+  **neither is idempotent** - running "increaseAmount 10" twice adds 20.
 
 If a request could mean more than one of these, **stop and ask**.
 
@@ -377,7 +391,7 @@ Amazon Ads knowledge, because the platform's behaviour here is what matters:
 - **Switching away from `ruleBased`** bidding strategy.
 - **`profileType`** for `productAd + create` when `profiles[].storeType` came back empty
   (server-side degradation) - there is no other source, so ask.
-- **A platform minimum daily budget.** `set to` requires an amount above 0, but the real
+- **A platform minimum daily budget.** `setTo` requires an amount above 0, but the real
   floor (and whether it varies by marketplace) is not documented.
 
 ## Composition limits

@@ -143,7 +143,7 @@ When `operation` is non-null, the tool uses `ids` as the target set and ignores
 enum (lowercase is rejected with `does not have a value in the enumeration [...]`):
 
 `BUDGET`, `STATUS`, `TARGET_TYPE`, `ACOS`, `ROAS`, `TARGET_HARVEST`, `DYNAMIC_BUDGET`,
-`CAMPAIGN_NAME_SIGN`, `AI_PERSONALITY`, `ACTION_SETTINGS`, `BID_OPTIMIZATION`,
+`CAMPAIGN_NAME_SIGN`, `AI_PERSONALITY`, `BID_OPTIMIZATION`,
 `STRUCT_OPTIMIZATION`, `BUDGET_DAYPART`, `BUDGET_DYNAMIC_ACTION`, `BUDGET_REDISTRIBUTE`,
 `TARGET_HARVEST_ACTION`, `NEGATIVE_TARGET`, `BRAND_TARGET`, `TARGET_PAUSED_ADD`.
 

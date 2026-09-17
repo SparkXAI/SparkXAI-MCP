@@ -340,8 +340,8 @@ Placement type filter. Narrows placement operations to specific placement types.
 | operationType | string | Fine-grained operation type (e.g. `DailyBudget Increased`) |
 | profileId | long | Profile ID |
 | aiGroupName | string | AI managed group name (present on aiGroup-related logs) |
-| amazonCampaignId | long | Amazon campaign ID |
-| campaignName | string | Campaign name |
+| amazonCampaignId | long | Amazon campaign ID — **this is the id to report** when the user asks for one; it is not the internal `campaignId` the write tools take |
+| campaignName | string | Campaign name — **answer with this** unless an id was explicitly asked for (see `platform-notes.md` -> "Naming things in your answer") |
 | campaignType | string | Campaign type |
 | amazonAdGroupId | long | Amazon ad group ID (null if not applicable) |
 | adGroupName | string | Ad group name (null if not applicable) |

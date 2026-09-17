@@ -10,7 +10,7 @@ description: >-
   for enabling or editing an existing group (use sparkx-edit-ai-group) or deleting one (use
   sparkx-delete-ai-group).
 metadata:
-  version: 1.1.2
+  version: 1.1.3
 ---
 
 # Create AI Managed Group
@@ -75,10 +75,10 @@ confirm the meaning first, then use the ad-type reference to pick the field.
     switches. If the user wants an SP/SB group's spend budget set at creation, tell them
     that's not a create-time field here.
   Never map "set budget to X" (a target) onto the dynamic-budget increase value; if the
-  meaning isn't clear, ask. When enabling 按表现调预算 at create, **set 预算重新分配
-  explicitly** - its scope (per-campaign vs whole-group) depends on it; don't rely on an
-  unknown default. To preview a cap, base it on the **enabled** campaigns among those
-  you're adding (use each one's `dailyBudget`).
+  meaning isn't clear, ask. When enabling 按表现调预算 on an **SP/SB** create, **set 预算
+  重新分配 explicitly** - its scope (per-campaign vs whole-group) depends on it; don't rely
+  on an unknown default. To preview a cap, base it on the **enabled** campaigns among those
+  you're adding (use each one's `dailyBudget`). **SD creation does not support 按表现调预算.**
 - **"target / goal" / "目标"**: 推广目标 `targetType` (1 growth / 2 stability / 3 volume /
   4 legacy) vs 目标 ACOS (`acos`). **Create has no `roas` field** - if the user says
   "目标 ROAS", do NOT build `roas`; tell them create can't set a target ROAS directly, and
@@ -187,7 +187,8 @@ confirm the meaning first, then use the ad-type reference to pick the field.
      `aiPersonality` outside `1`-`5` is rejected; `campaignIds` is capped at **1000** per
      group; and a coupled field sent without its companion is rejected. At **create** the
      real budget couplings are: **SD budget** = `budgetChange` + `budget`; **SD dynamic
-     budget** = `budgetDynamicStatus` + `numType` + `num`; **SP/SB dynamic budget** = the
+     budget is unsupported** (omit `budgetDynamicStatus`, `numType`, and `num`); **SP/SB
+     dynamic budget** = the
      action-space switch + `budgetNumType` + `budgetNum`. (`acosType`/`budgetType`/
      `budgetRatio` are **edit/batch** fields - do **not** put them in a create call.)
      Catch these up front rather than leaning on the backend error.
@@ -247,9 +248,11 @@ A managed group **can** now be created from a platform template via `templateId`
   read sits behind the **write** scope.
 - **Apply it** by passing `templateId` (>0) to `create_sd_ai_managed_group` or
   `save_sp_sb_ai_managed_group`. The template supplies defaults for `acos`, `optimizeType`,
-  `status`, `budgetDynamicStatus`, `numType`, `num`, `campaignNameSign`,
-  `targetHarvestStatus`, `budgetRedistributeStatus`, `aiPersonality`, plus the action-space
-  and automation config.
+  `status`, `campaignNameSign`, `targetHarvestStatus`, `budgetRedistributeStatus`,
+  `aiPersonality`, plus the action-space and automation config. For SP/SB it may also
+  supply dynamic-budget settings. For SD, a template whose `budgetDynamicStatus` is
+  non-zero is incompatible and the tool rejects it; choose another template or update
+  that template in the platform rather than trying to override it through MCP.
 - **Anything you pass explicitly wins over the template value.** Fields you omit fall back
   to the template. So "use template X but with a 25% ACOS target" is one call: `templateId`
   plus `acos: 25`.
@@ -294,7 +297,7 @@ the target right away.
 ## Enum discipline
 
 `optimizeType` / `targetType` / `status` / `aiStatus` / `targetHarvestStatus` /
-`numType` / `aiPersonality` and the `aiActionSettings` switches are closed enums.
+`aiPersonality` and the `aiActionSettings` switches are closed enums.
 Use only the values listed in
 [`references/field-reference.md`](references/field-reference.md) - do not invent or
 infer values. Passing an unlisted value makes the call fail, and the error comes back
@@ -341,6 +344,24 @@ explicit instruction only, and **only the asking**.
 - **Still ask anyway** when the ad type or a mapped setting is ambiguous, when you would
   create more groups than the user described, or before turning AI **on** at creation - that
   starts spending against settings the user never saw.
+
+## Naming the group and its campaigns
+
+Two different rules apply inside one answer:
+
+- **The managed group itself** is this platform's own object — no Amazon id exists for it.
+  Report `aiGroupName`; if an id is asked for, give the internal `aiGroupId` and say that is
+  the only id this object has.
+- **The campaigns inside it** are ordinary Amazon objects. Report `campaignName`; if an id is
+  asked for, give `amazonCampaignId` — **not** the internal `campaignId` these write tools
+  take as input.
+
+So one sentence can legitimately mix the two id spaces: the group by its own id, its
+campaigns by Amazon's. What is never acceptable is presenting the internal `campaignId` as
+"the campaign ID".
+
+Full convention: [`references/platform-notes.md`](references/platform-notes.md) -> "Naming
+things in your answer".
 
 ## Response & errors
 

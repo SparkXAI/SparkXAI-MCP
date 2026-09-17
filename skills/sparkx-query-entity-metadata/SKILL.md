@@ -8,7 +8,7 @@ description: >-
   which ads, enabled/paused status, budget settings, bidding strategy, automation rules,
   managed group schedule, flight, seasonal plan, rule mode config, RBA rule conditions
 metadata:
-  version: 1.3.0
+  version: 1.4.0
 ---
 
 # Query Entity Metadata Skill
@@ -39,7 +39,7 @@ Use this tool when the user needs any of the following:
 
 **✅ To count matching rows, read `meta.total` - do not page.** `total` is the exact number of rows matching your filters, independent of `pageSize`. `data.rowCount` is only the current page's length and is never a total.
 
-`total` is **omitted** when the downstream cannot supply one (notably `asin`, and `aiGroup` when its total is missing). In that case say the count is not available rather than summing pages, or narrow `filters` until everything fits one page (`pageSize` max 500) and use `rowCount` for that filtered set. Entities that suppress pagination (`automationRule`, `aiGroup_schedule`) return every requested row and carry no `total` / `page` / `hasNextPage` at all.
+`total` is **omitted** when the downstream cannot supply one (notably `asin`, and `aiGroup` when its total is missing). In that case you can still count, in this order of preference: page to the end (`pageSize` max 500, continue while `meta.hasNextPage` is `true`) and sum `data.rowCount` — paging is exact, so the sum is the real count, but say it is "as read in this query" rather than quoting it like a server-side total; or narrow `filters` until everything fits one page and use that page's `rowCount`. For the entities that suppress pagination entirely, the single response *is* the full set, so its `rowCount` is the count. Entities that suppress pagination (`automationRule`, `aiGroup_schedule`, and the five suggestion entities `amcAudience` / `keywordGroup` / `suggestedKeyword` / `suggestedTarget` / `suggestedBid`) return every requested row and carry no `total` / `page` / `hasNextPage` at all.
 
 **Note**: This tool does NOT involve time range or performance metrics. For spend, clicks, ACOS etc, use `get_ads_perf`.
 
@@ -69,12 +69,12 @@ Unlike `get_ads_perf` (which infers tables from `select`), `get_entity_metadata`
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | profileIds | array[long] | **Yes** | — | Profile IDs from `get_user_authorized_context` -> `profiles[].profileId`. **All must be authorized**; `aiGroup_schedule` needs exactly one |
-| entity | string | **Yes** | — | Entity type to query. Enum: `profile` / `campaign` / `adGroup` / `target` / `keyword` / `negativeKeyword` / `negativeTarget` / `productAd` / `portfolio` / `placement` / `aiGroup` / `aiGroup_schedule` / `asin` / `automationRule`. Note: productLine info is nested inside `asin` entity results, not a separate `entity` value |
+| entity | string | **Yes** | — | Entity type to query. Enum: `profile` / `campaign` / `adGroup` / `target` / `keyword` / `negativeKeyword` / `negativeTarget` / `productAd` / `portfolio` / `placement` / `aiGroup` / `aiGroup_schedule` / `asin` / `automationRule` / `amcAudience` / `keywordGroup` / `suggestedKeyword` / `suggestedTarget` / `suggestedBid`. The last five have their own contract — see "Suggestion entities". Note: productLine info is nested inside `asin` entity results, not a separate `entity` value |
 | userContext | string | **Yes** | — | User's original query + reason, max 100 chars |
 | filters | object | No | {} | Filter conditions. Field names are **camelCase**, no `entity.` prefix, no `_` suffix (e.g. `campaignState`, not `campaign.campaignState_`) |
 | orderBy | array[object] | No | [] | `[{"field": "fieldName", "direction": "DESC"}]` |
 | select | array[string] | No | all fields | Return **only** these top-level fields (no nested paths), in the given order — **plus `currency`, which is always kept when the row has one**. Unknown fields are ignored (reported via `meta.hint`). Does not affect pagination. See "Trimming fields with `select`" below |
-| page | int | No | 1 | Page number (1-based). **`page` ≤ 0 is an error**, not a fallback to 1. Ignored for `automationRule` and `aiGroup_schedule` |
+| page | int | No | 1 | Page number (1-based). **`page` ≤ 0 is an error**, not a fallback to 1. Ignored for `automationRule`, `aiGroup_schedule` and the five suggestion entities |
 | pageSize | int | No | 100 | Rows per page, max 500. **Out of range (≤0 or >500) is an error**, not clamped — floor any computed value at 1 |
 
 ## Trimming fields with `select`
@@ -87,6 +87,12 @@ When you only need a few fields, pass `select` to return just those — it notic
 - `select` **does not affect pagination** (`page`/`pageSize`/`hasNextPage` behave the same).
 - ✅ **`currency` is the one field `select` never drops.** On a multi-profile read the server re-adds each row's `currency` after applying your projection, so you cannot accidentally strip the only thing that makes the amounts interpretable.
 - ⚠️ **`profileId` is NOT preserved that way — list it yourself.** On any multi-profile query with `select`, always include `profileId`; without it two stores on the same currency produce rows you cannot tell apart, and you lose the only handle for attributing a row back to a store.
+- ⚠️ **A `select` of ids alone produces rows you cannot phrase an answer from.** Answers are
+  given by name, not by id (see `references/platform-notes.md` -> "Naming things in your
+  answer"), so whenever the rows will be shown to a user, include that entity's label field -
+  `campaignName`, `adGroupName`, `portfolioName`, `aiGroupName`, `asinTitle`, `keywordText`,
+  `targetText` - plus the entity's `amazon*Id` if an id was asked for. There is no second
+  chance: a field left out of `select` is simply absent from the response.
 - ⚠️ **The `{field}Text` companion fields are NOT auto-included under `select`.** `select` is a strict projection: only the fields you list come back. If you still need the human-readable enum label (or will translate enums), you **must list both** the field and its `Text` companion, e.g. `["campaignState", "campaignStateText"]`. Selecting only `campaignState` returns the raw value `"paused"` — you won't get `"Paused"`.
 
 ## ⚠️ Field Naming Differs From `get_ads_perf`
@@ -205,12 +211,197 @@ When a managed group runs an action space in **Rule mode**, its effective config
 - The same raw value can mean different things in different rules (e.g. `amount` under rule 17 is a budget action, under rule 19 it's a placement bid action). Never carry a label across rule types.
 - **This is read-only.** There is no MCP tool that writes RBA rule configuration — see `sparkx-edit-ai-group`. You can show a user their rule setup and explain it; you cannot offer to change it here. Also note the direction constraint: a rule-based group can be switched to AI, but not the reverse.
 
+## `entity: campaign` - audience configuration arrives on its own
+
+What the campaign list itself knows about an audience is just two fields - `audienceId` and
+`audienceBidPercentage`. When `audienceId` is non-empty, the server looks that audience up and
+merges its configuration into the same row: **you do not query it separately, and there is no
+audience-detail entity**. The lookup is batched across profiles, so many stores cost one extra
+call, not one per row.
+
+**`audienceId` is always present.** An unbound campaign carries `""`, not a missing key - so
+`audienceId != ""` is the test for "is an audience bound", and `audienceBidPercentage: 0` is
+**not** (0 legitimately means "bound, no uplift").
+
+Fields merged in: `audienceName`, `audienceType`, `proximityLevel`, `autoUpdate`,
+`updateFrequence`, `audienceCount`.
+
+**Read them carefully - `meta.hint` says as much:**
+
+- **The enums are raw, not display text** - the product has official labels for all of them,
+  and those are what a user should see:
+
+| Field | Raw value | English | 中文 | 日本語 |
+|---|---|---|---|---|
+| `audienceType` | `target` | Rule-based Audience | 基于规则的受众 | ルールベースのオーディエンス |
+| | `lookalike` | Lookalike Audience | 相似受众 | 類似オーディエンス |
+| `proximityLevel` | `MOST_SIMILAR` | Most Similar | 最相似 | 最も類似 |
+| | `SIMILAR` | Similar | 相似 | 類似 |
+| | `BALANCED` | Balanced | 平衡 | バランス |
+| | `BROAD` | Broad | 广泛 | 広範 |
+| | `MOST_BROAD` | Most Broad | 最广泛 | 最も広範 |
+| `updateFrequence` | `daily` | Daily | 每日 | 毎日 |
+| | `weekly` | Weekly | 每周 | 毎週 |
+| | `biweekly` | Biweekly | 每两周 | 隔週 |
+
+  The field itself is **Audience type / 受众类型**, **Proximity Level / 邻近度级别** and
+  **Auto update frequency / 自动更新频率**; the group is **Audience Configuration /
+  受众配置**. Note `proximityLevel` is upper snake case while `updateFrequence` is lower case -
+  match on the raw value, don't normalize case and hope.
+
+- **`proximityLevel` only means anything when `audienceType` is `lookalike`.** Rule-based
+  audiences return an empty string for it, which is then dropped from the row entirely.
+- **Auto-update is `autoUpdate` (`0`/`1`), not the presence of `updateFrequence`.** A disabled
+  audience can still carry a stale frequency value, so reading the frequency as "it updates"
+  is wrong.
+- **The targeting rule itself (`expression`) is not included here.**
+- `audienceCount` is the audience size - the number worth checking before paying an uplift.
+
+**A row with an audience but no configuration is "unknown", not "broken".** Only AMC audiences
+created and synced on this platform carry configuration: Amazon behavioural audiences,
+audiences created outside the platform, and audiences whose sync has not finished have none,
+and a lookup call can also simply fail. All of those produce a `meta.hint` counting the
+affected rows. **Do not report those campaigns as having no audience, or as having an invalid
+one** - the binding is real; only its description is missing.
+
+**SD campaigns never get this.** Sponsored Display does not support AMC audience targeting,
+so its `audienceId` is always blank and no lookup is attempted.
+
+### "Which campaigns have no audience bound?"
+
+Both conditions filter **server-side**. One query answers it:
+
+```json
+{
+  "entity": "campaign",
+  "profileIds": [4404871489220462],
+  "userContext": "Find SP/SB campaigns without an AMC audience",
+  "filters": {
+    "audienceId": "",
+    "campaignType": {"in": ["sponsoredProducts", "sponsoredBrands"]}
+  }
+}
+```
+
+- **`{"audienceId": ""}` is a real condition**, not an empty one - the empty string is what an
+  unbound campaign actually stores, and the downstream matches on it.
+- **The `campaignType` half is not optional.** Sponsored Display has no AMC audience
+  targeting, so every SD campaign carries `audienceId: ""` forever. Filtering on the audience
+  alone reports the entire SD estate as "missing an audience".
+- **`meta.total` is the answer to "how many"** here, because both conditions were applied
+  server-side - it is the count of unbound SP/SB campaigns. You only need to page if the user
+  wants the *list*: raise `pageSize` (max 500) and continue while `meta.hasNextPage` is
+  `true`.
+
+To go the other way - which campaigns use a *particular* audience - filter
+`{"audienceId": "<id>"}` with the same `campaignType` pairing.
+
+The reverse question - *which* campaigns do have one, with performance attached - is
+`get_ads_perf(factEntity='campaignAudience')`, which returns only bound campaigns. Do not use
+it to derive the unbound set by subtraction unless you need the performance columns: it is a
+performance query with a date range, so a bound campaign with no activity in that window can
+be missing from it, which would misclassify it as unbound.
+
+## Suggestion entities - a different contract from everything above
+
+Five entities exist to feed **campaign creation** rather than reporting: `amcAudience`,
+`keywordGroup`, `suggestedKeyword`, `suggestedTarget`, `suggestedBid`. They come from their
+own providers and share a contract that breaks most of the habits the other entities teach:
+
+- **Exactly one `profileId`.** Not "one or more" - a list of two is rejected. Recommendations
+  are scoped to a single store.
+- **`filters` is mandatory**, and what it must contain differs per entity (below). These are
+  not optional narrowing filters; the query cannot run without them, and **none of them has a
+  list-all form**.
+- **No pagination at all.** `page` / `pageSize` / `hasNextPage` / `total` are absent from
+  `meta`: the downstream pages internally and the tool returns every row it got. Do not try
+  to page, and do not treat a large result as truncated.
+- **No sorting, and no comparison operators.** There is no `>=` / `like` vocabulary here.
+  A **list-valued** filter - `asin`, and `keyword` on `suggestedBid` - accepts three
+  interchangeable shapes: a bare string, an array, or `{"in": [...]}`. **Single-valued
+  filters do not**: `matchType`, `targetingType`, `campaignType` and `audienceSegmentType`
+  must resolve to exactly one value. `campaignType` and `audienceSegmentType` will accept a
+  one-element array or `{"in": [...]}` and reject anything longer (`accepts a single value
+  only, got N`), so just send a plain string and avoid the question.
+- **They are recommendations, not account state.** Nothing here describes what you already
+  run - `suggestedKeyword` does not tell you which keywords exist on a campaign. Use the
+  ordinary `keyword` / `target` entities for that.
+
+### `amcAudience` - AMC audiences you may bind to a campaign
+
+Required `filters.campaignType`: `sponsoredProducts` or `sponsoredBrands` (**SD is not
+valid here**). Optional `filters.audienceSegmentType`: `SPONSORED_ADS_AMC` (the default) or
+`BEHAVIOR_DYNAMIC`; either filter accepts a single value only.
+
+Also optional: **`filters.keyword`** narrows by audience **name** - use it when the user names
+an audience instead of making them pick from a long list.
+
+Returns `audienceId`, `audienceName`, and `audienceSegmentType` echoed back on every row.
+
+⚠️ **Send that echoed `audienceSegmentType` back when you create the campaign.** The two
+segment types are separate pools. An `audienceId` taken from one pool and submitted with the
+other is accepted, stored locally, and **never applies on Amazon** - nothing rejects it, so
+carry the pair together from this row to the write.
+
+### `keywordGroup` - keyword-group suggestions for an ad group
+
+Required `filters.asin` (one or more) - the suggestions are derived from the advertised
+products, so there is nothing to compute without them.
+
+Returns `keywordText`, `keywordGroupText`, `suggestedBid`, and where the downstream supplies
+a range, `suggestedBidRangeStart` / `suggestedBidRangeEnd`.
+
+⚠️ **`suggestedBid: 0` means no suggestion was obtained**, not "bid zero". The downstream
+swallows the error and the value is passed through raw. Never carry a `0` into a create
+request - fall back to the ad group's default bid, or ask.
+
+### `suggestedKeyword` - keyword suggestions
+
+Required `filters.asin`. Returns `keywordText`, `matchType`, `suggestedBid`,
+`suggestedBidRangeStart` / `suggestedBidRangeEnd`, `keywordTranslation` and
+`recommendationRank`. Rank is the downstream's ordering - respect it rather than re-sorting
+by bid.
+
+### `suggestedTarget` - product **and** category suggestions
+
+Required `filters.asin`. **Two kinds of row come back in one list**, told apart by
+`targetType`:
+
+| `targetType` | Fields |
+|---|---|
+| `product` | `asin` |
+| `category` | `categoryId`, `categoryName`, `categoryParentId`, `categoryPath`, `canBeTargeted` |
+
+`rowCount` is the two kinds summed. **Keep both by default** - the product rows are
+recommended ASINs to target, and silently dropping them answers a narrower question than the
+user asked. Filter to one kind only when they asked for one kind ("给我推荐的品类"), and say
+which kind you kept.
+
+⚠️ **`canBeTargeted: false` rows come back too.** They are context for the category tree, not
+usable targets - filter them out before offering anything to the user or putting it in a
+create request.
+
+### `suggestedBid` - a bid for a keyword, or for auto targeting
+
+Required `filters.asin`, plus **one of two mutually exclusive modes**:
+
+- **Keyword bids**: `filters.keyword` **and** `filters.matchType`. Supplying `keyword`
+  without `matchType` is rejected.
+- **Auto-targeting bids**: `filters.targetingType: "auto"`. Optional
+  **`filters.biddingStrategy`** is passed through to the suggestion request - send the
+  strategy the campaign will actually use, since the suggested bid depends on it.
+
+Neither mode given is an error naming both. Returns `suggestedBid` plus
+`suggestedBidRangeStart` / `suggestedBidRangeEnd`, with `keywordText` + `matchType` in
+keyword mode and `targetGroup` in auto mode.
+
 ## AdsList filter and sort rules (enforced - you get an error, not a silent fallback)
 
 **Scope: the AdsList entities only** - `profile`, `campaign`, `adGroup`, `target`, `keyword`,
 `negativeKeyword`, `negativeTarget`, `productAd`, `portfolio`, `placement`. `aiGroup`,
-`aiGroup_schedule`, `asin` and `automationRule` come from other providers and **do not share
-these validations**: `aiGroup`, for instance, silently takes only the first `orderBy` rule and
+`aiGroup_schedule`, `asin`, `automationRule` and the five suggestion entities (`amcAudience`,
+`keywordGroup`, `suggestedKeyword`, `suggestedTarget`, `suggestedBid`) come from other
+providers and **do not share these validations**: `aiGroup`, for instance, silently takes only the first `orderBy` rule and
 treats any direction other than `ASC` as descending, with no whitelist check at all. Do not
 assume an error will catch a bad sort there.
 
@@ -223,7 +414,7 @@ exact number of matching rows - use it directly, **do not page through results t
 anything.** `meta.hasNextPage` is derived from `total` when the downstream supplies one; when
 it does not, `total` is omitted and `hasNextPage` falls back to "this page came back full", so
 a completely full last page can report `hasNextPage: true` and cost one extra empty request.
-`automationRule` and `aiGroup_schedule` are not paginated at all and carry none of these.
+`automationRule`, `aiGroup_schedule` and the five suggestion entities (`amcAudience` / `keywordGroup` / `suggestedKeyword` / `suggestedTarget` / `suggestedBid`) are not paginated at all and carry none of these.
 
 **2. Only `>=` and `<=` exist.** `>` and `<` are **rejected**:
 `Strict comparison operators > and < are not supported ... do not substitute them unless
@@ -285,7 +476,7 @@ established** - do not infer them either way.)
   per row.
 - **Before writing an amount, re-read it with a single `profileId`.** That is the only form
   where the value and its currency are unambiguous. This applies to `previousBid`, to a
-  `set to` amount, and to the base of any percentage change.
+  `setTo` amount, and to the base of any percentage change.
 
 **`get_ads_perf` is deliberately different.** Its money is *performance* (`Spend`, `Sales`,
 `CPC`, `CPA` ...) and multi-profile queries **do** normalise it to USD so stores can be
@@ -433,7 +624,7 @@ they do not apply** (not set to null), and `meta` itself is omitted when entirel
 | `requestId` | string | **Top level.** Trace ID — quote it when reporting a failure to the user. May be absent locally |
 | `data.rows` | array[object] | Result rows — fields depend on `entity` |
 | `data.rowCount` | int | Row count **on the current page**, never a total |
-| `meta.page` / `meta.pageSize` | int | Pagination state, echoing your request (they echo it even on a zero-row response). **Absent** for `aiGroup_schedule` and `automationRule`, which are non-paginated |
+| `meta.page` / `meta.pageSize` | int | Pagination state, echoing your request (they echo it even on a zero-row response). **Absent** for `aiGroup_schedule`, `automationRule` and the five suggestion entities (`amcAudience` / `keywordGroup` / `suggestedKeyword` / `suggestedTarget` / `suggestedBid`), which are non-paginated |
 | `meta.total` | int | **Exact** number of matching rows - use this to count, never page for it. **Omitted** when the downstream supplies none (`asin`; `aiGroup` when unknown) and on non-paginated entities |
 | `meta.hasNextPage` | boolean | Whether more pages exist. **Absent** for the non-paginated entities |
 | `meta.effectiveProfileIds` | array[long] | Profile IDs the query ran against — an echo of your request (unauthorized IDs fail the call outright), minus duplicates |
@@ -445,7 +636,7 @@ On error, the response instead follows the shared error envelope described in Pl
 ## Notes
 
 - `entity` is **required** — this is the #1 cause of failed calls. Do not call this tool without it. Enum includes `aiGroup_schedule` (managed-group schedules)
-- Each page returns up to `pageSize` rows (max 500); use `page` to page and `meta.hasNextPage` to continue. **To count rows use `meta.total`, not paging** — see "Filter, sort and paging rules". Exceptions: `automationRule` and `aiGroup_schedule` ignore pagination entirely. An out-of-range `pageSize`/`page` is an **error**, not clamped
+- Each page returns up to `pageSize` rows (max 500); use `page` to page and `meta.hasNextPage` to continue. **To count rows use `meta.total` when present; when it is absent, page to the end and sum `rowCount`** — see "Filter, sort and paging rules". Exceptions: `automationRule`, `aiGroup_schedule` and the five suggestion entities (`amcAudience` / `keywordGroup` / `suggestedKeyword` / `suggestedTarget` / `suggestedBid`) ignore pagination entirely. An out-of-range `pageSize`/`page` is an **error**, not clamped
 - `profileIds` is **required**. Always call `get_user_authorized_context` first. If the user doesn't name a store, pass all authorized `profileIds`
 - **Every requested `profileId` must be authorized** — one bad value fails the whole call. `aiGroup_schedule` additionally requires exactly one
 - `aiGroup` results are a **projection of the currently effective config** (trimmed by ad type, then reduced to what's actually in effect) — an absent field means "not in effect", not "unset" and not "write failed". See the dedicated section above
@@ -457,7 +648,7 @@ On error, the response instead follows the shared error envelope described in Pl
 - `automationRule` **requires** `amazonCampaignId` in filters, and does not support sort/pagination
 - `automationRule` is an enabled-type lookup, not a template/configuration query. There is no current metadata entity for listing the account's standalone automation templates or reading their full configuration
 - Product inventory rules are associated at SKU/product level and are not exposed by the campaign-scoped `automationRule` entity or managed-group `aiAutomation`; do not report them as absent based on either query
-- `campaignStartDate`/`campaignEndDate` use `YYYYMMDD` (Ymd) — different from the `YYYY-MM-DD` used by `dateStart`/`dateEnd` on the other two tools
+- `campaignStartDate`/`campaignEndDate` are **strings with no guaranteed format** — a live sample held both `"20260101"` and `"2026-01-01"`, `""` occurs, and **both shapes can appear in one result set**. So **do not filter a date range on them across campaigns** (a filter matches one shape and silently drops the other) — narrow with other filters, page to the end, parse client-side. Before reusing either value as `dateStart`/`dateEnd` on the other two tools, parse it and emit `YYYY-MM-DD` - one of the two shapes already is that, the compact one needs converting, and you cannot tell which you have without looking
 - For campaign rows, `campaignId` is the internal integer ID used by managed-group write tools; `amazonCampaignId` is the Amazon ID used to link performance/log data. Never substitute one for the other
 - `asin` was the first entity to carry a per-row `currency`; multi-profile reads now follow that same pattern across entities — always prefer a row's own `currency` over any envelope-level value
 - When querying across multiple `profileIds`, verify whether the entity's rows carry a `profileId` field (e.g. `asin` does); if not, query per-profile or cross-reference before merging

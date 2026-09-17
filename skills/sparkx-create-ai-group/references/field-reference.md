@@ -19,7 +19,7 @@ rejected outright.
 |---|---|
 | `aiPersonality` | `1`=非常保守, `2`=保守, `3`=平衡, `4`=激进, `5`=非常激进. **>=3 required when `targetType=3` (volume/冲量)** - front-end rule, not backend-enforced |
 | `campaignNameSign` | `0`=off, `1`=on |
-| `numType` / `budgetNumType` / `bidRangeType` | `1`=percentage, `2`=fixed value |
+| `budgetNumType` / `bidRangeType` | `1`=percentage, `2`=fixed value |
 | `*MatchType` (branded/competitor/harvest/negative) | `1`=exact(等于/精确), `2`=phrase(包含/词组) |
 | `*ListType` (harvest/negative) | `1`=include/whitelist, `2`=exclude/blacklist |
 
@@ -33,8 +33,8 @@ Flat fields (no nested objects):
 | `optimizeType` | `1`=drive growth, `2`=maintain stability |
 | `acos` | number, ACOS on the x100 scale (see create-sd.md) |
 | `budget` / `budgetChange` | number / boolean (budget applies only when `budgetChange=true`) |
-| `budgetDynamicStatus` | `0`/`1` |
-| `numType` / `num` | value type / value for dynamic budget |
+| `budgetDynamicStatus` | **Unsupported for SD creation** - omit or send `0`; non-zero is rejected |
+| `numType` / `num` | **Do not send for SD creation**; companions of the unsupported dynamic-budget switch |
 | `targetHarvestStatus` | `0`=off, `1`=on, `2`=on with exact negation in source ad group |
 | `budgetRedistributeStatus` | `0`/`1` |
 | `campaignNameSign` | `0`/`1` |

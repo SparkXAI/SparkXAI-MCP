@@ -8,7 +8,7 @@ description: >-
   group (use sparkx-edit-ai-group), editing config (use sparkx-edit-ai-group), or creating a group (use
   sparkx-create-ai-group).
 metadata:
-  version: 1.0.5
+  version: 1.0.6
 ---
 
 # Delete AI Managed Group
@@ -190,6 +190,24 @@ explicit instruction only, and **only the asking**.
   before you call, then proceed.
 - **Still ask anyway** when the disposal choice was never specified, when you resolved more
   groups than the user named, or when AI is still on (`aiStatus=1`).
+
+## Naming the group and its campaigns
+
+Two different rules apply inside one answer:
+
+- **The managed group itself** is this platform's own object — no Amazon id exists for it.
+  Report `aiGroupName`; if an id is asked for, give the internal `aiGroupId` and say that is
+  the only id this object has.
+- **The campaigns inside it** are ordinary Amazon objects. Report `campaignName`; if an id is
+  asked for, give `amazonCampaignId` — **not** the internal `campaignId` these write tools
+  take as input.
+
+So one sentence can legitimately mix the two id spaces: the group by its own id, its
+campaigns by Amazon's. What is never acceptable is presenting the internal `campaignId` as
+"the campaign ID".
+
+Full convention: [`references/platform-notes.md`](references/platform-notes.md) -> "Naming
+things in your answer".
 
 ## Response & errors
 

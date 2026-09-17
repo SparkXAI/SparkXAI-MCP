@@ -16,16 +16,15 @@ Response:
 {
   "isError": false,
   "toolName": "get_entity_metadata",
-  "rows": [
-    {"amazonCampaignId": 123456789, "enabledRuleTypes": [2, 4], "enabledRuleNames": ["Dayparting", "Harvest Keywords"]},
-    {"amazonCampaignId": 987654321, "enabledRuleTypes": [], "enabledRuleNames": []},
-    {"amazonCampaignId": 555555555, "enabledRuleTypes": [17, 19], "enabledRuleNames": ["Budget Performance", "Placement Rule"]}
-  ],
-  "rowCount": 3,
-  "page": 1,
-  "pageSize": 3,
-  "hasNextPage": false,
-  "effectiveProfileIds": [4404871489220462]
+  "data": {
+    "rows": [
+      {"amazonCampaignId": 123456789, "enabledRuleTypes": [2, 4], "enabledRuleNames": ["Dayparting", "Harvest Keywords"]},
+      {"amazonCampaignId": 987654321, "enabledRuleTypes": [], "enabledRuleNames": []},
+      {"amazonCampaignId": 555555555, "enabledRuleTypes": [17, 19], "enabledRuleNames": ["Budget Performance", "Placement Rule"]}
+    ],
+    "rowCount": 3
+  },
+  "meta": {"effectiveProfileIds": [4404871489220462]}
 }
 ```
 

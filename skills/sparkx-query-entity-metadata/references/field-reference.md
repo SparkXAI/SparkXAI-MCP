@@ -18,6 +18,11 @@
 | `aiGroup_schedule` | AiGroupScheduleMetadataProvider | Schedules of **one** managed group — **requires exactly one `profileId` and `filters.aiGroupId` only**, ignores pagination/sorting |
 | `asin` | AsinMetadataProvider | ASIN product info (child ASIN + parent ASIN + product line, nested) |
 | `automationRule` | AutomationRuleMetadataProvider | Enabled rule-type codes/names for given campaign(s) — **requires `amazonCampaignId` in filters; does not return template configuration** |
+| `amcAudience` | AmcAudienceMetadataProvider | AMC audiences bindable to a campaign — **requires `filters.campaignType`; one profileId; not paginated** |
+| `keywordGroup` | KeywordGroupMetadataProvider | Keyword-group suggestions — **requires `filters.asin`; one profileId; not paginated** |
+| `suggestedKeyword` | SuggestedKeywordMetadataProvider | Keyword suggestions — **requires `filters.asin`; one profileId; not paginated** |
+| `suggestedTarget` | SuggestedTargetMetadataProvider | Product **and** category targeting suggestions — **requires `filters.asin`; one profileId; not paginated** |
+| `suggestedBid` | SuggestedBidMetadataProvider | Suggested bid for a keyword or for auto targeting — **requires `filters.asin` plus one of the two modes; one profileId; not paginated** |
 
 ### `currency` - a per-row field, plus an envelope fallback
 
@@ -26,22 +31,51 @@ underlying row carries one - it is not conditional on profile count**, so a sing
 read can return it too (verified in the `asin` provider, whose row mapping adds it
 unconditionally; the value is *omitted* rather than set to null when absent).
 
-What *is* conditional is the envelope: on a **multi**-profile query `meta.currency` is
-omitted, on a **single**-profile query it holds that store's code.
+The envelope's `meta.currency` is the fallback, and **what it does varies by entity** - the
+table below is the authority. Do not generalise from one entity to another.
 
 **So: always prefer the row's own `currency`; fall back to `meta.currency` only when the row
-has none.**
+has none, and treat a `USD` there as a claim to check rather than a fact.**
 
-It is not listed in the per-entity tables below because it is not an entity field - treat it
-as always available on multi-profile reads. **`select` does not strip it**: the server re-adds
-`currency` after applying your projection, so you never have to list it. `asin` has behaved
-this way all along.
-**This currency rule covers the AdsList entities and `asin` only.** `aiGroup`,
-`aiGroup_schedule` and `automationRule` come from different providers, carry no currency
-indicator, and their currency semantics have **not** been confirmed - do not infer them, and
-do not assume a row's `profileId` settles the question (`automationRule` does not even return
-one). If a customer needs the currency of an `aiGroup` budget, say it is not established
-rather than guessing.
+It is not listed in the per-entity tables below because it is not an entity field.
+**`select` does not strip it**: the server re-adds `currency` after applying your projection,
+so you never have to list it.
+
+### Where the currency lives, per entity
+
+| Entities | Single profile | Multiple profiles |
+|---|---|---|
+| AdsList entities | row `currency` **and** `meta.currency` when the currency resolves; if it does not, the row's `currency` is `null`, `meta.currency` is **dropped**, and a `meta.hint` says so | row `currency` only — `meta.currency` is omitted |
+| `asin` | row `currency` when the downstream supplied one, plus `meta.currency` from the resolver — which **falls back to `USD`** if the lookup fails | row `currency` only — `meta.currency` is omitted |
+| `aiGroup` | `meta.currency` only | `meta.currency` is **`"USD"`**, and amounts are **not** converted — see below |
+| `aiGroup_schedule` | `meta.currency` only | n/a — **it requires exactly one `profileId`**; asking for several is an error, not a fallback |
+| `keywordGroup`, `suggestedKeyword`, `suggestedBid` | `meta.currency` only | n/a — these accept exactly one profile |
+| `automationRule`, `amcAudience`, `suggestedTarget` | none | none — they return no amounts |
+
+⚠️ **The two read-failure modes are opposite, so trust them differently.** When AdsList
+cannot resolve a currency it **removes** `meta.currency` and flags it in `meta.hint` - absence
+is the signal. `asin` instead goes through the resolver, which **substitutes `USD`** - so a
+`USD` on an `asin` read may be a real answer or a failed lookup, and nothing in the response
+distinguishes them.
+
+⚠️ **`meta.currency: "USD"` can mean "we could not tell".** The resolver returns `USD` as a
+fallback in three situations: more than one profile is in scope, the profile lookup failed, or
+it came back without a currency code. In none of those has anything been converted - the
+amounts are still each store's local currency.
+
+So a `USD` label is only trustworthy when you asked for **one** profile and that store really
+is a USD marketplace. In particular:
+
+- **Never label a multi-store `aiGroup` figure as USD**, and never sum managed-group budgets
+  across stores on the strength of that code. Query one profile at a time when the currency
+  matters. (`aiGroup_schedule` cannot get into this state - it refuses a multi-profile request
+  outright rather than returning a fallback.)
+- On the bid-carrying suggestion entities the single-profile shape removes the multi-store
+  ambiguity, but not the lookup-failure one - a suggested bid is in the store's own currency
+  either way, so treat `USD` there as a label to verify, not a conversion.
+
+When a customer needs the currency behind an `aiGroup` budget and you only have a fallback
+`USD`, say the currency is not established rather than guessing.
 
 ### Money value types (string vs number - not uniform)
 
@@ -64,6 +98,44 @@ Dates are inconsistent: campaign dates are strings and may be `YYYYMMDD` or `YYY
 empty; portfolio dates are numbers (`YYYYMMDD`, `0` when unset). Build a date filter in the
 shape a read of that same entity actually returned. `profileUseBudgetCap` can be `null` -
 **null is not `false`**.
+
+### The field to answer with, per entity
+
+Answers go out by name (see `platform-notes.md` -> "Naming things in your answer"), so every
+read that will be shown to a user needs its label field - and `select`, being a strict
+projection, will not add it for you.
+
+| Entity | Label field | Amazon-side id |
+|---|---|---|
+| `campaign` | `campaignName` | `amazonCampaignId` |
+| `adGroup` | `adGroupName` | `amazonAdGroupId` (parent campaign: none - see below) |
+| `keyword` / `negativeKeyword` | `keywordText` | `amazonKeywordId` |
+| `target` / `negativeTarget` | **none** - see below | `amazonTargetId` |
+| `productAd` | **none** - use `asin` + `sku` | `amazonAdId` |
+| `asin` / `parentAsin` | `asinTitle` / `parentAsinTitle` | the ASIN itself is Amazon-side |
+| `portfolio` | `portfolioName` | `amazonPortfolioId` |
+| `profile` | `profileName` | `profileId` is already Amazon-side |
+| `aiGroup` | `aiGroupName` | **none** - platform-only object, report `aiGroupId` |
+| `placement` | the placement label itself | n/a - an enum, not an object |
+
+`automationRule` returns `enabledRuleNames`, already human-readable and already localized.
+
+**Three entities have no name to report**, so "answer with the name" needs a different shape
+for them - say *what the thing is*, not a bare identifier:
+
+| Entity | What identifies it | How to say it |
+|---|---|---|
+| `productAd` | `asin` + `sku` | "推广商品 B0XXXXXXXX (SKU: ...)" |
+| `target` | `targetText` — an ASIN, a category, or an expression, depending on `targetType` | "商品定向 B0XXXXXXXX" / "类目定向 Headphones" — name the kind, then the value |
+| `negativeTarget` | `negativeTargetText` — **the ASIN, or the brand id** | "否定商品 B0XXXXXXXX" / "否定品牌 <id>" — and say it is a brand id when that is what it is |
+
+⚠️ `targetText` / `negativeTargetText` are **not** display names, so do not present them as
+one. A brand id in particular is a number the user has no way to recognise: label it rather
+than dropping it into a sentence where a brand name belongs.
+
+The suggestion entities are recommendations rather than objects in the account, so they carry
+no id/name split: report `audienceName` (with `audienceId` when binding one), `keywordText`,
+`keywordGroupText`, `categoryName` / `categoryPath`.
 
 ## Fields by Entity
 
@@ -105,21 +177,55 @@ from an Amazon campaign ID returned by `get_ads_perf` or `get_operation_log`, fi
 entity by `amazonCampaignId`, then use the matched row's internal `campaignId`. Never
 coerce a long Amazon ID into the write field or infer one identifier from the other.
 
+**Which one to report back.** The internal `campaignId` is this platform's own primary key -
+never present it to a user as "the campaign ID". Answer with `campaignName`; when an id is
+actually asked for, give `amazonCampaignId`. The same split applies to every entity below
+(`amazonAdGroupId`, `amazonKeywordId`, `amazonTargetId`, `amazonAdId`, `amazonPortfolioId`).
+Full convention, including the three exceptions, in
+[`platform-notes.md`](platform-notes.md) -> "Naming things in your answer".
+
 **⚠️ "How much budget is left today?" cannot be reliably answered from `dailyBudget`/`currentBudget` alone.** These are configuration values, not a live spend ledger, and can change intraday. Combining them with `get_ads_perf`'s today's-`Spend` doesn't produce a reliable real-time remaining-budget figure either, since that metric is subject to the T+2 processing delay (see PLATFORM_NOTES.md). Tell the user this can't be computed reliably rather than presenting a subtraction as if it were precise.
 
 **More campaign fields (also filterable):**
 
 | Field | Type | Enum |
 |---|---|---|
-| campaignStartDate | **see date note below** | Ymd, e.g. `20260101` |
-| campaignEndDate | **see date note below** | Ymd, e.g. `20260131` |
+| campaignStartDate | **string — see date note below** | `"20260101"` *or* `"2026-01-01"`; may be `""` |
+| campaignEndDate | **string — see date note below** | same; `""` when there is no end date |
 | portfolioId | number | **This is the AMAZON portfolio ID, not the internal one** — see "Joining campaigns to portfolios" below |
 | aiGroupId | number | — |
 | campaignAiFirstOnDate | string | — |
 | campaignAiLastOnDate | string | — |
 | campaignAiLastOffDate | string | — |
 
-**⚠️ Date fields: the `YYYYMMDD` (Ymd) *format* is certain, the JSON *type* is not.** `campaignStartDate` / `campaignEndDate` / `portfolioStartDate` / `portfolioEndDate` are `20260101`-style, never `"2026-01-01"`. But the two sources disagree on whether the value comes back as a **number** or a **string**: the downstream interface contract says number, while an actual TEST response was observed returning a string. **So do not hard-code either type.** If you need to filter on a date field, read one row of that entity first and build the filter value in **the same JSON type the response actually gave you**. If you cannot read first, say the filter may not match rather than presenting an empty result as "none found". (`campaignAiFirstOnDate` / `campaignAiLastOnDate` / `campaignAiLastOffDate` are placeholder fields with no settled type at all - do not filter on them.) This is different from the `dateStart`/`dateEnd` request parameters on the other two tools, which use `YYYY-MM-DD`. This tool has no `dateStart`/`dateEnd` params of its own — these are just two ordinary campaign config fields that happen to hold dates, in Ymd format.
+**AMC audience fields — returned, filterable and sortable:**
+
+| Field | Type | Notes |
+|---|---|---|
+| audienceId | string | The AMC audience bound to this campaign. **`""` means no audience is bound** - the key is always present, never omitted. SP / SB only; on SD it is permanently `""` because SD does not support AMC audience targeting |
+| audienceBidPercentage | number | Bid uplift for that audience, `10` = +10%. **`0` does not mean "unbound"** - it is a legitimate value meaning "bound, no uplift". Unbound rows also carry `0`, so this field cannot tell the two apart |
+
+Both can be filtered and sorted on, and **the empty string is a real filter value, not "no
+condition"**: `{"audienceId": ""}` selects the campaigns with no audience bound. The
+empty-string meaning is stated in the interface contract; that the field is **filterable** is
+confirmed against the implementation and not yet written there - so reading the contract alone
+would lead you to think it is sort-only.
+
+⚠️ **`{"audienceId": ""}` alone is wrong** - it sweeps in every Sponsored Display campaign,
+whose `audienceId` is permanently `""` because SD has no AMC audience targeting. Always pair
+it with a `campaignType` filter.
+
+The **enriched** audience fields - `audienceName`, `audienceType`, `proximityLevel`,
+`updateFrequence`, `autoUpdate`, `audienceCount` - are neither filterable nor sortable: MCP
+adds them after the list call, so the downstream has never seen them.
+
+**Is this campaign using an AMC audience?** Test `audienceId != ""`. Do not test for the key's
+presence (it is always there) and do not test `audienceBidPercentage` (0 is ambiguous). When a
+row does have an audience, the server also merges that audience's configuration into the same
+row - see "`entity: campaign` - audience configuration arrives on its own" in SKILL.md.
+
+
+**⚠️ Date fields: the JSON *type* is certain, the *format* is not.** **campaign** dates come back as **strings** and a live sample contained **both** `"20260101"` and `"2026-01-01"` - the format is not settled, and an empty string also occurs. **portfolio** dates come back as **numbers** in `YYYYMMDD` (`0` when unset). So the type is predictable per entity and the campaign format is not. **Never normalise by stripping the dashes**, and never assume one campaign row's format applies to the next. If you need to filter on a date field **for one known campaign**, read that campaign's row first and build the filter value in **the same JSON type and shape the response actually gave you** - and pin the filter to that campaign's id so it cannot be reused across a mixed set. **Across campaigns there is no safe server-side date filter on these fields**: page to the end and compare client-side. If you cannot read first, say the filter may not match rather than presenting an empty result as "none found". (`campaignAiFirstOnDate` / `campaignAiLastOnDate` / `campaignAiLastOffDate` are placeholder fields with no settled type at all - do not filter on them.) This is different from the `dateStart`/`dateEnd` request parameters on the other two tools, which use `YYYY-MM-DD`. This tool has no `dateStart`/`dateEnd` params of its own — these are just two ordinary campaign config fields that happen to hold dates — in whatever shape the downstream stored them, and **the shapes can be mixed within one result set**. Because a filter can only be written in one shape, **do not filter a date range on these fields across campaigns**: narrow with other filters, page to the end, then parse both shapes client-side.
 
 **Filter examples** (each is a standalone example of a `filters` value — not one combined call):
 ```json
@@ -138,9 +244,13 @@ coerce a long Amazon ID into the write field or infer one identifier from the ot
 {"amazonCampaignId": {"in": ["298539385213868"]}}
 ```
 ```json
-{"campaignStartDate": {">=": 20260101, "<=": 20260131}}
-// or the quoted form, matching whatever type a read of this entity returns — see the date note above
+{"amazonCampaignId": {"in": ["298539385213868"]}, "campaignStartDate": {">=": "20260101", "<=": "20260131"}}
 ```
+⚠️ **Note the campaign id in that example - it is not decoration.** Filtering these date
+fields is only safe for a campaign whose stored shape you have already seen. Across campaigns
+the shapes can be mixed, and a filter written one way silently drops every row stored the
+other, so there is no correct cross-campaign form of this filter - page to the end and compare
+client-side instead. See the date note below.
 ```json
 {"biddingStrategy": "autoForSales"}
 ```
@@ -153,7 +263,7 @@ coerce a long Amazon ID into the write field or infer one identifier from the ot
 | amazonAdGroupId | string | Amazon ad group ID — the bridge from `get_ads_perf` / `get_operation_log` back to the internal `adGroupId` |
 | profileId | string | — |
 | campaignType | string | `sponsoredProducts` / `sponsoredBrands` / `sponsoredDisplay` — required on writes |
-| campaignId | number | — (this entity returns no `amazonCampaignId`) |
+| campaignId | number | **Internal** parent-campaign id. ⚠️ This entity returns **no `amazonCampaignId`** — to report the parent campaign (by name, or by its Amazon id) read the `campaign` entity keyed on this value. Never pass this number off as the Amazon campaign id |
 | adGroupName | string | — |
 | adGroupState | string | `enabled` / `paused` / `archived` |
 | defaultBid | string | Local-currency **decimal string**, e.g. `"0.50"` |
@@ -496,9 +606,66 @@ Pagination and `orderBy` are ignored; all schedules for the group come back in o
 
 Single query returns **child ASIN + parent ASIN + product line info nested together**. By default only returns non-deleted ASINs (`asinIsDelete=0`).
 
-**Child ASIN fields**: `profileId`, `asin`, `sku`, `parentAsin` (aka virtual_parent_asin), `asinTitle`, `asinBrand`, `asinOpenDate` (SP go-live date), `asinCategoryInfo` (JSON), `asinBsr`, `asinPrice`, `asinFbaQuantity`, `asinInventoryStatus`, `asinSpEligibilityStatus`, `asinSbEligibilityStatus`, `asinSdEligibilityStatus`
+**Child ASIN fields**: `profileId`, `asin`, `sku`, `parentAsin` (aka virtual_parent_asin), `asinTitle`, `asinBrand`, `asinOpenDate` (SP go-live date), `asinCategoryInfo` (JSON), `asinBsr`, `asinPrice`, `asinInventoryStatus`, `asinSpEligibilityStatus`, `asinSbEligibilityStatus`, `asinSdEligibilityStatus`
 
-**Parent ASIN fields**: `parentAsinTitle`, `parentAsinBrand`, `parentAsinPrice`, `parentAsinBsr`, `parentAsinInventoryStatus`, `parentAsinOpenDate`, `parentAsinCategoryInfo`, `parentAsinSpEligibilityStatus`, `parentAsinSbEligibilityStatus`, `parentAsinSdEligibilityStatus`, `parentAsinFbaQuantity`
+**Parent ASIN fields**: `parentAsinTitle`, `parentAsinBrand`, `parentAsinPrice`, `parentAsinBsr`, `parentAsinInventoryStatus`, `parentAsinOpenDate`, `parentAsinCategoryInfo`, `parentAsinSpEligibilityStatus`, `parentAsinSbEligibilityStatus`, `parentAsinSdEligibilityStatus`
+
+**Inventory & available-days fields**: `asinFbaQuantity` (fulfillable), `asinFbmQuantity` (merchant-fulfilled), `asinInventoryDetail` (breakdown object), `asinDayAvailability7` / `14` / `30` / `60` / `90`
+
+The parent dimension mirrors all of these: `parentAsinFbaQuantity`, `parentAsinFbmQuantity`, `parentAsinInventoryDetail`, `parentAsinDayAvailability7` / `14` / `30` / `60` / `90`. Every parent figure is **summed from its child ASINs** — the parent row itself carries no inventory.
+
+⚠️ **Parent available-days is NOT the average of its children's.** The numerator is the summed stock of all child ASINs; the denominator is the **sum of each child's daily sales rate** (`Σ if(daysᵢ > 0, unitsᵢ / daysᵢ, 0)`), not "summed units ÷ a shared day count" — each child has its own number of selling days, so summing first and dividing once would be wrong. Parent therefore computes `floor(summedStock / summedDailyRate)` while a child computes `floor(stock × days / units)`. This matches the report-side `availableDaysAgg` exactly. Example: a parent with 4 children holding 100/100/100/117 units, each selling 3/day, yields `floor(417 / 12) = 34`, while the children individually read 33/33/33/39.
+
+⚠️ Only returned for **Seller profiles with SP-API authorization** — the same rule the product list page applies. Vendor profiles and unauthorized profiles omit this whole group, and `meta.hint` names those profileIds.
+
+⚠️ **A missing field is not zero stock.** Key absent = the profile cannot provide SP-API inventory data. Key present with value `0` = the stock really is zero. Never report a missing field as out-of-stock.
+
+`asinInventoryDetail` shape (each node with children carries its own `total`; the outermost `total` is the overall figure):
+
+```json
+{
+  "inbound":       { "inboundQuantity": 50, "inboundWorkingQuantity": 10,
+                     "inboundShippedQuantity": 30, "inboundReceivingQuantity": 10 },
+  "reserved":      { "reservedQuantity": 15, "pendingCustomerOrderQuantity": 8,
+                     "pendingTransshipmentQuantity": 5, "fcProcessingQuantity": 2 },
+  "totalResearchingQuantity": 3,
+  "unfulfillable": { "totalUnfulfillableQuantity": 4, "customerDamagedQuantity": 1,
+                     "warehouseDamagedQuantity": 1, "distributorDamagedQuantity": 0,
+                     "carrierDamagedQuantity": 0, "defectiveQuantity": 1, "expiredQuantity": 1 },
+  "total": 189
+}
+```
+
+Field names follow the `InventoryDetailField` enum and map one-to-one onto the front-end `FBA_INVENTORY_TREE`, so MCP output can be cross-checked against list-page exports and reports. The product's own labels for each node - use these when you show the breakdown to a user:
+
+| Node | English | 中文 | 日本語 |
+|---|---|---|---|
+| (top-level `asinFbaQuantity`) | Available | 可售 | 販売可能 |
+| `inbound.inboundQuantity` | Inbound | 入库 | 入庫中 |
+| `inbound.inboundWorkingQuantity` | Working | 处理中 | 処理中 |
+| `inbound.inboundShippedQuantity` | Shipped | 已发货 | 出荷済み |
+| `inbound.inboundReceivingQuantity` | Receiving | 正在接收 | 受領中 |
+| `reserved.reservedQuantity` | Reserved | 预留 | 引当済み |
+| `reserved.pendingCustomerOrderQuantity` | Customer orders | 买家订单 | 顧客注文 |
+| `reserved.pendingTransshipmentQuantity` | FC transfer | 运营中心转运 | FC間移動 |
+| `reserved.fcProcessingQuantity` | FC processing | 运营中心处理 | FC処理中 |
+| `totalResearchingQuantity` | Researching | 调查中 | 調査中 |
+| `unfulfillable.totalUnfulfillableQuantity` | Unfulfillable | 不可售 | 販売不可 |
+| `unfulfillable.customerDamagedQuantity` | Customer damaged | 因买家导致的残损 | 顧客による破損 |
+| `unfulfillable.warehouseDamagedQuantity` | Warehouse damaged | 在库房出现残损 | 倉庫による破損 |
+| `unfulfillable.distributorDamagedQuantity` | Distributor damaged | 因分销商导致的残损 | 販売者・ベンダー・ディストリビューターによる破損 |
+| `unfulfillable.carrierDamagedQuantity` | Carrier damaged | 因承运人导致的残损 | 配送業者による破損 |
+| `unfulfillable.defectiveQuantity` | Defective | 存在瑕疵 | 不良品 |
+| `unfulfillable.expiredQuantity` | Expired | 已过期 | 期限切れ |
+
+`inboundQuantity` is a **computed** subtotal (working + shipped + receiving), not a field Amazon returns. `Researching` never lasts more than 60 days, by Amazon's own rule - a non-zero value there is temporary, not stuck. Within each node the **first key is that node's subtotal** (e.g. `inbound.inboundQuantity`) and the rest are its constituents. Fulfillable stock is not repeated here — see the top-level `asinFbaQuantity`.
+
+The outer `total` = fulfillable + inbound + reserved + unfulfillable, **excluding `totalResearchingQuantity`** (per SP-API, `totalQuantity` excludes `researchingQuantity`), matching the product list page. Only first-level nodes are summed — children are the constituents of their subtotal, so adding them again would double-count.
+
+`asinDayAvailability*` = `floor(inventory(fba + reserved) × selling-days-in-window / units-sold-in-window)`, same implementation as the product list page. Its product name is **Product available days (Based on units over the past N days)** / **商品可售天数(基于过去 N 天销量)** / **商品販売可能日数(過去N日間の販売数に基づく)** - the stock in the numerator is deliberately fulfillable **plus** reserved, matching the rule-based-automation definition of "inventory". The look-back window is `[today-N, today-1]` (**excludes today**, since the current day's report is incomplete and marketplaces differ by timezone) and does not follow any date filter in the request. **N is the number of days that actually counted, not the nominal window.** A day drops out of the denominator whether it had no sales or no report at all - so a 7-day window with sales on 3 days divides by 3, and a 7-day window missing two days of reports divides by 5. Zero-sales days therefore never dilute the daily average, and the figure can look healthier than a naive stock/7-day-rate calculation would suggest. Say which window you used when you report it.
+
+- **`null` when there were no sales in the window** (cannot be projected) — this differs from `0` (stock really is zero).
+- It is an **ASIN-level** metric (the sales data has no SKU dimension), so SKU rows of the same ASIN repeat the same value, whereas the inventory fields are per SKU.
 
 **Product line fields** (nested array `productLines`, one ASIN may belong to multiple product lines): `productLineParentId`, `productLineParentName`, `productLineChildId` (null = directly attached to parent line, no sub-tag), `productLineChildName`, `productLineCreator`
 
@@ -506,7 +673,7 @@ Single query returns **child ASIN + parent ASIN + product line info nested toget
 
 | Scenario | Outer `currency` | Per-row `currency` field | Notes |
 |---|---|---|---|
-| Single profile | Local currency code | **may also be present** | `asinPrice`/`parentAsinPrice` in local currency |
+| Single profile | the store's code, **or `USD` if the resolver's lookup failed** | **may also be present** | `asinPrice`/`parentAsinPrice` in local currency either way — a `USD` label here is not a conversion |
 | Multi profile | **not present** | present **only when the row has one** (key omitted, not `null`) | Product pricing is not FX-converted. Same rule as the AdsList entities, except those always emit the key and may set it to `null` |
 
 Multi-profile example:
@@ -514,10 +681,14 @@ Multi-profile example:
 {
   "isError": false,
   "toolName": "get_entity_metadata",
-  "rows": [
-    {"asin": "B0XX", "asinPrice": 29.99, "currency": "USD", "profileId": 111},
-    {"asin": "B0YY", "asinPrice": 2980, "currency": "JPY", "profileId": 222}
-  ]
+  "data": {
+    "rows": [
+      {"asin": "B0XX", "asinPrice": 29.99, "currency": "USD", "profileId": 111},
+      {"asin": "B0YY", "asinPrice": 2980, "currency": "JPY", "profileId": 222}
+    ],
+    "rowCount": 2
+  },
+  "meta": {"effectiveProfileIds": [111, 222]}
 }
 ```
 Multi-profile does not mean USD here — check each row's `currency` field individually. `asin` was the first entity to behave this way; every AdsList entity now does.
@@ -536,10 +707,25 @@ Multi-profile does not mean USD here — check each row's `currency` field indiv
 | asinInventoryStatus | string/array | `in` | `{"asinInventoryStatus": {"in": ["IN_STOCK"]}}` |
 | asinSpEligibilityStatus / asinSbEligibilityStatus / asinSdEligibilityStatus | string | `=` | `{"asinSpEligibilityStatus": "ELIGIBLE"}` |
 | asinIsDelete | number | `=` | `{"asinIsDelete": 1}` (to see deleted ones) |
+| asinFbaQuantity | number | `>=`, `<=` | `{"asinFbaQuantity": {">=": 10, "<=": 500}}` |
+| asinFbmQuantity | number | `>=`, `<=` | `{"asinFbmQuantity": {">=": 10, "<=": 500}}` |
+| asinDayAvailability7 / 14 / 30 / 60 / 90 | number | `>=`, `<=` | `{"asinDayAvailability30": {"<=": 14}}` — 14 days of cover or less (restock risk) |
 | productLineParentId / productLineChildId | number/array | `in` | `{"productLineParentId": {"in": [101, 102]}}` |
 | productLineParentName | string | `like` / `=` | — |
 
-**orderBy supported fields**: `asin`, `asinTitle`, `asinBrand`, `asinBsr`, `asinPrice`, `asinFbaQuantity`, `parentAsin`
+⚠️ Available-days filtering takes **one window per call**: the five windows share the same downstream parameter, so if several are given only the smallest window (most sensitive to sales pace) is applied and the rest are ignored.
+
+⚠️ Inventory-based filters need inventory data. If every profile in the request is a Vendor or unauthorized profile, such a filter returns an empty result rather than silently dropping the condition and returning a page of seemingly-matching rows.
+
+⚠️ Numeric range fields (`asinBsr`, `asinPrice`, `asinFbaQuantity`, `asinFbmQuantity`, `asinDayAvailability*`) accept only `>=`, `<=`, `>` and `<`, where `>` behaves as `>=` and `<` as `<=` (the downstream SQL has closed bounds only) — so `{"<": 14}` matches 14 as well, and the strict-operator **rejection** described in SKILL.md is AdsList-only and does not reach this entity. Write the inclusive operator you actually mean and drop the boundary rows yourself. Any other operator — `=`, `eq`, `in`, `between`, `like` — is **rejected** rather than ignored: silently dropping the condition would return unfiltered rows while you believe the filter applied.
+
+⚠️ A range whose lower bound exceeds its upper bound, e.g. `{"asinDayAvailability30": {">=": 100, "<=": 10}}`, is **rejected**. Such a condition compiles to an always-false predicate and returns zero rows, which is easy to report as a genuine "no products match this criteria" finding. Equal bounds (`{">=": 100, "<=": 100}`) are a valid single-point range and are accepted.
+
+⚠️ Two bounds on the same side, e.g. `{"asinPrice": {">": 5, ">=": 10}}`, are also **rejected**. `>` and `>=` collapse to the same closed bound downstream, so which value survived would depend on map ordering. Keep at most one lower bound and one upper bound.
+
+**orderBy supported fields**: `asin`, `asinTitle`, `asinBrand`, `asinBsr`, `asinPrice`, `parentAsin`, `asinFbaQuantity`, `asinFbmQuantity`, `asinDayAvailability7` / `14` / `30` / `60` / `90`, `parentAsinFbaQuantity`, `parentAsinFbmQuantity`, `parentAsinDayAvailability7` / `14` / `30` / `60` / `90`
+
+⚠️ The inventory-based sort fields are ignored (falling back to no sorting) when no profile in the request can provide inventory data — otherwise the query would reference a column that does not exist.
 
 ### automationRule
 
@@ -601,16 +787,15 @@ Response:
 {
   "isError": false,
   "toolName": "get_entity_metadata",
-  "rows": [
-    {"amazonCampaignId": 123456789, "enabledRuleTypes": [2, 4], "enabledRuleNames": ["Dayparting", "Harvest Keywords"]},
-    {"amazonCampaignId": 987654321, "enabledRuleTypes": [], "enabledRuleNames": []},
-    {"amazonCampaignId": 555555555, "enabledRuleTypes": [17, 19], "enabledRuleNames": ["Budget Performance", "Placement Rule"]}
-  ],
-  "rowCount": 3,
-  "page": 1,
-  "pageSize": 3,
-  "hasNextPage": false,
-  "effectiveProfileIds": [4404871489220462]
+  "data": {
+    "rows": [
+      {"amazonCampaignId": 123456789, "enabledRuleTypes": [2, 4], "enabledRuleNames": ["Dayparting", "Harvest Keywords"]},
+      {"amazonCampaignId": 987654321, "enabledRuleTypes": [], "enabledRuleNames": []},
+      {"amazonCampaignId": 555555555, "enabledRuleTypes": [17, 19], "enabledRuleNames": ["Budget Performance", "Placement Rule"]}
+    ],
+    "rowCount": 3
+  },
+  "meta": {"effectiveProfileIds": [4404871489220462]}
 }
 ```
 

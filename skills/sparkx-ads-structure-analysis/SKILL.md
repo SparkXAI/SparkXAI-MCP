@@ -10,7 +10,7 @@ description: >-
   sparkx-weekly-ads-report / sparkx-monthly-ads-report / a lighter ad-hoc analysis skill), product-level diagnosis
   (use sparkx-product-diagnosis), or keyword-level diagnosis (a dedicated skill, not yet built).
 metadata:
-  version: 1.0.4
+  version: 1.0.5
 ---
 
 # Ads Structure Analysis
@@ -148,7 +148,7 @@ For each segment in the breakdown: **share of total** (`segment Spend / account 
 
 **Trend view (when `includeTrend=true`)**: using Step 2c's weekly-grouped data, show each segment's `ACOS`/`CPA` across the weeks in the window — the product's own canonical dashboard treats this trend, not just the period snapshot, as the primary way to read structural efficiency. Call out any segment whose trend moved meaningfully within the window (e.g. "SB's ACOS was stable at ~24% for three weeks, then jumped to 31% in the last week") — a snapshot alone would average that shift away and miss it.
 
-**Ratio-metric display rule**: `ACOS`/`CTR`/`CVR` are confirmed pre-scaled ×100 — append `%`, don't re-scale. `ROAS`/`CPA` are plain ratios/unit-costs, not percentages — no `%`. `TACOS`/NTB `*Rate` fields are the confirmed-scale exception among NTB metrics — see the base skill's Ratio Metric Display Rule for which NTB fields are Tier 1 vs Tier 2 before appending `%` to any of them.
+**Ratio-metric display rule**: the confirmed percentage metrics used here — `ACOS`, `CTR`, `CVR`, `TACOS`, and the listed NTB `*Rate` metrics — are already pre-scaled ×100. Append `%`, never re-scale. Do not apply this rule to an unlisted ratio-shaped field solely from its name. `ROAS`/`CPA` are plain ratios/unit-costs, not percentages — no `%`. See the base skill's Ratio Metric Display Rule.
 
 ### Step 4 · Diagnose Structural Imbalance
 
@@ -174,6 +174,26 @@ When `profileIds` spans multiple stores:
 - Add `profile.profileId_`/`profile.profileName_` to Step 2a's `select` if you need to know which store each row belongs to (e.g. combining `marketplace` breakdown with multi-store detail) — but don't add it when the point is one blended breakdown across all selected stores, since that would fragment each segment's row by store instead of aggregating it.
 
 ## Output Format
+
+### Naming entities in this report
+
+Nobody reading this report knows an internal id, and the ids `get_ads_perf` returns are
+Amazon's anyway. So:
+
+- **Every entity column and every sentence uses the name** — `campaignName`, `adGroupName`,
+  `asinTitle`. A `Campaign` column holds a campaign name, never a number.
+- **Keep ids in your working data regardless.** Period-over-period joins must be by id,
+  because names get duplicated and renamed — that requirement does not change. What changes
+  is only what reaches the page.
+- **An export gets both.** If the user asked for CSV / Excel / "something I can reconcile",
+  add an id column next to the name. The id to publish is the **Amazon** one, which is what
+  `get_ads_perf` already gives you.
+- In `structured_report` mode the entity/target fields carry the **name**; when ids were
+  asked for, add a separate key for the Amazon id rather than gluing both into one string.
+
+Full convention, including the managed-group and product-ad exceptions:
+[`references/platform-notes.md`](references/platform-notes.md) -> "Naming things in your
+answer".
 
 ### markdown mode
 

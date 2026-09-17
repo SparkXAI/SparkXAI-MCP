@@ -9,7 +9,7 @@ description: >-
   hourly data, by hour, intraday, AMS, Amazon Marketing Stream, keyword placement,
   vendor, seller, distributorView, sellingProgram, shipped revenue, ordered revenue, TACOS
 metadata:
-  version: 1.3.0
+  version: 1.4.0
 ---
 
 # Query Ads Performance Skill
@@ -51,6 +51,7 @@ The query subject determining aggregation granularity:
 - `productAd`: product ad level
 - `asin`: ASIN business data level (adds business metrics like TotalSalesAmount, TACOS)
 - `keywordPlacement`: keyword × placement joint level, sourced from Amazon Marketing Stream (AMS) — **hourly by nature, SP only, max 7-day span**. See Hourly / AMS Data below
+- `campaignAudience`: one campaign × the AMC audience bound to it — campaign metrics plus the audience bid adjustment. **SP / SB only, and only campaigns that already have an audience bound.** Its contract differs from every other entity; see "factEntity: campaignAudience" below
 
 Passing an unsupported value fails with `invalid_params`; the enum above is the complete list.
 
@@ -85,7 +86,7 @@ Auxiliary tables for joining and aggregating — referenced via `select`/`filter
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
 | profileIds | array[long] | **Yes** | — | Profile IDs from `get_user_authorized_context` -> `profiles[].profileId`. **All must be authorized** — one unauthorized value fails the whole call |
-| factEntity | string | **Yes** | — | Fact entity type. Enum: `campaign` / `adGroup` / `target` / `searchTerm` / `placement` / `productAd` / `asin` / `keywordPlacement` |
+| factEntity | string | **Yes** | — | Fact entity type. Enum: `campaign` / `adGroup` / `target` / `searchTerm` / `placement` / `productAd` / `asin` / `keywordPlacement` / `campaignAudience` |
 | dateStart | string | **Yes** | — | Start date `YYYY-MM-DD`. Max span vs `dateEnd` is 90 inclusive calendar days (see platform-notes.md for the precise off-by-one-safe definition) — **7 days for hourly/AMS queries**; cannot be more than 15 months before today |
 | dateEnd | string | **Yes** | — | End date `YYYY-MM-DD`. Default to yesterday if user gives no end date (T+2 data delay) |
 | metrics | array[string] | **Yes** | — | Metric fields (non-empty). Must be valid for the chosen `factEntity` — see Metrics × Entity Support Matrix below |
@@ -134,6 +135,68 @@ Do not just write `week`/`month` as bare field names — use the exact ClickHous
 | Yearly | `toYear(parseDateTime32BestEffort(date)) as year` |
 
 **This does not raise the 90-day cap.** If the user's window exceeds 90 days, first split into multiple calls each with `dateStart`/`dateEnd` spanning ≤90 days — aggregation only reduces the row count *within* each of those calls.
+
+## `factEntity: campaignAudience` — AMC audience performance
+
+One row = one campaign paired with the AMC audience bound to it, carrying that campaign's
+metrics plus the audience bid adjustment. Answers "is this audience worth the uplift", "how
+did it do week over week", "which campaigns run audience targeting at all".
+
+**This data comes from a different service than every other entity**, and the contract shows
+it. Four things are not like the rest of this tool:
+
+**1. Metric names are SINGULAR.** `Impression`, `Click`, `TotalSales`, `TotalPurchases`,
+`TotalUnitOrdered`, `PurchasesRate` — **not** the plural `Impressions` / `Clicks` used
+everywhere else. An unknown name is rejected with the supported list, so this fails loudly
+rather than returning nothing.
+
+The 27 metrics: `Impression`, `Click`, `CTR`, `Spend`, `CPC`, `TotalPurchases`, `TotalSales`,
+`TotalUnitOrdered`, `PurchasesRate`, `ACOS`, `ROAS`, `CPA`, `TotalSalesSameSKU`,
+`TotalSalesOtherSKU`, `TotalPurchasesSameSKU`, `TotalPurchasesOtherSKU`,
+`TotalUnitOrderedSameSKU`, `TotalUnitOrderedOtherSKU`, `ClickCPC`, `TotalCostCPC`,
+`TotalConversionsCPC`, `NspImpression`, `NspClick`, `NspTotalConversions`, `NspTotalSales`,
+`NspTotalUnitOrdered`, `TotalCostVCPM`.
+
+**2. Period-over-period comparison is free — and unavoidable.** Every metric also returns as
+`prev<Metric>` (the preceding period of equal length) and `gap<Metric>` (percent change).
+**Do not query twice to build a comparison.** The cost is width: omitting `metrics` returns
+all 27 in all three forms, **80+ fields per row**. Pass `metrics` unless you genuinely need
+everything.
+
+**3. `select`, `groupBy` and `queryType` are rejected**, because the row granularity is fixed
+downstream. Narrow with `filters` instead. Only one `orderBy` rule is accepted, and
+`timeGranularity: "hourly"` is not available.
+
+**4. Paging is tighter**: `pageSize` defaults to **50** and caps at **200**, not 100/500 —
+those 80+ fields per row are why. Over the cap is an error, not a silent clamp. `meta.total`
+tells you whether paging is worth it.
+
+**`search` works only here.** A case-insensitive fuzzy match on the audience name. Every other
+entity rejects the parameter — use `filters` with `like` there.
+
+### What it is not
+
+- **Not a way to list campaigns.** Only campaigns with an audience already bound appear.
+- **Not `get_ads_perf`'s `target` dimension.** That one sees audience targeting that exists as
+  a *target record* — mostly Sponsored Display — which is a different mechanism from the
+  campaign-level `audienceId` / `audienceBidPercentage` this entity reports on.
+- **Not the place to find an audience for a new campaign.** That is
+  `get_entity_metadata(entity='amcAudience')`, which returns the whole targetable pool; this
+  returns only what is already in use. For the audience currently bound to a campaign and its
+  configuration, read `get_entity_metadata(entity='campaign')` — the config is merged into
+  those rows automatically.
+
+⚠️ **On Sponsored Brands rows the same-SKU metrics are always `null`** —
+`TotalSalesSameSKU`, `TotalPurchasesSameSKU`, `TotalUnitOrderedSameSKU` and their `prev`
+forms. Amazon does not report that breakdown for SB. **Do not read `null` as zero**, and do
+not sum SP and SB same-SKU figures into one total.
+
+### `get_amc_audience_perf` is the old door to the same room
+
+A dedicated tool of that name exists and returns exactly this data through the same
+downstream. It marks itself **superseded**: use `get_ads_perf(factEntity='campaignAudience')`.
+Both accept `search`. If you see the old tool in a client's list, prefer this entity — and if
+a user asks why two tools look identical, that is the answer.
 
 ## Hourly / AMS Data
 
@@ -204,7 +267,7 @@ For ASIN business analysis, additionally (asin entity only):
 }
 ```
 
-Note the `ACOS` threshold above is `20`, not `0.2` — `ACOS`/`CTR`/`CVR` are confirmed returned pre-scaled ×100 (e.g. `17.61` means 17.61%), so `{"ACOS": {"<": 20}}` means "ACOS under 20%". `TACOS`'s scale is not independently confirmed — see the Tier 2 note in Ratio Metric Display Rule above. Using `0.2` would be a common construction mistake for the confirmed Tier 1 fields.
+Note the `ACOS` threshold above is `20`, not `0.2` — confirmed percentage metrics such as `ACOS`, `TACOS`, and the derived `*Rate` fields listed in Platform Notes are returned pre-scaled ×100 (e.g. `17.61` means 17.61%), so `{"ACOS": {"<": 20}}` means "ACOS under 20%". Writing `0.2` is the common construction mistake: it filters for "under 0.2%". Do not infer the scale of an unlisted field from its name alone.
 
 Supported operators: `>`, `<`, `>=`, `<=`, `=`, `in`, `like`
 
@@ -297,7 +360,7 @@ On error, the response instead follows the shared error envelope described in Pl
 - **`get_entity_metadata` is deliberately different**: its money is configuration (budgets, bids, caps) and stays in each store's own currency, never normalized. So do not compare a budget from there with a `Spend` from here across stores without converting one side
 - When `profileIds` has more than one entry, add `profile.profileId_`/`profile.profileName_` to `select` so rows can be attributed to a store
 - Only request metrics valid for the chosen `factEntity` — check the support matrix above
-- `ACOS`/`CTR`/`CVR` (confirmed Tier 1) are pre-scaled ×100 — don't re-scale, but append `%` when presenting to the user; filters use the raw ×100 number with no `%`. `TACOS`/`*Rate` fields (Tier 2) are unconfirmed — relay as-is with no `%`
+- **Confirmed percentage metrics are pre-scaled ×100** — this includes `ACOS`, `CTR`, `CVR`, `AdsCVR`, `TACOS`, `UnitSessionPercentage`, and the explicit derived `*Rate` fields listed in Platform Notes. Don't re-scale; **append `%` when presenting** (`"TACOS": 17.61` is 17.61%); filters use the raw ×100 number with no `%`. Do not generalize this to an unlisted field solely from a `Rate`/`Percentage` suffix. `ROAS`/`CPC`/`CPA` are not percentages
 - On error, check `errorType` and handle per the guidance above rather than assuming the question is unanswerable
 
 ## Reference Docs

@@ -9,7 +9,7 @@ description: >-
   "月度复盘", "这个月表现如何", "monthly report". Not for weekly recaps (use sparkx-weekly-ads-report) or
   quarterly/QBR-level strategic review (use quarterly-ads-report, not yet built).
 metadata:
-  version: 1.0.4
+  version: 1.0.5
 ---
 
 # Monthly Ads Report
@@ -139,7 +139,7 @@ No dimension in `select` — global aggregate across all campaigns. **If the AI-
 ```
 **g. Last month, Top ASINs** — same shape as (f), shifted back one month, for MoM product comparison (Step 6).
 
-**h. New-product identification**: `get_entity_metadata` (`entity: asin`). **`asinOpenDate` is NOT a filterable field** — asin's filterable fields are `asin`/`parentAsin`/`sku`/`asinBrand`/`asinTitle`/`asinBsr`/`asinPrice`/`asinInventoryStatus`/the eligibility flags/`asinIsDelete`/`productLine*` — so you can't filter the call by open date. Instead, pull the asin metadata (**fully paginate — loop `page` while `hasNextPage` is `true`; default page size is 100, so a catalog past one page silently truncates otherwise**), then read the returned `asinOpenDate` field and filter to this month's window **client-side**. `asinOpenDate` is a datetime-with-timezone string, e.g. `"2026-06-01 00:00:00 PST"` — not `YYYYMMDD`, and not the `YYYY-MM-DD` used by `dateStart`/`dateEnd` — so parse it and mind the **PST timezone** when judging whether an ASIN opened inside the month, to avoid month-boundary misclassification. (`YYYYMMDD` is `campaignStartDate`/`EndDate`'s format, not this field's.)
+**h. New-product identification**: `get_entity_metadata` (`entity: asin`). **`asinOpenDate` is NOT a filterable field** — asin's filterable fields are `asin`/`parentAsin`/`sku`/`asinBrand`/`asinTitle`/`asinBsr`/`asinPrice`/`asinInventoryStatus`/the eligibility flags/`asinIsDelete`/`productLine*` — so you can't filter the call by open date. Instead, pull the asin metadata (**fully paginate — loop `page` while `hasNextPage` is `true`; default page size is 100, so a catalog past one page silently truncates otherwise**), then read the returned `asinOpenDate` field and filter to this month's window **client-side**. `asinOpenDate` is a datetime-with-timezone string, e.g. `"2026-06-01 00:00:00 PST"` — not `YYYYMMDD`, and not the `YYYY-MM-DD` used by `dateStart`/`dateEnd` — so parse it and mind the **PST timezone** when judging whether an ASIN opened inside the month, to avoid month-boundary misclassification. (`campaignStartDate`/`EndDate` are strings of no guaranteed shape — a different problem again, not this field's format.)
 
 **i. Keyword-level performance**: `get_ads_perf` with `factEntity: target`, `queryType: keyword`, this month's window, `select` including `target.targetId_`/`target.targetText_`/`target.targetMatchType_`, metrics `Impressions/Clicks/Spend/Sales/Conversions/ACOS`.
 
@@ -159,7 +159,7 @@ For each: this-month value, last-month value (if `compareBaseline` includes `mom
 
 **Zero-denominator handling** (same discipline as any period comparison): if the baseline period's value is `0` and this month's is nonzero, there's no valid percentage — report "N/A (no prior baseline)," never a fabricated large number or "+∞%". If both are `0`, report "flat / no activity."
 
-**Ratio-metric display rule**: `ACOS`/`CTR`/`CVR` are confirmed pre-scaled ×100 — append `%` directly, don't re-scale. `ROAS`/`CPC`/`CPA` are plain ratios, no `%`. `TACOS`/other `*Rate` fields are unconfirmed scale — relay raw, no `%`, no assumed scale.
+**Ratio-metric display rule**: confirmed percentage metrics such as `ACOS`, `CTR`, `CVR`, `TACOS`, and the derived `*Rate` metrics explicitly listed in Platform Notes are pre-scaled ×100. Append `%` directly, don't re-scale. Do not infer an unlisted field's scale from its name alone. `ROAS`/`CPC`/`CPA` are plain ratios, no `%`.
 
 ### Step 4 · Goal Attainment (if `monthlyTarget` supplied)
 
@@ -227,6 +227,26 @@ When `profileIds` spans multiple stores:
 - The "site" breakdown in Step 5 is only meaningful for a multi-country `profileIds` selection — for a single-store report, omit it or note it's not applicable.
 
 ## Output Format
+
+### Naming entities in this report
+
+Nobody reading this report knows an internal id, and the ids `get_ads_perf` returns are
+Amazon's anyway. So:
+
+- **Every entity column and every sentence uses the name** — `campaignName`, `adGroupName`,
+  `asinTitle`. A `Campaign` column holds a campaign name, never a number.
+- **Keep ids in your working data regardless.** Period-over-period joins must be by id,
+  because names get duplicated and renamed — that requirement does not change. What changes
+  is only what reaches the page.
+- **An export gets both.** If the user asked for CSV / Excel / "something I can reconcile",
+  add an id column next to the name. The id to publish is the **Amazon** one, which is what
+  `get_ads_perf` already gives you.
+- In `structured_report` mode the entity/target fields carry the **name**; when ids were
+  asked for, add a separate key for the Amazon id rather than gluing both into one string.
+
+Full convention, including the managed-group and product-ad exceptions:
+[`references/platform-notes.md`](references/platform-notes.md) -> "Naming things in your
+answer".
 
 Remember: **the section headers and labels below are structural placeholders (shown in English here) — always regenerate them in the user's own language**, not copy the English (or any other) wording verbatim (see "Output Language" above).
 

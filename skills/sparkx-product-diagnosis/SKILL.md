@@ -9,7 +9,7 @@ description: >-
   "ASIN health check". Not for account-wide structural share analysis (use sparkx-ads-structure-analysis)
   or periodic WoW/MoM recaps (use sparkx-weekly-ads-report / sparkx-monthly-ads-report).
 metadata:
-  version: 1.0.4
+  version: 1.0.5
 ---
 
 # Product Diagnosis
@@ -102,7 +102,8 @@ Default: trailing 30 days ending yesterday (T+2 delay — note if the window's e
 
 **⚠️ `Sales` and `TotalSalesAmount` are two different things, both requested deliberately**: `Sales` is ad-attributed sales (the numerator context for `ACOS`, whose formula is `Spend/Sales×100`); `TotalSalesAmount` is the ASIN's total business sales including organic (the denominator for `TACOS`, whose formula is ad `Spend/TotalSalesAmount`). Don't drop either thinking the other covers it — see Step 3's zero-denominator handling, which depends on both being present.
 
-**⚠️ `TotalSalesAmount`/`TACOS` are Seller Central metrics — they don't exist for a Vendor Central profile** (the product's "ASIN 层级" board labels these columns "(Seller)"). There's no queryable field that proves a profile's account type in advance. If `TotalSalesAmount`/`TACOS` are null/zero on every row while `Spend`/`Sales` are non-zero, treat Vendor Central as a **hypothesis, not a conclusion**: retry with `OrderedRevenue`/`OrderedTACOS` (pre-shipment) or `ShippedRevenue`/`ShippedTACOS` (post-shipment, COGS-aware). Use and relabel the Vendor fields only when that retry returns meaningful data; otherwise report the business-sales field set as unavailable rather than inferring account type from nulls alone.
+**✅ `TotalSalesAmount`/`TACOS` work on Vendor profiles too.** They are unified metrics: on a Vendor row they are computed on the shipped basis, deliberately so that Seller and Vendor rows can be summed in one query. **Do not re-query with `OrderedRevenue`/`ShippedRevenue` on seeing a Vendor profile** - that was guidance from before the metrics were unified, and it costs a round trip for nothing. (What remains Vendor-specific is the *extra* breakdown: `OrderedRevenue`/`OrderedTACOS` only under `distributorView_=MANUFACTURING`, `ShippedRevenue`/`ShippedTACOS`/`ShippedCogs`/`NetPPM` on both views.) A genuinely null `TotalSalesAmount` means no sales in the window, not a wrong field.
+
 
 Scope this call per `scope`:
 - `topN` → `orderBy` on the primary ranking metric (default `Spend` descending), `pageSize` = `max(1, min(topN, 500))` — `get_ads_perf` rejects a `pageSize` of `0`, a negative number, or anything over `500` with `invalid_params` (it does **not** clamp), so both ends need guarding: a `topN` of `0` must not become `pageSize: 0`, and if `topN > 500`, keep `pageSize: 500` and loop `page` while `hasNextPage` to collect the remainder instead of requesting an oversized page
@@ -116,7 +117,7 @@ Scope this call per `scope`:
 
 **b. Prior-period ASIN performance** — same shape as (a), `dateStart`/`dateEnd` shifted to the comparison window, same `select`/`filters` so the two periods are comparable.
 
-**c. New-product identification**: `get_entity_metadata` (`entity: asin`). **`asinOpenDate` is NOT a filterable field**, so don't filter the call on it. Pull the asin metadata for the current analysis set (**fully paginate — loop `page` while `hasNextPage` is `true`; default page size is 100, so a catalog past one page silently truncates otherwise**), then read the returned `asinOpenDate` and filter to the analysis window **client-side**. `asinOpenDate` is a datetime-with-timezone string, e.g. `"2026-06-01 00:00:00 PST"` (not `YYYYMMDD`, not `YYYY-MM-DD` — `YYYYMMDD` is `campaignStartDate`'s format, not this one), so parse it and mind the **PST timezone**. **Under `scope=specifiedAsins` or `granularity=variant`, scope this pull to the current analysis set** (the user's specified ASIN list, or the anchored parent's children) — don't scan the whole catalog and then tag "New" onto ASINs that aren't part of what's being analyzed.
+**c. New-product identification**: `get_entity_metadata` (`entity: asin`). **`asinOpenDate` is NOT a filterable field**, so don't filter the call on it. Pull the asin metadata for the current analysis set (**fully paginate — loop `page` while `hasNextPage` is `true`; default page size is 100, so a catalog past one page silently truncates otherwise**), then read the returned `asinOpenDate` and filter to the analysis window **client-side**. `asinOpenDate` is a datetime-with-timezone string, e.g. `"2026-06-01 00:00:00 PST"` (not `YYYYMMDD`, not `YYYY-MM-DD`; `campaignStartDate` is a string of no guaranteed shape, which is a different problem again), so parse it and mind the **PST timezone**. **Under `scope=specifiedAsins` or `granularity=variant`, scope this pull to the current analysis set** (the user's specified ASIN list, or the anchored parent's children) — don't scan the whole catalog and then tag "New" onto ASINs that aren't part of what's being analyzed.
 
 **d. Eligibility/inventory config** (feeds Step 5's diagnostic card): `get_entity_metadata` (`entity: asin`), for the ASINs flagged in Step 3 as Declining (or explicitly in scope via `underperformingOnly`, per Step 5) — pull `asinInventoryStatus`, `asinSpEligibilityStatus`/`asinSbEligibilityStatus`/`asinSdEligibilityStatus`, `asinIsDelete`. Only pull this for flagged ASINs, not the whole catalog — it's diagnostic detail, not part of the ranking.
 
@@ -138,7 +139,7 @@ Either way, when the list is long: split into chunks for the `in` filter rather 
 
 ### Step 3 · Rank and Segment
 
-**Ranking table**: sort by the requested/default metric (`Spend` unless the user asked for `Sales`/`ACOS` ranking specifically), showing `Spend`/`TotalSalesAmount`/`ACOS`/`TACOS` per ASIN. **Zero-denominator handling — `ACOS` and `TACOS` have different denominators, don't conflate them**: an ASIN with `Sales = 0` (ad-attributed sales) has undefined `ACOS`; an ASIN with `TotalSalesAmount = 0` (total business sales) has undefined `TACOS` — these can differ (e.g. an ASIN can have `Sales = 0` this period while still showing organic `TotalSalesAmount`, or vice versa). Check each independently and report "no ad sales this period" / "no total sales this period" as appropriate, never a fabricated ratio for either. **Before reporting `TotalSalesAmount = 0`/`TACOS` undefined account-wide (every row, not just one ASIN), rule out the Seller/Vendor mismatch from Step 2a first** — an all-zero `TotalSalesAmount` column on a Vendor Central profile isn't a zero-denominator finding, it's the wrong field set.
+**Ranking table**: sort by the requested/default metric (`Spend` unless the user asked for `Sales`/`ACOS` ranking specifically), showing `Spend`/`TotalSalesAmount`/`ACOS`/`TACOS` per ASIN. **Zero-denominator handling — `ACOS` and `TACOS` have different denominators, don't conflate them**: an ASIN with `Sales = 0` (ad-attributed sales) has undefined `ACOS`; an ASIN with `TotalSalesAmount = 0` (total business sales) has undefined `TACOS` — these can differ (e.g. an ASIN can have `Sales = 0` this period while still showing organic `TotalSalesAmount`, or vice versa). Check each independently and report "no ad sales this period" / "no total sales this period" as appropriate, never a fabricated ratio for either. If `TotalSalesAmount` is zero across every row, report that no total sales were returned for the window; do not infer a Seller/Vendor field mismatch or switch metric families solely from that result.
 
 **Lifecycle segmentation** — classify each analysis entity (a child ASIN under `granularity=asin`/`variant`, or a parent ASIN under `granularity=parentAsin` — don't revert to child-level classification just because the underlying rows started as child-ASIN data) into exactly one tier:
 - **新品 (New)**: identified in Step 2c (opened within the analysis window). Takes priority over other tiers — a new product's low volume is expected, not "long-tail" or "declining."
@@ -178,6 +179,26 @@ When `profileIds` spans multiple stores:
 - Add `profile.profileId_`/`profile.profileName_` to Step 2a/2b's `select` when `profileIds` spans multiple stores, so a ranking/lifecycle-tier call can attribute each ASIN to its store — the same ASIN can exist under multiple stores with different performance. **This attribution must actually reach the output**: add a 店铺/Store column to Step 3's ranking table (and the markdown template's table below) whenever `profileIds` has more than one entry, and add `profileId`/`profileName` to `structured_report`'s `ranking` entries in the same case — don't pull the per-store `select` fields in Step 2a/2b only to drop them before presenting.
 
 ## Output Format
+
+### Naming entities in this report
+
+Nobody reading this report knows an internal id, and the ids `get_ads_perf` returns are
+Amazon's anyway. So:
+
+- **Every entity column and every sentence uses the name** — `campaignName`, `adGroupName`,
+  `asinTitle`. A `Campaign` column holds a campaign name, never a number.
+- **Keep ids in your working data regardless.** Period-over-period joins must be by id,
+  because names get duplicated and renamed — that requirement does not change. What changes
+  is only what reaches the page.
+- **An export gets both.** If the user asked for CSV / Excel / "something I can reconcile",
+  add an id column next to the name. The id to publish is the **Amazon** one, which is what
+  `get_ads_perf` already gives you.
+- In `structured_report` mode the entity/target fields carry the **name**; when ids were
+  asked for, add a separate key for the Amazon id rather than gluing both into one string.
+
+Full convention, including the managed-group and product-ad exceptions:
+[`references/platform-notes.md`](references/platform-notes.md) -> "Naming things in your
+answer".
 
 ### markdown mode
 
@@ -250,7 +271,7 @@ _生成时间：{timestamp} · 数据源：SparkX AI MCP · Skill: sparkx-produc
 - **Lifecycle tier cutoffs are heuristic**, not a certified business classification — always show the underlying numbers (spend share, ACOS, trend) alongside the tier label so the customer can judge, don't present the tier as an automated verdict beyond dispute.
 - **`get_entity_metadata` has no historical-snapshot capability** — inventory/eligibility status in Step 5's diagnostic card reflects the *current* state, not necessarily the state at the time of the decline. Say so if the timing matters and can't be confirmed.
 - **`variant` granularity requires an anchor** (a named parent or child ASIN) — there is no "compare all variants across the whole catalog at once" mode; see "Granularity" above.
-- **`TotalSalesAmount`/`TACOS` only exist for Seller Central profiles** — Vendor data uses `OrderedRevenue`/`OrderedTACOS` or `ShippedRevenue`/`ShippedTACOS`, and no field reports account type in advance. Follow Step 2a's retry procedure; do not classify the account from nulls alone.
+- **`TotalSalesAmount`/`TACOS` are unified Seller/Vendor metrics** — Vendor rows use the shipped basis, so these fields can be used directly across mixed Seller and Vendor profiles. Use `OrderedRevenue`/`OrderedTACOS` or `ShippedRevenue`/`ShippedTACOS` only when the user explicitly needs that Vendor-specific breakdown.
 
 ## Example Call
 

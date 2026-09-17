@@ -7,7 +7,7 @@ group ids. **The two tools wrap the request differently - don't share one shape.
 `ROAS`, `TARGET_HARVEST`, `DYNAMIC_BUDGET`, `CAMPAIGN_NAME_SIGN`, `AI_PERSONALITY`,
 `BID_OPTIMIZATION`, `STRUCT_OPTIMIZATION`, `BUDGET_DAYPART`, `BUDGET_DYNAMIC_ACTION`,
 `BUDGET_REDISTRIBUTE`, `TARGET_HARVEST_ACTION`, `NEGATIVE_TARGET`, `BRAND_TARGET`,
-`TARGET_PAUSED_ADD`, `ACTION_SETTINGS`). Prod pre-env testing (2026-08-13) confirmed
+`TARGET_PAUSED_ADD`). Prod pre-env testing (2026-08-13) confirmed
 `{"operation":"STATUS", ...}` succeeds. **Enum spelling has differed between builds, so
 read the routed tool's schema enum and copy the exact value** rather than trusting this
 list blindly.
@@ -54,7 +54,7 @@ Everything inside `request`; **Flat** operation params go in `batchParams`,
 
 - **Flat** ops -> `batchParams`: `STATUS`, `BUDGET`, `TARGET_TYPE`, `ACOS`, `ROAS`,
   `TARGET_HARVEST`, `DYNAMIC_BUDGET`, `CAMPAIGN_NAME_SIGN`, `AI_PERSONALITY`.
-- **Action-space** ops -> `aiActionSettings` / `aiAutomation`: `BID_OPTIMIZATION`, `STRUCT_OPTIMIZATION`, `BUDGET_DAYPART`, `BUDGET_DYNAMIC_ACTION`, `BUDGET_REDISTRIBUTE`, `ACTION_SETTINGS`.
+- **Action-space** ops -> `aiActionSettings` / `aiAutomation`: `BID_OPTIMIZATION`, `STRUCT_OPTIMIZATION`, `BUDGET_DAYPART`, `BUDGET_DYNAMIC_ACTION`, `BUDGET_REDISTRIBUTE`.
   - **Schema-only - do not use on SP/SB** (word-list, rejected in batch): `NEGATIVE_TARGET`, `BRAND_TARGET`, `TARGET_PAUSED_ADD`, `TARGET_HARVEST_ACTION`. (`TARGET_HARVEST_ACTION` / `targetHarvest` are valid on the **SD** tool, not here.)
 
 > **Naming**: the server's canonical codes are camelCase (`budget`, `status`, `targetType`,

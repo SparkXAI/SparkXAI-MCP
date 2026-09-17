@@ -194,10 +194,18 @@ If a user's requested range exceeds 90 days, **proactively split it** into seque
 |---|---|---|
 | `dateStart`/`dateEnd` request params (`get_ads_perf`, `get_operation_log`) | `YYYY-MM-DD` | `"2026-06-01"` |
 | `date` dimension field returned in `get_ads_perf` rows (daily grouping) | `YYYYMMDD` (no dashes) | `"20240601"` |
-| `campaignStartDate`/`campaignEndDate` fields in `get_entity_metadata` (both as returned values and as filter values) | `YYYYMMDD` (Ymd, no dashes) | `"20260101"` |
+| `campaignStartDate`/`campaignEndDate` fields in `get_entity_metadata` | **string, format varies** — `"20260101"` *or* `"2026-01-01"`, sometimes `""` | one known campaign: use its returned value as-is. Across campaigns: **do not filter server-side** — page to the end and compare client-side |
 | `createdDate` field in `get_operation_log` rows | Full timestamp, **timezone varies by entity + `profileIds` count** — see the next section | `"2026-08-24 07:01:06"` |
 
-Concretely: when you *request* a date range, always use `YYYY-MM-DD`. When you *read or filter* the `date`/`campaignStartDate`/`campaignEndDate` data fields, use `YYYYMMDD` with no separators — e.g. `{"campaignStartDate": {">=": "20260101", "<=": "20260131"}}`, not `{"campaignStartDate": {">=": "2026-01-01"}}`. Getting this backwards is a common cause of a filter silently matching nothing or an `invalid_params` error.
+Concretely: when you *request* a date range, always use `YYYY-MM-DD`. The `date` dimension **returned by `get_ads_perf`** is `YYYYMMDD` with no separators. But **`campaignStartDate`/`campaignEndDate` on `get_entity_metadata` have no fixed format** — a live sample contained both `"20260101"` and `"2026-01-01"`, plus empty strings, and **the two shapes can coexist in one result set**. So:
+
+- **Reading one known campaign's dates**: use the value as returned, parsing whichever shape it is.
+- **Filtering a date range across campaigns**: **do not filter server-side on these fields at all.** A filter can only be written in one shape, so it silently drops every row stored in the other. Narrow with other filters (`campaignState`, `campaignType`, `portfolioId`…), page to the end, then parse both shapes and compare client-side.
+- **If you did not page to the end**, say the result is partial rather than presenting it as the full set.
+
+**Never strip the dashes just to build a server-side filter on these fields** — that turns a
+non-match into a wrong match. Client-side is the opposite: **do** parse both shapes into real
+date values and compare those, rather than comparing the strings.
 
 ### ⚠️ `get_operation_log`'s `createdDate` timezone depends on your request shape
 
@@ -248,27 +256,18 @@ Amount fields carry a `currency` indicator, but the exact mechanism differs by t
 
 ### get_entity_metadata
 
-| Entity | Scenario | Outer `currency` | Per-row `currency` field | Notes |
-|---|---|---|---|---|
-| campaign/adGroup/portfolio/etc | Single profile | Local currency code | **may also be present** | `dailyBudget` etc in local currency |
-| campaign/adGroup/portfolio/etc | any | single: that store's code; multi: **not present** | **always present**, value may be `null` if the profile currency could not be resolved | Config amounts stay in each store's own currency — **not** FX-converted. A `null` here also raises a `meta.hint`; never fall back to USD |
-| **asin** | Single profile | Local currency code | **may also be present** | `asinPrice`/`parentAsinPrice` in local currency — the row field is emitted whenever the underlying row has one, regardless of profile count |
-| **asin** | Multi profile | **not present** | present **only when the row has one** — the key is omitted rather than set to `null` | Same rule; `asin` was the first entity to work this way. Note the difference from AdsList above, where the key is always present and may be `null` |
-| aiGroup / aiGroup_schedule / automationRule | any | **not present** | **none** | Other providers, no currency handling. Currency semantics for these are **not established** — do not infer them (`automationRule` returns no `profileId` at all) |
+**One rule, one place.** Which entities carry a per-row `currency`, which carry only
+`meta.currency`, which carry neither, and when a `USD` label is a real answer versus a failed
+lookup - all of that lives in **`query-entity-metadata`'s field reference**, under "Where the
+currency lives, per entity". It is not repeated here, because a table copied into 24 files
+drifts the moment the behaviour changes.
 
-`asin` multi-profile example:
-```json
-{
-  "isError": false,
-  "toolName": "get_entity_metadata",
-  "rows": [
-    {"asin": "B0XX", "asinPrice": 29.99, "currency": "USD", "profileId": 111},
-    {"asin": "B0YY", "asinPrice": 2980, "currency": "JPY", "profileId": 222}
-  ]
-}
-```
+The two things worth knowing without opening it:
 
-**Rule of thumb**: **prefer a row's own `currency` whenever it is present** — it is emitted independently of profile count. Fall back to the outer `currency` only when the row has none. Outer present → all rows share it; outer absent **and** row absent → currency is undetermined, see the handling rule in the skill.
+- **Amounts are never FX-converted.** Every figure is in its own store's currency, whatever
+  label the envelope carries.
+- **A `USD` in `meta.currency` may mean "could not resolve".** Do not sum across stores, and
+  do not label a multi-store figure as USD, on the strength of that code alone.
 
 ### get_operation_log
 
@@ -278,27 +277,33 @@ This tool *may* also emit an outer `currency`, inferred from the rows: if every 
 
 ## Ratio Metric Display Rule
 
-**Two tiers — do not treat every ratio-shaped metric the same way.** Only some fields have confirmed evidence of a ×100/percentage scale in the platform spec; the rest are unconfirmed and must be handled more conservatively.
+**Use the confirmed field list below rather than generalizing from a metric's name.** The server explicitly calculates these percentage metrics on a ×100 scale.
 
-### Tier 1 — Confirmed ×100/percentage scale
+### Confirmed ×100 percentage metrics
 
-`ACOS` (`Spend/Sales×100`), `CTR` (`Clicks/Impressions×100`), `CVR` (`Conversions/Clicks×100`) — confirmed by their documented formulas and by the tool's own response example (`"ACOS": 17.61`, i.e. 17.61%). `aiGroup.targetAcos_` (`get_entity_metadata`) is confirmed by its explicit label "Target ACOS (percentage)". `UnitSessionPercentage` is confirmed the same way (explicitly labeled "percentage" in the spec). For these fields:
+Checked one by one against the SQL the server builds: `ACOS`, `CTR`, `CVR`, `AdsCVR`, `TACOS`,
+`ShippedTACOS`, `OrderedTACOS`, `NTBOrdersRate`, `NTBUnitsRate`, `NTBSalesRate`,
+`ViewableImpressionsRate`, `AdsSalesRate`, `AdsOrdersRate`, `AdsUnitsRate`,
+`AdsSalesSameSKURate`, `AdsOrdersSameSKURate`, `Video5SecondViewRate` and
+`UnitSessionPercentage` all end in `* 100`. `aiGroup.targetAcos_` on
+`get_entity_metadata` is on the same scale.
 
-- The number is already ×100-scaled — do not multiply or divide by 100 again.
-- **Append a `%` sign when presenting the value to the user**: if the tool returns `"ACOS": 17.61`, say "ACOS is 17.61%". If `targetAcos` returns `35`, say "target ACOS is 35%".
-- When constructing a filter, pass the threshold on this same ×100 scale, as a plain number with **no `%` in the JSON**: `{"ACOS": {"<": 20}}` for "ACOS under 20%" — not `{"ACOS": {"<": 0.2}}` (which means "under 0.2%", almost never intended).
+For the fields listed above:
 
-### Tier 2 — Unconfirmed scale (needs product team confirmation)
+- **The number is already ×100 — never multiply or divide by 100 again.**
+- **Append `%` when you show it.** `"ACOS": 17.61` is 17.61%, and `"TACOS": 17.61` is 17.61%
+  too. Relaying the bare number reads as a ratio and understates it a hundredfold.
+- **Filters take the same ×100 number, with no `%` in the JSON**: `{"ACOS": {"<": 20}}` means
+  "under 20%". `{"ACOS": {"<": 0.2}}` means "under 0.2%", which is almost never intended.
 
-`TACOS`, `ShippedTACOS`, `OrderedTACOS`, `NTBOrdersRate`, `NTBUnitsRate`, `NTBSalesRate`, `ViewableImpressionsRate`, `AdsSalesRate`, `AdsOrdersRate`, `AdsUnitsRate`, `AdsSalesSameSKURate`, `AdsOrdersSameSKURate`, `Video5SecondViewRate` — the platform spec gives only a metric name for these, with **no formula and no example value**, so their scale is not independently verified the way Tier 1 is.
+Do not expand this rule to every ratio-shaped name. `VTR`, `vCTR`, `TopOfSearchIS`,
+`BuyBoxPercentage`, and `UnavailabilityRate`, for example, are read or aggregated from
+source values rather than calculated with `* 100` in the same metric-expression block.
+Follow their field-specific contract; do not rescale them merely because their names imply
+a rate or percentage.
 
-**`AdsCVR` is a special case, not just "unconfirmed"**: its documented formula is `Conversions/Clicks` — explicitly **without** `×100`, unlike `CVR`'s formula which explicitly includes `×100`. This is active evidence that `AdsCVR` may be on a *different* scale (a plain 0–1 ratio) than `CVR`, not merely an assumption gap. Do not treat it as interchangeable with `CVR`.
-
-For all Tier 2 fields:
-- Relay the tool's raw value exactly as returned — do not assume it's a percentage, do not multiply/divide by 100, and do not append a `%` sign, since you don't actually know if the number is already ×100-scaled or a 0–1 ratio.
-- Do not construct filters against these fields using an assumed percentage scale (e.g. don't guess that `20` means "20%") — if the user wants to filter on one of these, either ask what scale they mean or note the ambiguity, and flag it to the SparkX AI product team for explicit confirmation before the skill can give guidance as confident as Tier 1's.
-
-`ROAS`, `CPC`, `CPA` are **not percentages at all** — they're plain ratios/currency-per-unit values (e.g. `ROAS: 5.68`), not covered by either tier.
+`ROAS`, `CPC`, `CPA` are **not percentages** — plain ratios or currency-per-unit (e.g.
+`ROAS: 5.68`).
 
 ## Multi-Profile Row Attribution
 
@@ -381,7 +386,7 @@ These are semantic mappings the agent should apply automatically when translatin
 | Last 30 days | `dateStart` = 30 days ago, `dateEnd` = yesterday |
 | Quarter-to-date (QTD) | `dateStart` = 1st day of the current calendar quarter (Jan/Apr/Jul/Oct 1st), `dateEnd` = yesterday |
 | Year-to-date (YTD) | `dateStart` = January 1st of the current year, `dateEnd` = yesterday |
-| "Since this campaign launched" / "since we started" | **Not a fixed offset — look it up.** First query `get_entity_metadata` (`entity: "campaign"`) for that campaign's `campaignStartDate`, then use that as `dateStart`. **Constrained by the 15-month lookback**: if the launch date is more than 15 months ago, you cannot query the full lifecycle in one range — say so explicitly ("I can only go back 15 months; this campaign launched earlier than that, so this covers the most recent 15 months, not the full history") rather than silently truncating and presenting it as the complete picture |
+| "Since this campaign launched" / "since we started" | **Not a fixed offset — look it up, then convert it.** Query `get_entity_metadata` (`entity: "campaign"`) for that campaign's `campaignStartDate`, parse it (it may come back as `"20260101"` **or** `"2026-01-01"`, and `""` means no start date is recorded), and **reformat it to `YYYY-MM-DD` before passing it as `dateStart`** — `get_ads_perf` rejects the compact form. **Constrained by the 15-month lookback**: if the launch date is more than 15 months ago, you cannot query the full lifecycle in one range — say so explicitly ("I can only go back 15 months; this campaign launched earlier than that, so this covers the most recent 15 months, not the full history") rather than silently truncating and presenting it as the complete picture |
 
 **⚠️ Check for a reversed range before sending it — this month/QTD/YTD can produce `dateEnd < dateStart` on the first day of the period.** These rules all use "yesterday" as `dateEnd` (per the T+2 rule) but "1st of the period" as `dateStart`. If today is the 1st of the month/quarter/year, `dateStart` = today's date but `dateEnd` = yesterday — which is *before* `dateStart`, an invalid, reversed range. Concretely: querying "this month" on July 1st gives `dateStart=2026-07-01`, `dateEnd=2026-06-30` (reversed). The same happens for QTD on Jan/Apr/Jul/Oct 1st, and for YTD on January 1st. **Always compute `dateEnd` and compare it to `dateStart` before issuing the call.** If `dateEnd < dateStart`, do not send the request — the period genuinely has no completed days to report yet (e.g. "this month" on July 1st has zero elapsed complete days). Tell the user that directly ("this month just started, so there's no completed-day data yet") rather than sending a reversed range and letting it error, or worse, silently swapping the two dates and reporting the wrong period.
 
@@ -407,9 +412,9 @@ See the dedicated Period-over-Period and Top Movers example for the full procedu
 - **Multi-profile `get_ads_perf` metrics are USD** (except `asin.asinPrice_`, which stays local). **`get_entity_metadata` is the opposite** — its config amounts stay in each store's currency and every row carries its own `currency`; see Currency Rules. When reporting a multi-profile **`get_ads_perf`** figure, say "in USD" explicitly so the user doesn't assume local currency. When reporting **`get_entity_metadata`** amounts, present each row with its own `currency` and **never label the combined result as USD** — group by currency, or convert explicitly and say so.
 - **Multi-profile rows need store attribution** — see Multi-Profile Row Attribution above; don't merge same-named campaigns across stores without labeling which store each row belongs to.
 - **`get_operation_log` pagination depends on `entities`**: a single non-`aiGroup` entity paginates for real (loop `page` until `hasNextPage=false`); multi-entity or `aiGroup`-only is limit-only. In limit-only mode with `truncated=true`, first prefer steering the user to a single entity (real pagination), otherwise split into non-overlapping date sub-windows until each returns `truncated=false`; if a single day alone is still truncated, say so rather than reporting a partial count as complete.
-- **Query-param dates (`dateStart`/`dateEnd`) are `YYYY-MM-DD`; data-field dates (`date`, `campaignStartDate`, `campaignEndDate`) are `YYYYMMDD`** — see Date Format above. These are NOT interchangeable.
+- **Query-param dates (`dateStart`/`dateEnd`) are `YYYY-MM-DD`; `get_ads_perf`'s `date` dimension is `YYYYMMDD`; `campaignStartDate`/`campaignEndDate` are strings of *no guaranteed format* — sample them before filtering** — see Date Format above. These are NOT interchangeable.
 - **`get_ads_perf` max span is 90 days on the request itself** — week/month aggregation reduces row count within a call, it does NOT let one call's `dateStart`/`dateEnd` exceed 90 days. Split first, aggregate second.
-- **ACOS/CTR/CVR/targetAcos/UnitSessionPercentage are confirmed pre-scaled ×100** (e.g. `17.61` = 17.61%) — don't re-scale, but **do append `%`** when presenting to the user (`"17.61%"`); filters stay on the raw ×100 scale (`{"ACOS": {"<": 20}}`). **TACOS/`*Rate` fields are unconfirmed** — relay the raw value as-is with no `%` and no assumed scale until backend confirms. See Ratio Metric Display Rule above.
+- **Confirmed percentage metrics are pre-scaled ×100** — use the explicit field list in Ratio Metric Display Rule rather than assuming every `*Rate`/`*Percentage` name has the same implementation. For confirmed fields such as `ACOS`, `CTR`, `CVR`, `TACOS`, `AdsCVR`, `targetAcos`, and `UnitSessionPercentage`, don't re-scale, but **do append `%`** when presenting (`"17.61%"`); filters stay on the raw ×100 scale (`{"ACOS": {"<": 20}}`). `ROAS`/`CPC`/`CPA` are not percentages.
 - **Metric/field names are case-sensitive** — `Spend` ✓, `spend` ✗, `SPEND` ✗.
 - **Field-naming convention differs by tool** — see the "Field Naming Rules" section in each tool's own SKILL.md before constructing `select`/`filters`. Do not assume the two tools share one convention.
 - **One unauthorized `profileId` fails the whole call** — no silent dropping any more. Always take IDs verbatim from `get_user_authorized_context`.
@@ -418,3 +423,55 @@ See the dedicated Period-over-Period and Top Movers example for the full procedu
 - **`get_operation_log`'s `createdDate` timezone shifts with the request** (`aiGroup` = UTC; ad entities = store-local for one profile, UTC for many) — always label the zone, never merge single- and multi-profile results. See the timezone section above.
 - **`currency: "mixed"` on `get_operation_log` is not a currency** — read each row's `currencyCode` instead of formatting or summing.
 - **`get_entity_metadata`'s `aiGroup` response is a projection of what's *currently effective*** — fields belonging to a disabled switch, and rules running in AI mode, are omitted rather than returned with stale values. A missing field means "not in effect", not "not configured" and not "write failed". See that skill for the full rules.
+
+## Naming things in your answer: names first, Amazon ids when asked
+
+Users think in names, not numbers. An internal id is this platform's own primary key - it
+means nothing on Amazon and nothing to the person reading your answer.
+
+**Default to names.** Unless the user asked for an identifier, report `campaignName` /
+`adGroupName` / `portfolioName` / `aiGroupName` / `asinTitle` and leave ids out entirely -
+"Summer Tent SP - Exact spent $1,200 last week", not "campaign 41398 spent $1,200".
+
+**If an id is shown, the name goes with it**: `Summer Tent SP - Exact (ID: 298539385213868)`.
+Never a bare number.
+
+**When the user asks for an id, give the Amazon one.** The same object has two different
+numbers, and which one you get depends on the tool:
+
+| Source | What its `campaignId` holds |
+|---|---|
+| `get_ads_perf` | the **Amazon** campaign id |
+| `get_operation_log` | the **Amazon** campaign id |
+| `get_entity_metadata` | the **internal** id - the Amazon one is the separate `amazonCampaignId` field |
+
+Amazon-side fields per entity: `amazonCampaignId`, `amazonAdGroupId`, `amazonKeywordId`
+(keywords and negative keywords), `amazonTargetId` (targets and negative targets),
+`amazonAdId` (product ads), `amazonPortfolioId`. **Never present an internal id as "the
+campaign ID", and never derive one identifier from the other** - they are unrelated numbers.
+
+**Exports and tables carry both.** For a CSV, a spreadsheet, or any table the user will
+reconcile against another system, give a name column **and** an Amazon-id column.
+
+**Previews and confirmations.** A write preview echoes back the **internal** ids you sent.
+Translate them to names before showing the user - nobody can meaningfully approve a change
+to objects they cannot identify.
+
+### Three exceptions
+
+1. **Managed groups have no Amazon id.** A managed group is this platform's own construct,
+   not an Amazon object, so no Amazon-side identifier exists. Report its name, and its
+   internal `aiGroupId` when an id is asked for. The **campaigns inside** a managed group are
+   ordinary Amazon objects and follow the rule above.
+2. **Product ads have no name.** Identify one by **ASIN + SKU**; do not invent a label.
+   (`placement` is an enum rather than an object - report the placement label itself.)
+3. **A just-created object has only an internal id.** Creation returns local ids; the Amazon
+   id appears later, once the object syncs. Report the name, and if an id is asked for give
+   the internal one and say plainly that the Amazon id is not available yet. Do not poll for
+   it, and do not invent one.
+
+### Getting the name in the first place
+
+`select` is a **strict projection**: ask for ids only and no name comes back. Whenever a
+result will be shown to a user, put the name field in `select` as well - or omit `select`
+entirely and take the full row.

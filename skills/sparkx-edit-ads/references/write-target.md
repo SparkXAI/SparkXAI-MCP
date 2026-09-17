@@ -102,12 +102,12 @@ Same shape as `updateStatus`, with `bid` instead of `state`:
 | `data[].id` | number | yes | `targetId` |
 | `data[].profileId` | string | yes | |
 | `data[].campaignType` | string | yes | |
-| `data[].bid.type` | string | yes | `set to` / `increase amount` / `decrease amount` / `increase percent` / `decrease percent` |
+| `data[].bid.type` | string | yes | `setTo` / `increaseAmount` / `decreaseAmount` / `increasePercent` / `decreasePercent` |
 | `data[].bid.previousBid` | number | yes | `>= 0`, read from metadata just before |
-| `data[].bid.amount` | number | yes | **> 0** for every type, `set to` included |
+| `data[].bid.amount` | number | yes | **> 0** for every type, `setTo` included |
 
-- `increase percent` <= 10000, `decrease percent` <= 99.
-- **`set to` with `amount: 0` is rejected** (older docs said otherwise). Pause the target
+- `increasePercent` <= 10000, `decreasePercent` <= 99.
+- **`setTo` with `amount: 0` is rejected** (older docs said otherwise). Pause the target
   instead of bidding it to zero.
 - `previousBid` is forwarded raw and never verified - a stale value goes through unnoticed.
 - The preview for this route also carries `campaignType`.
@@ -119,6 +119,12 @@ Same shape as `updateStatus`, with `bid` instead of `state`:
 **These two routes are the same operation.** Same implementation, same endpoint
 (`create`), byte-identical request body; `action` changes nothing. Both add new rows at the
 destination, so both are **non-idempotent**.
+
+**The destination ad group must be product-targeting.** A keyword-targeting ad group is
+rejected for both routes: the server reads each destination's targeting type before writing,
+and **if any destination is ineligible - or its targeting type cannot be read at all - nothing
+is submitted**. It fails closed, so a lookup failure is not a reason to retry blindly; check
+the ad group first with `get_entity_metadata`. (`target` + `create` runs the same check.)
 
 **SP / SB only.** Payload: `request.businessType` (**top-level**) + `request.target[]`:
 

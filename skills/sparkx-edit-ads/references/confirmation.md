@@ -1,6 +1,6 @@
 # Two-phase confirmation
 
-Nine of the 18 routes do not write on the first call. They return a preview plus a
+Eleven of the 20 routes do not write on the first call. They return a preview plus a
 `confirmToken`; the write happens only when you call again with that token.
 
 ## Which routes, and when
@@ -8,6 +8,8 @@ Nine of the 18 routes do not write on the first call. They return a preview plus
 **Always (every call):**
 
 - `campaign` + `updateBudget`
+- `campaign` + `updateAudienceBid` (including 0% and changes to an existing binding)
+- `campaign` + `updatePlacementBid` (including 0%)
 - `keyword` + `updateBid`
 - `target` + `updateBid`
 - `productAd` + `archive`
@@ -138,6 +140,8 @@ is no single schema. Roughly:
 
 | Route | Keys you will see |
 |---|---|
+| `campaign` + `updateAudienceBid` | `index`, `id`, `profileId`, `campaignType`, `audienceId`, `audienceSegmentType`, `audienceBidPercentage` (requested binding and absolute uplift, not queried current values) |
+| `campaign` + `updatePlacementBid` | `index`, `id`, `profileId`, `campaignType`, and whichever placement fields you sent (requested absolute percentages, not queried current values) |
 | `campaign` + `updateBudget` | `index`, `campaignId`, `profileId`, `campaignName`, `currentBudget`, `adjustmentType`, `adjustmentAmount`, `projectedBudget` (+ `warnings` only when non-empty) |
 | `campaign` + `updateStatus` | `index`, `campaignId`, `profileId`, `campaignName`, `campaignType`, `currentState` (always `"unknown"`), `targetState` |
 | `keyword` / `target` + `updateBid` | `id`, `previousBid`, `projectedBid` (+ `campaignType` on target) |

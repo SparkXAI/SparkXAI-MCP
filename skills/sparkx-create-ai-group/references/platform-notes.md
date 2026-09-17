@@ -176,3 +176,55 @@ value or re-sending the write.
 For multiple writes against the same object set, execute serially and read back after
 each call. Never run dependent writes concurrently. When operation-log read access is
 available, also verify the resulting audit entry; `changedBy` is server-derived.
+
+## Naming things in your answer: names first, Amazon ids when asked
+
+Users think in names, not numbers. An internal id is this platform's own primary key - it
+means nothing on Amazon and nothing to the person reading your answer.
+
+**Default to names.** Unless the user asked for an identifier, report `campaignName` /
+`adGroupName` / `portfolioName` / `aiGroupName` / `asinTitle` and leave ids out entirely -
+"Summer Tent SP - Exact spent $1,200 last week", not "campaign 41398 spent $1,200".
+
+**If an id is shown, the name goes with it**: `Summer Tent SP - Exact (ID: 298539385213868)`.
+Never a bare number.
+
+**When the user asks for an id, give the Amazon one.** The same object has two different
+numbers, and which one you get depends on the tool:
+
+| Source | What its `campaignId` holds |
+|---|---|
+| `get_ads_perf` | the **Amazon** campaign id |
+| `get_operation_log` | the **Amazon** campaign id |
+| `get_entity_metadata` | the **internal** id - the Amazon one is the separate `amazonCampaignId` field |
+
+Amazon-side fields per entity: `amazonCampaignId`, `amazonAdGroupId`, `amazonKeywordId`
+(keywords and negative keywords), `amazonTargetId` (targets and negative targets),
+`amazonAdId` (product ads), `amazonPortfolioId`. **Never present an internal id as "the
+campaign ID", and never derive one identifier from the other** - they are unrelated numbers.
+
+**Exports and tables carry both.** For a CSV, a spreadsheet, or any table the user will
+reconcile against another system, give a name column **and** an Amazon-id column.
+
+**Previews and confirmations.** A write preview echoes back the **internal** ids you sent.
+Translate them to names before showing the user - nobody can meaningfully approve a change
+to objects they cannot identify.
+
+### Three exceptions
+
+1. **Managed groups have no Amazon id.** A managed group is this platform's own construct,
+   not an Amazon object, so no Amazon-side identifier exists. Report its name, and its
+   internal `aiGroupId` when an id is asked for. The **campaigns inside** a managed group are
+   ordinary Amazon objects and follow the rule above.
+2. **Product ads have no name.** Identify one by **ASIN + SKU**; do not invent a label.
+   (`placement` is an enum rather than an object - report the placement label itself.)
+3. **A just-created object has only an internal id.** Creation returns local ids; the Amazon
+   id appears later, once the object syncs. Report the name, and if an id is asked for give
+   the internal one and say plainly that the Amazon id is not available yet. Do not poll for
+   it, and do not invent one.
+
+### Getting the name in the first place
+
+`select` is a **strict projection**: ask for ids only and no name comes back. Whenever a
+result will be shown to a user, put the name field in `select` as well - or omit `select`
+entirely and take the full row.

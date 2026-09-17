@@ -1,9 +1,102 @@
 # Campaign writes
 
-Three routes: daily budget, state, bidding strategy.
+Four routes: daily budget, state, bidding strategy, audience bid adjustment.
+
+## `campaign` + `updateAudienceBid` - always confirms
+
+Send `request.profileIds` and `request.data[]` with `id` (internal campaign ID),
+`profileId`, `campaignType`, `audienceId`, `audienceSegmentType`, and
+`audienceBidPercentage`. Each batch supports SP/SB only, one profile and campaignType,
+at most 200 items, and an absolute integer percentage from 0 to 900. 0 retains the
+audience binding with no uplift. This does not unbind audiences or edit placements.
+
+Query campaign metadata for current binding and amcAudience for selectable IDs/types.
+Never guess an ID or audience pool. The first call returns a preview, not a write result.
+Review the target campaigns, audience IDs/types and new percentages with the user;
+then resend identical parameters with the returned `request.confirmToken`.
+The preview contains requested target values, not queried current values or audience names.
+The existing five-minute, one-time confirmation protocol applies even if approval
+was already given in conversation; see [confirmation.md](confirmation.md).
 
 `campaignType` values everywhere: `sponsoredProducts` / `sponsoredBrands` /
 `sponsoredDisplay`.
+
+---
+
+## `campaign` + `updatePlacementBid` - always confirms
+
+Send `request.profileIds` and `request.data[]` with `id` (internal campaign ID),
+`profileId`, `campaignType`, and **at least one** placement adjustment. An item carrying no
+adjustment at all is rejected. SP / SB only; the `request.data` 200-item cap applies.
+
+**The placement fields are different for SP and SB, and they do not cross over.** Field
+names, and the labels the customer sees for them in the web console:
+
+| campaignType | Field | Console label (EN) | Console label (ZH) | Decimals |
+|---|---|---|---|---|
+| `sponsoredProducts` | `topAdjustment` | Top of search (first page) | 搜索结果顶部(首页) | allowed |
+| | `productPageAdjustment` | Product pages | 商品页面 | allowed |
+| | `restOfSearchAdjustment` | Rest of search | 搜索结果的其余位置 | allowed |
+| `sponsoredBrands` | `topOfSearchAdjustment` | Top of search | 搜索结果顶部 | **integers only** |
+| | `homeAdjustment` | Home | 首页 | **integers only** |
+| | `detailPageAdjustment` | Product page | 商品页面 | **integers only** |
+| | `otherAdjustment` | Rest of search | 搜索结果的其余位置 | **integers only** |
+
+Talk to the user in the console labels, not the field names - "搜索结果顶部" is what they see
+on screen. Two of these are easy to get wrong:
+
+- **SP's top-of-search field is `topAdjustment`; SB's is `topOfSearchAdjustment`.** Similar
+  names, different campaign types, not interchangeable.
+- **SB's "Rest of search" is `otherAdjustment`**, not `restOfSearchAdjustment` (which is
+  SP-only). The name reads like a catch-all; the console does not offer any other SB
+  placement, so it is the rest-of-search slot.
+
+A field that is **present** but belongs to the other campaign type is rejected with
+`... is not supported for this campaignType`. A field left **absent** is fine - see below.
+
+**Omitting a field keeps its current value; it does not zero it.** Absent fields are not sent
+downstream at all, which is exactly what the console means by "提交将维持修改前的值" /
+"Submission without bid adjustment will maintain the value before modification". So send only
+the placements you mean to change, and say so when you report back - "改了搜索结果顶部,其余
+广告位保持原值", not "把广告位竞价设成了 X".
+
+Every value is an absolute percentage from **0 to 900**. It replaces that placement's current
+adjustment rather than adding to it, so re-running the same request is harmless - unlike the
+budget and bid routes. `0` means "no uplift for this placement"; there is no way to remove a
+placement, only to stop boosting it.
+
+**SP keeps its bidding strategy; SB does not.** The route never forwards a `biddingStrategy`
+of its own, so it cannot overwrite one. On SP that is the whole story. On **Sponsored Brands
+the downstream also sets `bidOptimization=false`**, switching that campaign to custom bidding
+as a side effect of the placement write - so this call does write a bidding-related field on
+SB, and a concurrent change to `bidOptimization` can still be lost.
+
+⚠️ **Say this to the user before writing an SB placement adjustment.** They asked to change
+one number and they are also changing the campaign's bidding mode; that is not something to
+discover afterwards. On SP there is no such effect - state the difference rather than
+applying one warning to both.
+
+To change a strategy deliberately, use `campaign + updateBiddingStrategy` as a separate call.
+
+⚠️ **AI placement bid optimization.** The console shows a per-campaign "AI 广告位竞价优化" /
+"AI ad placement bid optimization" toggle beside these fields. Where that automation is
+running it manages placement adjustments itself, so a manual value set here may not be what
+ends up live. This tool neither reads nor reports that toggle - if the user is surprised that
+an adjustment "did not stick", point them at it rather than re-sending the write.
+
+**One campaign per batch.** Listing the same `id` twice is rejected with
+`duplicates campaign ... ; combine its placement adjustments into one item` - put every
+placement for one campaign into a single item, not one item per placement.
+
+**One campaignType and one marketplace per batch.** The marketplace is verified before the
+write by reading the profiles; if a profile's country cannot be resolved, or the lookup
+itself fails, the batch is refused (`Unable to verify marketplaces before updatePlacementBid`)
+rather than submitted partially. Split by marketplace and resubmit.
+
+The first call returns a preview, not a write result. The preview echoes the percentages you
+asked for - it does **not** query and show the current adjustments, so if the user wants a
+before/after comparison, read campaign placement metadata yourself first. The usual
+five-minute single-use token rules apply; see [confirmation.md](confirmation.md).
 
 ---
 
@@ -18,7 +111,7 @@ Payload: `request.data[]`, each item:
 | `campaignType` | string | yes | SP / SB / SD |
 | `budget.type` | string | yes | one of the nine values below |
 | `budget.amount` | number | yes | see rules |
-| `budget.suggestBudget` | number | for `suggest` types | must be > 0 |
+| `budget.suggestBudget` | number | for `Suggest` modes | must be > 0 |
 
 **Do not include** `adGroupId`, `state`, `keywords`, `targets` or `negativeKeywords` - a
 foreign field rejects the whole batch.
@@ -26,14 +119,14 @@ foreign field rejects the whole batch.
 ### The nine `budget.type` values
 
 ```
-set to
-increase amount        decrease amount
-increase percent       decrease percent
-increase suggest amount    decrease suggest amount
-increase suggest percent   decrease suggest percent
+setTo
+increaseAmount        decreaseAmount
+increasePercent       decreasePercent
+increaseSuggestAmount    decreaseSuggestAmount
+increaseSuggestPercent   decreaseSuggestPercent
 ```
 
-Byte-exact, lowercase, single spaces. Any type containing `suggest` additionally requires
+Use the exact camelCase values above, with no spaces. Any type containing `Suggest` additionally requires
 `budget.suggestBudget > 0`.
 
 ### Amount rules
@@ -44,15 +137,16 @@ Byte-exact, lowercase, single spaces. Any type containing `suggest` additionally
 - **Amounts are in the profile's local currency** - never cents, never USD-converted. Money
   read back from metadata is a **decimal string** (`"100.00"`); parse it before doing
   arithmetic.
-- **Adjustment amounts are always non-negative.** To decrease, use a `decrease ...` type with
+- **Adjustment amounts are always non-negative.** To decrease, use a `decreaseAmount`, `decreasePercent`,
+  `decreaseSuggestAmount` or `decreaseSuggestPercent` mode with
   a positive amount - **never pass a negative number**.
 
 
-- `set to`: `amount` must be **> 0**. Zero is rejected.
+- `setTo`: `amount` must be **> 0**. Zero is rejected.
 - Other types: `amount >= 0` (0 is accepted and means "leave unchanged").
-- `increase percent` / `increase suggest percent`: `amount <= 10000`.
-- `decrease percent` / `decrease suggest percent`: `amount <= 99`. **You cannot cut a budget
-  by 100%** - use `set to` with a floor, or pause the campaign instead.
+- `increasePercent` / `increaseSuggestPercent`: `amount <= 10000`.
+- `decreasePercent` / `decreaseSuggestPercent`: `amount <= 99`. **You cannot cut a budget
+  by 100%** - use `setTo` with a floor, or pause the campaign instead.
 
 ### One campaignType and one marketplace per batch
 
@@ -88,7 +182,7 @@ unambiguous.
 
 ### Not idempotent
 
-`increase amount 10` twice adds 20. If a call times out or returns
+`increaseAmount 10` twice adds 20. If a call times out or returns
 `ambiguous_write`, **read the budget back before retrying**.
 
 ### Reconciling the preview

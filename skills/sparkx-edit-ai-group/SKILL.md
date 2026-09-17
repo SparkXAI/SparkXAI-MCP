@@ -9,7 +9,7 @@ description: >-
   save_sp_sb_ai_managed_group (edit mode). Not for creating a group (use sparkx-create-ai-group)
   or deleting one (use sparkx-delete-ai-group).
 metadata:
-  version: 1.1.3
+  version: 1.1.4
 ---
 
 # Edit AI Managed Group
@@ -411,6 +411,24 @@ explicit instruction only, and **only the asking**.
   the set you resolved is much larger than what the user described, or when a group is
   running (`aiStatus=1`) and the edit may be silently skipped - a waiver does not make a
   skipped edit visible.
+
+## Naming the group and its campaigns
+
+Two different rules apply inside one answer:
+
+- **The managed group itself** is this platform's own object — no Amazon id exists for it.
+  Report `aiGroupName`; if an id is asked for, give the internal `aiGroupId` and say that is
+  the only id this object has.
+- **The campaigns inside it** are ordinary Amazon objects. Report `campaignName`; if an id is
+  asked for, give `amazonCampaignId` — **not** the internal `campaignId` these write tools
+  take as input.
+
+So one sentence can legitimately mix the two id spaces: the group by its own id, its
+campaigns by Amazon's. What is never acceptable is presenting the internal `campaignId` as
+"the campaign ID".
+
+Full convention: [`references/platform-notes.md`](references/platform-notes.md) -> "Naming
+things in your answer".
 
 ## Response & errors
 

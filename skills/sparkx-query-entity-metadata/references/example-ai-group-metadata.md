@@ -31,7 +31,7 @@ Notes:
 - For a full configuration read, omit `select` so `aiActionSettings` and `aiAutomation` are both
   retained. If you do use `select`, explicitly include every needed top-level field; nested paths
   are not supported.
-- `targetAcos` (if returned) is Tier 1 confirmed ×100/percentage — append `%` when presenting it.
+- `targetAcos` (if returned) is ×100/percentage — append `%` when presenting it.
 - Unlike `get_ads_perf`, this tool's spec does not document support for custom SQL aggregate expressions (e.g. `count(distinct ...)`) in `select` — stick to the plain fields listed in the `aiGroup` field table.
 - When the user asks for the complete setup, list every supported action-space switch separately,
   including off switches, then pair each on rule-capable switch with its AI/Rule mode. For rules

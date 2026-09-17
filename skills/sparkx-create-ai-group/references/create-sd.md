@@ -15,9 +15,9 @@ Creates a new **Sponsored Display** AI managed group. SD-only - for SP/SB use
 | `acos` | number | No | Target ACOS on the **x100 scale** - user's `25%` -> send `25` (not `0.25`) |
 | `optimizeType` | int | No | `1`=drive growth, `2`=maintain stability |
 | `status` | int | No | AI status at creation: **`0`=off, `1`=on only** (`2`=cancelled is a lifecycle state, not a valid create input) |
-| `budgetDynamicStatus` | int | No | Dynamic budget optimization: `0`=off, `1`=on |
-| `numType` | int | No | Dynamic budget value type: `1`=percentage, `2`=fixed value |
-| `num` | number | No | Dynamic budget optimization value |
+| `budgetDynamicStatus` | int | No | **Not supported on SD — send `0` or omit it.** A non-zero value is rejected outright (`budgetDynamicStatus is not supported for SD (Sponsored Display)`). Historical values: `0`=off, `1`=on |
+| `numType` | int | No | **Do not send for SD creation.** It is only meaningful with the unsupported dynamic-budget switch |
+| `num` | number | No | **Do not send for SD creation.** It is only meaningful with the unsupported dynamic-budget switch |
 | `campaignNameSign` | int | No | Campaign-name label: `0`=off, `1`=on |
 | `targetHarvestStatus` | int | No | `0`=off, `1`=on, `2`=on with exact negation in the source ad group |
 | `budgetRedistributeStatus` | int | No | Budget redistribute: `0`=off, `1`=on |
@@ -31,8 +31,9 @@ actually wants to set.
 
 - **Budget**: `budget` does nothing unless `budgetChange=true`. If the user gives a
   budget, send both.
-- **Dynamic budget**: `num` needs `numType` to be meaningful, and both are only
-  relevant when `budgetDynamicStatus=1`.
+- **Dynamic budget is unavailable for SD creation**: omit `budgetDynamicStatus`, `numType`,
+  and `num`. A non-zero `budgetDynamicStatus` is rejected; sending its companion values
+  cannot enable the feature.
 
 ## Example - create an SD group with AI off, then let the user turn it on later
 

@@ -1,5 +1,22 @@
 # Field & Metrics Reference — `get_ads_perf`
 
+> **The ids for Amazon advertising entities are Amazon's.** `campaign.campaignId_`,
+> `adGroup.adGroupId_`, `target.targetId_`, `productAd.amazonAdId_` and the rest of the ad hierarchy are
+> Amazon's identifiers, **not** the internal keys `get_entity_metadata` returns under the same
+> names. For each such object the two are different numbers and neither can be derived
+> from the other: to go from a value here to a write, filter `get_entity_metadata` by
+> `amazonCampaignId` (or the entity's own `amazon*Id`) and use the internal id from the
+> matched row.
+>
+> **The exceptions are the objects Amazon does not own**: `aiGroup.aiGroupId_` is a managed
+> group, a platform-only construct, and `productLine.*Id_` are platform tagging ids. These
+> have **no second id to reconcile against** - report them as-is.
+>
+> **Report names, not ids.** Put `campaign.campaignName_` / `adGroup.adGroupName_` /
+> `asin.asinTitle_` in `select` alongside the id and answer with the name; give an id only
+> when asked, and then the Amazon one. Full convention:
+> [`platform-notes.md`](platform-notes.md) -> "Naming things in your answer".
+
 ## Supported Dimension Fields (by entity)
 
 ### Campaign
@@ -257,7 +274,7 @@ Never report AI performance from this entity or divide by those values; use `fac
 | ACOS | Spend/Sales×100 |
 | ROAS | Sales/Spend |
 
-**⚠️ `CTR`/`CVR`/`ACOS` are confirmed returned pre-scaled ×100** — a value of `17.61` means 17.61%. Don't re-scale the number, but **append `%`** when presenting it to the user: "ACOS is 17.61%". Filters stay on the raw ×100 scale with no `%` in the JSON (`{"ACOS": {"<": 20}}`). `TACOS` and other `*Rate`/`*Percentage`-named metrics are **not independently confirmed** to be on this scale — relay their raw value as-is with no `%` until backend confirms. `CPC`/`CPA`/`ROAS` are plain ratios, not percentages at all.
+**⚠️ Confirmed percentage metrics are returned pre-scaled ×100** — a value of `17.61` means 17.61%. This includes `CTR`, `CVR`, `ACOS`, `AdsCVR`, `TACOS`, `UnitSessionPercentage`, and the derived `*Rate` metrics explicitly listed in Platform Notes. Don't re-scale the number, but **append `%`** when presenting it to the user: "ACOS is 17.61%". Filters stay on the raw ×100 scale with no `%` in the JSON (`{"ACOS": {"<": 20}}`). Do not infer an unlisted field's scale from its name alone. `CPC`/`CPA`/`ROAS` are plain ratios, not percentages at all.
 
 ### NTB (New-to-Brand) metrics
 `NTBOrders`, `NTBUnits`, `NTBSales`, `NTBOrdersRate`, `NTBUnitsRate`, `NTBSalesRate`
@@ -296,6 +313,18 @@ Never report AI performance from this entity or divide by those values; use `fac
 
 ### ASIN business metrics (asin entity only)
 `TotalSalesAmount`, `OrderCount`, `UnitCount`, `AverageOrderPrice`, `AverageProductPrice`, `TACOS`, `CPO`, `Sessions`, `UnitSessionPercentage`, `PageViews`, `GlanceViews`, `BuyBoxPercentage`, `OrderedUnits`, `OrderedRevenue`, `ShippedUnits`, `ShippedRevenue`, `ShippedCogs`, `CustomerReturns`, `NetPPM`, `UnavailabilityRate`, `AdsSalesRate`, `AdsOrdersRate`, `AdsUnitsRate`, `AdsSalesSameSKURate`, `AdsOrdersSameSKURate`, `AdsCVR`, `OrganicSales`, `OrganicOrders`, `ShippedAverageProductPrice`, `ShippedTACOS`, `OrderedAverageProductPrice`, `OrderedTACOS`
+
+> **`OrganicSales` / `OrganicOrders` are derived, not stored**: total product sales minus the
+> advertised share. Two consequences worth knowing before you quote them:
+>
+> - **An un-advertised ASIN now reports its full sales as organic.** It previously reported
+>   `0`, because the ad-side term was `NULL` for an ASIN with no ads and the subtraction
+>   collapsed. If you are comparing against a figure someone pulled earlier, that is where the
+>   difference comes from - the old number was wrong, not the new one.
+> - **They are floored at zero.** When ad-attributed sales exceed product sales for a period -
+>   attribution windows differ - the difference is clamped to `0` rather than going negative.
+>   So `OrganicSales: 0` means "no organic sales *that we can compute*", which is not
+>   necessarily "no organic sales".
 
 ⚠️ **Only supported on asin `factEntity`** — do NOT join with Campaign/AdGroup/aiGroup dimensions (causes row duplication). See [`ad-type-dependent-metrics.md`](ad-type-dependent-metrics.md).
 

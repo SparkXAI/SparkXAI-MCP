@@ -7,7 +7,7 @@ description: >-
   Not for monthly/quarterly reports (use sparkx-monthly-ads-report / quarterly-ads-report, not yet built),
   nor for deep-dive analysis on a specific question (use the relevant analysis skill instead).
 metadata:
-  version: 1.0.4
+  version: 1.0.5
 ---
 
 # Weekly Ads Report
@@ -185,7 +185,7 @@ Skip this call entirely when `compareBaseline=wow` (the default) — don't issue
 
 **When `compareBaseline=wow+4w_avg`**: additionally include the trailing-4-week **weekly** average from Step 2g and a `vs. 4-week avg` % computed the same way as WoW (`(this week − 4-week avg) / 4-week avg × 100`, same zero-denominator handling). Per Step 2g: the 5 base metrics use 28-day sum ÷ 4 (**not** ÷ 28, which would be a daily figure not comparable to this week's 7-day total); the ratio metrics (`ACOS`/`ROAS`/`CTR`/`CVR`) are **not** divided by anything directly — they're recomputed from those summed base metrics via their standard formulas. Add the baseline as a third column alongside This Week / Last Week in both output templates below — don't compute this baseline without displaying it, and don't display the column without actually computing it.
 
-**Ratio-metric display rule** (same rule shared across the three base skills): `ACOS`/`CTR`/`CVR` are confirmed pre-scaled ×100 (the tool returns `17.61` meaning 17.61%) — **append `%` directly, do not multiply/divide by 100 again**; `ROAS`/`CPC`/`CPA` are not percentages, they're plain ratios/unit-costs — no `%`. If the report ever surfaces `TACOS`/other `*Rate` fields, their scale is **unconfirmed** — show the raw value as-is, no `%`, no assumed scale.
+**Ratio-metric display rule** (same rule shared across the three base skills): confirmed percentage metrics such as `ACOS`, `CTR`, `CVR`, `TACOS`, and the derived `*Rate` metrics explicitly listed in Platform Notes are pre-scaled ×100 (the tool returns `17.61` meaning 17.61%) — **append `%` directly, do not multiply/divide by 100 again**. Do not infer an unlisted field's scale from its name alone; `ROAS`/`CPC`/`CPA` are not percentages, they're plain ratios/unit-costs — no `%`.
 
 **"Significant change" thresholds** (used for the initial screen in Step 5's Top Changes section — not the final sort criterion, which still follows Step 5's full procedure):
 - Spend WoW absolute value ≥ 20%
@@ -238,6 +238,26 @@ When `profileIds` spans multiple stores:
 - `asin.asinPrice_` (if used) stays in local currency and is not affected by the USD-aggregation rule above — this report doesn't currently use that field, but note the exception if the report is later extended to include it.
 
 ## Output Format
+
+### Naming entities in this report
+
+Nobody reading this report knows an internal id, and the ids `get_ads_perf` returns are
+Amazon's anyway. So:
+
+- **Every entity column and every sentence uses the name** — `campaignName`, `adGroupName`,
+  `asinTitle`. A `Campaign` column holds a campaign name, never a number.
+- **Keep ids in your working data regardless.** Period-over-period joins must be by id,
+  because names get duplicated and renamed — that requirement does not change. What changes
+  is only what reaches the page.
+- **An export gets both.** If the user asked for CSV / Excel / "something I can reconcile",
+  add an id column next to the name. The id to publish is the **Amazon** one, which is what
+  `get_ads_perf` already gives you.
+- In `structured_report` mode the entity/target fields carry the **name**; when ids were
+  asked for, add a separate key for the Amazon id rather than gluing both into one string.
+
+Full convention, including the managed-group and product-ad exceptions:
+[`references/platform-notes.md`](references/platform-notes.md) -> "Naming things in your
+answer".
 
 Remember: **the section headers and labels below are structural placeholders (shown in English here) — always regenerate them in the user's own language**, not copy the English (or any other) wording verbatim (see "Output Language" above).
 

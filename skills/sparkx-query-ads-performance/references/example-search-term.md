@@ -21,7 +21,7 @@ Notes:
 - `query_`/`matchType_` (searchTerm's own fields) have **no entity prefix** — not `searchTerm.query_`.
 - `campaign.campaignName_`/`campaign.campaignId_` (joined dimension) **do** keep the normal `entity.field_` form, since they belong to the `campaign` entity, not `searchTerm`.
 - `queryType` on `searchTerm` is **optional**, unlike on `target`. Passing `keyword` or `product` filters to that source; passing `auto` is rejected outright (`queryType=auto is not supported for factEntity=searchTerm`); **omitting it returns the full unfiltered set — manual keyword/product terms mixed with Auto-matched terms in the same result.**
-- `CTR` in the response is Tier 1 confirmed pre-scaled ×100 — append `%` when presenting it.
+- `CTR` in the response is pre-scaled ×100 — append `%` when presenting it.
 
 ## Auto-targeting search terms (no dedicated `queryType` — omit it and filter on `matchType_`)
 

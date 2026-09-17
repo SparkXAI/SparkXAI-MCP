@@ -30,8 +30,9 @@ won't enforce them, so you must. (Exact field names: `field-reference.md`.)
 
 **按表现调预算** (`DYNAMIC_BUDGET`) - the value is an **increase cap on top of the current
 budget, NOT a target**. Mode `1`=percentage (`+num%`), `2`=fixed (`+$num`). **Fields by
-path:** SP/SB action space `budgetDynamicActionStatus`+`budgetNumType`+`budgetNum`; SD
-`budgetDynamicStatus`+`numType`+`num`; batch = per the `DYNAMIC_BUDGET` schema.
+path:** SP/SB create uses `budgetDynamicActionStatus`+`budgetNumType`+`budgetNum`; SD
+**creation does not support this feature**. The SD edit/batch path is documented separately
+in the edit Skill; do not carry its `budgetDynamicStatus`+`numType`+`num` fields into create.
 
 **预算重新分配** (`BUDGET_REDISTRIBUTE`) - a switch that **changes the scope of 按表现调预算**.
 **Fields by path:** SP/SB action space `budgetRedistributeActionStatus`; SD

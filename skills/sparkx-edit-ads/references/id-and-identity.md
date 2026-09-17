@@ -127,7 +127,7 @@ So:
    is a **write-safety rule**: it removes the chance of picking a same-named entity from the
    wrong store, or of carrying an amount across from another store's row. **Do not feed an
    amount taken from a multi-profile result straight into a write** - not as `previousBid`,
-   not as a `set to` amount, and not as the base for a percentage change. The same applies to
+   not as a `setTo` amount, and not as the base for a percentage change. The same applies to
    `dailyBudget` before a budget write.
 2. A stale or wrong `previousBid` is **not detected**. If time has passed, or if the AI or
    another user may have adjusted bids, re-read rather than reusing a cached value.

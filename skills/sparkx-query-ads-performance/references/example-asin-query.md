@@ -18,5 +18,5 @@ Use `factEntity: "asin"` to get ASIN-level business metrics (TotalSalesAmount, T
 
 Notes:
 - `TotalSalesAmount`, `OrderCount`, `TACOS`, and the rest of the ASIN business-metrics block (`Sessions`, `BuyBoxPercentage`, `OrganicSales`, etc.) are **only valid on the `asin` fact entity** — requesting them on `campaign`/`adGroup`/etc returns an error.
-- `TACOS` is a Tier 2 (unconfirmed scale) metric — relay its raw value as-is, do not assume it's ×100 and do not append `%`, unlike `ACOS`.
+- `TACOS` is pre-scaled ×100 just like `ACOS` — append `%` when presenting it, don't re-scale. (Earlier revisions of this file said its scale was unconfirmed and told you to relay the bare number; that was wrong.)
 - If querying multiple profiles, `asin.asinPrice_` (if selected) stays local currency even though other monetary metrics convert to USD.
