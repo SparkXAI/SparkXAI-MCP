@@ -9,7 +9,7 @@ description: >-
   hourly data, by hour, intraday, AMS, Amazon Marketing Stream, keyword placement,
   vendor, seller, distributorView, sellingProgram, shipped revenue, ordered revenue, TACOS
 metadata:
-  version: 1.4.0
+  version: 1.4.1
 ---
 
 # Query Ads Performance Skill
@@ -51,7 +51,7 @@ The query subject determining aggregation granularity:
 - `productAd`: product ad level
 - `asin`: ASIN business data level (adds business metrics like TotalSalesAmount, TACOS)
 - `keywordPlacement`: keyword × placement joint level, sourced from Amazon Marketing Stream (AMS) — **hourly by nature, SP only, max 7-day span**. See Hourly / AMS Data below
-- `campaignAudience`: one campaign × the AMC audience bound to it — campaign metrics plus the audience bid adjustment. **SP / SB only, and only campaigns that already have an audience bound.** Its contract differs from every other entity; see "factEntity: campaignAudience" below
+- `campaignAudience`: one audience segment from the report table × that campaign's metrics, plus the campaign's current audience bid adjustment. Covers **both** audience types, custom AMC and Amazon-built. **SP / SB only, and only campaigns that have rows in the audience report table** - which is not the same as "currently bound". Its contract differs from every other entity; see "factEntity: campaignAudience" below
 
 Passing an unsupported value fails with `invalid_params`; the enum above is the complete list.
 
@@ -136,11 +136,64 @@ Do not just write `week`/`month` as bare field names — use the exact ClickHous
 
 **This does not raise the 90-day cap.** If the user's window exceeds 90 days, first split into multiple calls each with `dateStart`/`dateEnd` spanning ≤90 days — aggregation only reduces the row count *within* each of those calls.
 
-## `factEntity: campaignAudience` — AMC audience performance
+## `factEntity: campaignAudience` — audience performance
 
-One row = one campaign paired with the AMC audience bound to it, carrying that campaign's
-metrics plus the audience bid adjustment. Answers "is this audience worth the uplift", "how
-did it do week over week", "which campaigns run audience targeting at all".
+One row = **one audience segment from the report table, carrying that campaign's metrics,
+plus the campaign's current audience configuration**. Those are two different sources stitched
+together, and the section "`audienceName` and `audienceId` on one row come from different
+tables" below says what that costs you.
+
+It answers **"how did this audience segment perform under this campaign, and how does that
+compare with the previous period"**. It does not answer:
+
+- **"Is this audience worth the uplift?"** The metrics belong to a report segment; the uplift
+  on the same row is the campaign's *current* `audienceBidPercentage`. Nothing ties the two
+  together - the segment need not be the audience bound now, and the uplift need not have
+  been in force during the reported period. You can reach that conclusion only after
+  confirming from `entity: campaign` that the binding and the uplift are what you think, and
+  that they did not change inside the window.
+- **"Which audience is this campaign bound to?"** Read `entity: campaign`.
+- **"Which campaigns run audience targeting at all?"** Same - `audienceId != ""` there.
+
+**It is not AMC-only, despite the name.** A live query returned full performance for a
+campaign bound to the Amazon-built audience "High interest based on shopping history", so
+both audience types appear here. Where a tool description or spec calls this "AMC audience
+performance", the live behaviour is wider than that wording.
+
+`audienceSegmentType` is **filterable here but not returned**, and the filter is weaker than
+it looks: downstream it becomes `segment_name LIKE 'AMC%'` (or `NOT LIKE`). **The two types
+are told apart by a naming convention, not by a type column** - the report table has none. An
+AMC audience whose name does not start with "AMC" is filtered as Amazon-built, and an
+Amazon-built one that happens to start with "AMC" is filtered as AMC. So:
+
+- **Do not use this filter to determine an audience's type.** It answers "is it named like an
+  AMC audience", which is not the same question, and gets it wrong for the misnamed ones.
+- Omitting the filter is the honest default: **no condition is applied and both types come
+  back.** Passing both values does the same thing. Passing `notin` with both values forces an
+  empty result.
+
+### What decides whether a campaign appears here
+
+Not `campaign.audienceId`. The query inner-joins the report table on `campaign_id` and groups
+by `campaign_id` + `segment_name`, so **a campaign appears only if the report table holds
+audience rows for it**, and its `audienceId` never enters the filter. The two can disagree in
+both directions:
+
+- A campaign with an audience bound can be **completely absent**. On one test profile, 273
+  campaigns carried an `audienceId` and the entity returned `total: 0`, because the report
+  table had no rows for them. That is missing report data, not a broken binding and not "no
+  activity in the window".
+- **Never report "this campaign has no audience" from an empty result here.** Read
+  `entity: campaign` and test `audienceId != ""` for that question.
+
+### `audienceName` and `audienceId` on one row come from different tables
+
+`audienceName` is the report table's `segment_name`; `audienceId` and
+`audienceBidPercentage` are the campaign's current values. A campaign whose report rows carry
+several `segment_name`s splits into several rows - **and every one of them repeats the same
+campaign-level `audienceId`**. So the name and the ID on a row are not guaranteed to describe
+the same audience. Quote the name for a per-row answer, and take the ID from
+`entity: campaign` when the ID is what matters.
 
 **This data comes from a different service than every other entity**, and the contract shows
 it. Four things are not like the rest of this tool:
@@ -176,13 +229,19 @@ entity rejects the parameter — use `filters` with `like` there.
 
 ### What it is not
 
-- **Not a way to list campaigns.** Only campaigns with an audience already bound appear.
+- **Not a way to list campaigns, and not a way to read binding state.** A campaign appears
+  here when the audience report table has rows for it, which neither implies nor requires that
+  an audience is bound right now. For binding state, read `entity: campaign` and test
+  `audienceId != ""`.
 - **Not `get_ads_perf`'s `target` dimension.** That one sees audience targeting that exists as
   a *target record* — mostly Sponsored Display — which is a different mechanism from the
   campaign-level `audienceId` / `audienceBidPercentage` this entity reports on.
 - **Not the place to find an audience for a new campaign.** That is
-  `get_entity_metadata(entity='amcAudience')`, which returns the whole targetable pool; this
-  returns only what is already in use. For the audience currently bound to a campaign and its
+  `get_entity_metadata(entity='amcAudience')`, queried **once per audience segment type** -
+  its `audienceSegmentType` filter takes a single value, so one call returns one pool, never
+  the full set. This entity, by contrast,
+  returns audience segments that appear in the report table, which is not the same as the
+  audience a campaign is bound to now. For the audience currently bound to a campaign and its
   configuration, read `get_entity_metadata(entity='campaign')` — the config is merged into
   those rows automatically.
 

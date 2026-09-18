@@ -18,7 +18,7 @@
 | `aiGroup_schedule` | AiGroupScheduleMetadataProvider | Schedules of **one** managed group — **requires exactly one `profileId` and `filters.aiGroupId` only**, ignores pagination/sorting |
 | `asin` | AsinMetadataProvider | ASIN product info (child ASIN + parent ASIN + product line, nested) |
 | `automationRule` | AutomationRuleMetadataProvider | Enabled rule-type codes/names for given campaign(s) — **requires `amazonCampaignId` in filters; does not return template configuration** |
-| `amcAudience` | AmcAudienceMetadataProvider | AMC audiences bindable to a campaign — **requires `filters.campaignType`; one profileId; not paginated** |
+| `amcAudience` | AmcAudienceMetadataProvider | Targetable audiences bindable to a campaign — **requires `filters.campaignType`; one profileId; not paginated. One call returns ONE audience pool** - `filters.audienceSegmentType` takes a single value and defaults to `SPONSORED_ADS_AMC`, so query once per type to see both |
 | `keywordGroup` | KeywordGroupMetadataProvider | Keyword-group suggestions — **requires `filters.asin`; one profileId; not paginated** |
 | `suggestedKeyword` | SuggestedKeywordMetadataProvider | Keyword suggestions — **requires `filters.asin`; one profileId; not paginated** |
 | `suggestedTarget` | SuggestedTargetMetadataProvider | Product **and** category targeting suggestions — **requires `filters.asin`; one profileId; not paginated** |
@@ -198,11 +198,11 @@ Full convention, including the three exceptions, in
 | campaignAiLastOnDate | string | — |
 | campaignAiLastOffDate | string | — |
 
-**AMC audience fields — returned, filterable and sortable:**
+**Audience fields — returned, filterable and sortable:**
 
 | Field | Type | Notes |
 |---|---|---|
-| audienceId | string | The AMC audience bound to this campaign. **`""` means no audience is bound** - the key is always present, never omitted. SP / SB only; on SD it is permanently `""` because SD does not support AMC audience targeting |
+| audienceId | string | The audience bound to this campaign - either pool, custom AMC or Amazon-built. **`""` means no audience is bound** - the key is always present, never omitted. SP / SB only; on SD it is permanently `""` because SD supports neither audience pool |
 | audienceBidPercentage | number | Bid uplift for that audience, `10` = +10%. **`0` does not mean "unbound"** - it is a legitimate value meaning "bound, no uplift". Unbound rows also carry `0`, so this field cannot tell the two apart |
 
 Both can be filtered and sorted on, and **the empty string is a real filter value, not "no
@@ -212,14 +212,14 @@ confirmed against the implementation and not yet written there - so reading the 
 would lead you to think it is sort-only.
 
 ⚠️ **`{"audienceId": ""}` alone is wrong** - it sweeps in every Sponsored Display campaign,
-whose `audienceId` is permanently `""` because SD has no AMC audience targeting. Always pair
+whose `audienceId` is permanently `""` because SD supports neither audience pool. Always pair
 it with a `campaignType` filter.
 
 The **enriched** audience fields - `audienceName`, `audienceType`, `proximityLevel`,
 `updateFrequence`, `autoUpdate`, `audienceCount` - are neither filterable nor sortable: MCP
 adds them after the list call, so the downstream has never seen them.
 
-**Is this campaign using an AMC audience?** Test `audienceId != ""`. Do not test for the key's
+**Is this campaign using an audience?** Test `audienceId != ""`. This covers both pools; the row does not say which one (see SKILL.md). Do not test for the key's
 presence (it is always there) and do not test `audienceBidPercentage` (0 is ambiguous). When a
 row does have an audience, the server also merges that audience's configuration into the same
 row - see "`entity: campaign` - audience configuration arrives on its own" in SKILL.md.

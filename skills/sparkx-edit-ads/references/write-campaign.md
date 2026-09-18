@@ -10,7 +10,46 @@ Send `request.profileIds` and `request.data[]` with `id` (internal campaign ID),
 at most 200 items, and an absolute integer percentage from 0 to 900. 0 retains the
 audience binding with no uplift. This does not unbind audiences or edit placements.
 
-Query campaign metadata for current binding and amcAudience for selectable IDs/types.
+### `audienceSegmentType` - the field the read side will not give you
+
+Two values, matching the two radio buttons under 选择受众类型 / Select audience type:
+
+| Value | Console (EN) | Console (ZH) |
+|---|---|---|
+| `SPONSORED_ADS_AMC` | Increase bids on a custom audience created in AMC | 提高针对自定义 AMC 人群的竞价 |
+| `BEHAVIOR_DYNAMIC` | Increase bids for audiences built by Amazon | 提高针对亚马逊人群的竞价 |
+
+It is **required and has no default here**, and this is the hard part: **nothing you can read
+tells you which one an already-bound campaign is using.** `entity: campaign` returns only
+`audienceId` and `audienceBidPercentage` - the segment type is not on the row, and a live
+check against a bound campaign returned it empty.
+
+**Sending the wrong one fails silently.** The two values address separate audience pools. An
+`audienceId` from one pool submitted with the other is accepted by this tool, accepted
+downstream, stored, and reported back as success - and then **never applies on Amazon**. There
+is no error to react to and nothing in the response to notice, so there is no room to guess
+now and correct later.
+
+**Asking the user is the reliable answer.** The console shows the two options as radio
+buttons, so it is a question they can answer at a glance, and no read path is known to settle
+it authoritatively:
+
+- On `get_ads_perf(factEntity='campaignAudience')` the same-named filter is **a name prefix
+  downstream** (`segment_name LIKE 'AMC%'`), so it classifies by naming convention and
+  misreads any audience whose name does not follow it. Do not use it to decide the type.
+- `get_entity_metadata(entity='amcAudience')` lists each pool separately, so finding the
+  `audienceId` under one value is **evidence**, and the pools do not overlap. Use it to form
+  an expectation - but it lists what is bindable now, so an audience that is bound yet no
+  longer offered simply will not appear, which is not proof of the other type.
+
+So: check `amcAudience` for each of the two values if you want a starting point, and **confirm
+with the user before writing** whenever it did not appear under exactly one of them. Do not
+fall back to `SPONSORED_ADS_AMC` because it is the metadata filter's default - that default
+belongs to the query, not to this campaign, and a wrong value here fails silently.
+
+**A resolved `audienceName` proves nothing about the type.** Amazon-built audiences resolve
+their names too. Do not infer the segment type from the presence of any enriched field.
+
 Never guess an ID or audience pool. The first call returns a preview, not a write result.
 Review the target campaigns, audience IDs/types and new percentages with the user;
 then resend identical parameters with the returned `request.confirmToken`.

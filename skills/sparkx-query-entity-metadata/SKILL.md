@@ -8,7 +8,7 @@ description: >-
   which ads, enabled/paused status, budget settings, bidding strategy, automation rules,
   managed group schedule, flight, seasonal plan, rule mode config, RBA rule conditions
 metadata:
-  version: 1.4.0
+  version: 1.4.1
 ---
 
 # Query Entity Metadata Skill
@@ -226,6 +226,22 @@ call, not one per row.
 Fields merged in: `audienceName`, `audienceType`, `proximityLevel`, `autoUpdate`,
 `updateFrequence`, `audienceCount`.
 
+**`audienceSegmentType` is NOT one of them, and is not on the campaign row at all.** Which of
+the two audience pools a campaign is bound to - a custom AMC audience
+(`SPONSORED_ADS_AMC` / 提高针对自定义 AMC 人群的竞价) or an Amazon-built one
+(`BEHAVIOR_DYNAMIC` / 提高针对亚马逊人群的竞价) - **cannot be read from here**. A live check
+against a bound campaign returned that field empty. It exists only as a filter on
+`entity: amcAudience`, echoed back on that entity's own rows.
+
+**And you cannot infer it from a name.** `get_ads_perf(factEntity='campaignAudience')`
+resolves audience names for **both** pools - it reads them from the report table, not from AMC
+- so seeing a name there says nothing about the type. A live campaign bound to the
+Amazon-built audience "High interest based on shopping history" showed its name there
+normally. The enrichment on *this* row is a different matter: it resolves only audiences
+created and synced here, so its absence is ambiguous and its presence is not something to
+build a write on either. When a write needs the type, see `edit-ads`, which has the procedure for establishing
+it.
+
 **Read them carefully - `meta.hint` says as much:**
 
 - **The enums are raw, not display text** - the product has official labels for all of them,
@@ -264,7 +280,7 @@ and a lookup call can also simply fail. All of those produce a `meta.hint` count
 affected rows. **Do not report those campaigns as having no audience, or as having an invalid
 one** - the binding is real; only its description is missing.
 
-**SD campaigns never get this.** Sponsored Display does not support AMC audience targeting,
+**SD campaigns never get this.** Sponsored Display supports neither audience pool,
 so its `audienceId` is always blank and no lookup is attempted.
 
 ### "Which campaigns have no audience bound?"
@@ -275,7 +291,7 @@ Both conditions filter **server-side**. One query answers it:
 {
   "entity": "campaign",
   "profileIds": [4404871489220462],
-  "userContext": "Find SP/SB campaigns without an AMC audience",
+  "userContext": "Find SP/SB campaigns without an audience bound",
   "filters": {
     "audienceId": "",
     "campaignType": {"in": ["sponsoredProducts", "sponsoredBrands"]}
@@ -285,8 +301,8 @@ Both conditions filter **server-side**. One query answers it:
 
 - **`{"audienceId": ""}` is a real condition**, not an empty one - the empty string is what an
   unbound campaign actually stores, and the downstream matches on it.
-- **The `campaignType` half is not optional.** Sponsored Display has no AMC audience
-  targeting, so every SD campaign carries `audienceId: ""` forever. Filtering on the audience
+- **The `campaignType` half is not optional.** Sponsored Display has no audience
+  targeting of either kind, so every SD campaign carries `audienceId: ""` forever. Filtering on the audience
   alone reports the entire SD estate as "missing an audience".
 - **`meta.total` is the answer to "how many"** here, because both conditions were applied
   server-side - it is the count of unbound SP/SB campaigns. You only need to page if the user
@@ -297,10 +313,12 @@ To go the other way - which campaigns use a *particular* audience - filter
 `{"audienceId": "<id>"}` with the same `campaignType` pairing.
 
 The reverse question - *which* campaigns do have one, with performance attached - is
-`get_ads_perf(factEntity='campaignAudience')`, which returns only bound campaigns. Do not use
-it to derive the unbound set by subtraction unless you need the performance columns: it is a
-performance query with a date range, so a bound campaign with no activity in that window can
-be missing from it, which would misclassify it as unbound.
+`get_ads_perf(factEntity='campaignAudience')`. **Do not derive the unbound set from it by
+subtraction.** Whether a campaign appears there is decided by an inner join onto the audience
+report table, and `campaign.audienceId` plays no part in it - so a campaign that is genuinely
+bound can be missing entirely (observed: 273 bound campaigns on one profile, `total: 0`).
+Subtracting would report all of them as unbound. `audienceId != ""` on this entity is the
+only answer to "is an audience bound".
 
 ## Suggestion entities - a different contract from everything above
 
@@ -327,7 +345,7 @@ own providers and share a contract that breaks most of the habits the other enti
   run - `suggestedKeyword` does not tell you which keywords exist on a campaign. Use the
   ordinary `keyword` / `target` entities for that.
 
-### `amcAudience` - AMC audiences you may bind to a campaign
+### `amcAudience` - targetable audiences you may bind to a campaign
 
 Required `filters.campaignType`: `sponsoredProducts` or `sponsoredBrands` (**SD is not
 valid here**). Optional `filters.audienceSegmentType`: `SPONSORED_ADS_AMC` (the default) or
@@ -338,10 +356,15 @@ an audience instead of making them pick from a long list.
 
 Returns `audienceId`, `audienceName`, and `audienceSegmentType` echoed back on every row.
 
-⚠️ **Send that echoed `audienceSegmentType` back when you create the campaign.** The two
-segment types are separate pools. An `audienceId` taken from one pool and submitted with the
-other is accepted, stored locally, and **never applies on Amazon** - nothing rejects it, so
-carry the pair together from this row to the write.
+⚠️ **Send that echoed `audienceSegmentType` back on every write that uses this
+`audienceId`** - when you create a campaign, and when you change the audience bid on an
+existing one. The two segment types are separate pools. An `audienceId` taken from one pool
+and submitted with the other is accepted, stored locally, and **never applies on Amazon** -
+nothing rejects it, so carry the pair together from this row to the write.
+
+This entity is the only place the type is available. It is not on the campaign row, so for a
+campaign that is already bound you have to find which pool its `audienceId` sits in by
+querying this entity once per value, or ask the user.
 
 ### `keywordGroup` - keyword-group suggestions for an ad group
 

@@ -3,13 +3,13 @@ name: sparkx-create-campaign
 description: >-
   Create new Amazon Sponsored Products campaigns in bulk through `create_sp_sb_campaign` -
   campaign, ad groups, promoted products, and either auto targeting, keywords, or product
-  targets, plus negatives, placement adjustments and an optional AMC audience. Use when the
+  targets, plus negatives, placement adjustments and an optional audience. Use when the
   user wants to build / launch / set up a new campaign - 新建广告活动 / 建一个自动广告 /
   开个手动词的活动 / 按这批 ASIN 建活动. Creates the campaign itself; it is NOT for editing
   existing ones (use sparkx-edit-ads), for AI managed groups (use sparkx-create-ai-group), or
   for reading data (use sparkx-query-ads-performance / sparkx-query-entity-metadata).
 metadata:
-  version: 1.0.0
+  version: 1.0.1
 ---
 
 # Create Sponsored Products campaigns
@@ -51,11 +51,27 @@ rest".
    two stores are two calls.
 2. `get_entity_metadata(entity='asin')` -> the ASINs you will promote, and **their SKUs on a
    Seller profile**. Do not invent SKUs; see "Seller vs Vendor" below.
-3. If the user asked for keyword or product-target suggestions, the five suggestion entities
-   (`suggestedKeyword`, `keywordGroup`, `suggestedTarget`, `suggestedBid`, `amcAudience`) are
-   in `sparkx-query-entity-metadata`. They need exactly one `profileId` and a mandatory
-   `filters.asin`.
-4. Decide the targeting type **before** writing anything - the campaign's and the ad group's
+3. If the user asked for keyword or product-target suggestions, the suggestion entities live
+   in `sparkx-query-entity-metadata`. All of them need exactly one `profileId`, but **their
+   mandatory filters differ - they are not interchangeable**:
+
+   | Entity | Mandatory filter |
+   |---|---|
+   | `suggestedKeyword`, `keywordGroup`, `suggestedTarget` | `filters.asin` |
+   | `suggestedBid` | `filters.asin`, plus one of two mutually exclusive modes |
+   | `amcAudience` | **`filters.campaignType`** (`sponsoredProducts` / `sponsoredBrands`; SD is rejected). It takes **no `asin`** |
+
+4. **Picking an audience is its own step, not part of the suggestion sweep.**
+   `amcAudience` also takes `filters.audienceSegmentType`, and **that filter chooses which of
+   the two pools you see**. Omitting it does not widen the search - it silently narrows it to
+   `SPONSORED_ADS_AMC`, so every Amazon-built audience is invisible and the user never learns
+   it existed. **The filter takes one value only** - a two-value array is rejected outright
+   (`accepts a single value only, got 2`), so there is no single call that returns both
+   pools. When the user names the type, query that pool. When they do not, either ask, or
+   **make two separate calls - one with `SPONSORED_ADS_AMC`, one with `BEHAVIOR_DYNAMIC` -
+   and merge the two results into one list for them to choose from**, saying which pool each
+   came from. Never let the default pick the audience.
+5. Decide the targeting type **before** writing anything - the campaign's and the ad group's
    together. They decide which child lists are legal, and sending the wrong ones fails the
    batch.
 
@@ -130,20 +146,31 @@ On a Seller profile a pair that is not found is **rejected**. Read SKUs from
 error means *retry*, not *change the ASIN*. Resending a different ASIN because a lookup
 failed is how you end up advertising the wrong product.
 
-## AMC audience targeting is optional, and unverified
+## Audience targeting is optional, and unverified
 
-`audienceId` and `audienceBidPercentage` must be sent **together** - a bid uplift with no
-audience does nothing, and an audience with no uplift is not what the console produces.
-`audienceBidPercentage` is an integer 0-900 **sent as a string**. `audienceSegmentType` is
+**Three fields, one atomic group.** Configuring an audience means sending `audienceId`,
+`audienceSegmentType` **and** `audienceBidPercentage` together, or none of them.
+`audienceBidPercentage` is an integer 0-900 **sent as a string**; `audienceSegmentType` is
 `SPONSORED_ADS_AMC` or `BEHAVIOR_DYNAMIC`.
+
+**Only two of the three are enforced.** The tool rejects an `audienceId` without an
+`audienceBidPercentage`, but **`audienceSegmentType` is optional in the validator** - leave it
+out and the request passes, then the downstream applies its own default,
+`SPONSORED_ADS_AMC`. Bind an Amazon-built audience without saying so and you get a success
+response for targeting that never runs. (The edit path, `batch_update_ads` +
+`updateAudienceBid`, does require it. Creation is the looser of the two - do not take that as
+permission to omit it.)
 
 ⚠️ **Nothing validates `audienceId`** - not this tool, not the downstream. An id that is
 invented, or taken from the other segment pool, is **accepted, stored locally, and never
 applies on Amazon**. You will see a successful response for a campaign whose audience
 targeting silently does nothing.
 
-So take both values from the same `get_entity_metadata(entity='amcAudience')` row - that
-entity echoes `audienceSegmentType` on each row exactly so the pair travels together.
+So copy **`audienceId` and `audienceSegmentType` from one and the same**
+`get_entity_metadata(entity='amcAudience')` row - that entity echoes the type on every row
+exactly so the pair travels together. **Never substitute that query's default type for the
+campaign's real one**: `SPONSORED_ADS_AMC` is the default *of the lookup*, not a fact about
+the audience you picked.
 
 ### ⚠️ `portfolioId` wants the **Amazon** portfolio id, and it is verified
 

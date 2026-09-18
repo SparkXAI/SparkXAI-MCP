@@ -6,7 +6,7 @@
   "skills": [
     {
       "name": "sparkx-query-ads-performance",
-      "version": "1.4.0",
+      "version": "1.4.1",
       "required": true,
       "mcp_tools": ["get_ads_perf"],
       "scopes": ["amazon_sa_performance_data:read"],
@@ -15,7 +15,7 @@
     },
     {
       "name": "sparkx-query-entity-metadata",
-      "version": "1.4.0",
+      "version": "1.4.1",
       "required": true,
       "mcp_tools": ["get_entity_metadata"],
       "scopes": ["amazon_sa_ads_configuration:read"],
@@ -60,7 +60,7 @@
     },
     {
       "name": "sparkx-edit-ads",
-      "version": "1.1.0",
+      "version": "1.1.1",
       "required": true,
       "mcp_tools": ["batch_update_ads"],
       "scopes": ["amazon_sa_campaign_edit:write"],
@@ -69,12 +69,12 @@
     },
     {
       "name": "sparkx-create-campaign",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "required": true,
       "mcp_tools": ["create_sp_sb_campaign"],
       "scopes": ["amazon_sa_campaign_create:write"],
       "path": "sparkx-create-campaign",
-      "description": "Create new Amazon Sponsored Products campaigns in bulk: campaign, ad groups, promoted products, auto targeting or keywords or product targets, negatives, placement adjustments and an optional AMC audience. SP only on this server."
+      "description": "Create new Amazon Sponsored Products campaigns in bulk: campaign, ad groups, promoted products, auto targeting or keywords or product targets, negatives, placement adjustments and an optional audience. SP only on this server."
     },
     {
       "name": "sparkx-weekly-ads-report",

@@ -10,7 +10,7 @@ description: >-
   those uses sparkx-create-ai-group / sparkx-edit-ai-group / sparkx-delete-ai-group. Not for
   reading data (use sparkx-query-ads-performance / sparkx-query-entity-metadata).
 metadata:
-  version: 1.1.0
+  version: 1.1.1
 ---
 
 # Edit Ads
@@ -137,7 +137,7 @@ distinct rejection messages: [`references/archived-guard.md`](references/archive
 | add negative ASIN / brand targets | `negativeTarget` + `create` | - |
 | enable / pause / archive negative targets | `negativeTarget` + `updateStatus` | if `archived` |
 | copy negative targets | `negativeTarget` + `copy` | - |
-| change an AMC audience bid uplift | `campaign` + `updateAudienceBid` | always |
+| change an audience bid uplift | `campaign` + `updateAudienceBid` | always |
 | change placement bid adjustments | `campaign` + `updatePlacementBid` | always |
 
 Per-route payloads, enums and limits live in the four write references:

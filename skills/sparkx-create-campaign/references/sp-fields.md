@@ -124,15 +124,18 @@ tool defaults to `MINIMIZE_SPEND`.
 Setting `siteRestrictions` makes `siteAmazonBusinessAdjustment`, **all `audience*` fields**
 and `offAmazonBudgetControlStrategy` illegal - omit them all.
 
-### AMC audience
+### Audience
 
 | Field | Type | Notes |
 |---|---|---|
 | `audienceId` | string | **not verified by anything** - see SKILL.md |
 | `audienceBidPercentage` | string | an integer 0-900 **sent as a string** |
-| `audienceSegmentType` | enum | `SPONSORED_ADS_AMC` / `BEHAVIOR_DYNAMIC` |
+| `audienceSegmentType` | enum | `SPONSORED_ADS_AMC` / `BEHAVIOR_DYNAMIC`. Must come from the **same** `amcAudience` row as the `audienceId` |
 
-`audienceId` and `audienceBidPercentage` must be sent **together, or neither**.
+**All three together, or none.** The validator only enforces `audienceId` <->
+`audienceBidPercentage`; `audienceSegmentType` is optional there and defaults to
+`SPONSORED_ADS_AMC` downstream, which silently mis-binds an Amazon-built audience. Treat the
+trio as atomic anyway - see SKILL.md.
 
 ## Ad group
 

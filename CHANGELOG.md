@@ -4,6 +4,19 @@
 
 ## [Unreleased]
 
+### 修复
+
+- 受众分两个人群池,不是一个。`create_sp_sb_campaign` 与 `batch_update_ads` +
+  `updateAudienceBid` 都需要 `audienceSegmentType`,传错类别会被接受、正常入库,
+  但在亚马逊侧永不生效。Skills 现已写明两个取值、说明活动行不携带该类型,
+  并要求向用户确认而不是猜测。`sparkx-create-campaign` `1.0.0` -> `1.0.1`,
+  `sparkx-edit-ads` `1.1.0` -> `1.1.1`。
+- `get_ads_perf(factEntity='campaignAudience')` 并非 AMC 专属;活动是否出现取决于
+  受众报表表中是否有其记录,而不是是否绑定了受众。空结果不再被描述为「未绑定受众」,
+  该问题应读 `entity: campaign` 并判断 `audienceId != ""`。
+  `sparkx-query-ads-performance` `1.4.0` -> `1.4.1`,
+  `sparkx-query-entity-metadata` `1.4.0` -> `1.4.1`。
+
 ## [1.3.0] - 2026-09-17
 
 ### 新增
