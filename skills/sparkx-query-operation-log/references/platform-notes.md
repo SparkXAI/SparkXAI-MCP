@@ -68,6 +68,62 @@ Any of the 3 tools can legitimately return zero rows for reasons that have nothi
 
 **Only after working through this sequence** can you responsibly tell the user "there's genuinely no data/activity in that range" — and even then, be specific about what you checked (e.g. "no spend recorded for campaign X between these dates, and the campaign does exist and is enabled") rather than a bare "no data found."
 
+## Diagnosing inflated or non-reconciling numbers
+
+The opposite failure of the one above: the call succeeds, the rows look reasonable, and the
+totals are several times the truth. It happens when a dimension from another entity doesn't
+match one-to-one, so every fact row is repeated once per match, each copy carrying the full
+value. Nothing errors.
+
+**The known high-risk shape** is splitting a non-product entity by a product dimension
+(`productAd.*`, `asin.*`, `sku.*`, `productLine.*`, `parentAsin.*` on a `campaign` / `adGroup` /
+`target` / `searchTerm` / `keywordPlacement` query) - always check that one. The server rejects
+some of these outright, but **rejection covers only the combinations already known to be
+unsafe**; it is not evidence that everything it lets through is one-to-one. So also check any
+cross-entity join whose cardinality you cannot confirm.
+
+> **The check.** Re-run the same query **without** the extra dimension. `SUM(Spend)` across the
+> split rows must equal the unsplit total. If it is larger, the rows are duplicated - do not
+> report them.
+
+**Recovering without changing the question.** Which fix is right depends on what was asked, and
+they are not interchangeable:
+
+| The user asked for | Do this |
+|---|---|
+| Ad performance per product ("spend / ACOS by ASIN") | Re-query with `factEntity: "productAd"` - its rows are one per advertised product |
+| Targets or search terms **within** a product scope ("keywords that ran for this ASIN") | **Keep the original `factEntity`** and narrow it by ad group - three steps, see below |
+| A real target x product or search-term x product cross-split | **Not available** - spend is not attributed per product at that level. Say so; do not substitute either row above |
+
+Switching to `productAd` answers "how did this product do", not "which search terms ran for this
+product". Silently swapping one for the other is a wrong answer, not a workaround.
+
+**Narrowing target / search-term performance to a product takes three steps, not two**, because
+the metadata and performance tools use different id spaces:
+
+1. `get_entity_metadata(entity='productAd')` filtered to the ASIN or SKU -> gives the
+   **internal** `adGroupId` (that row carries no `amazonAdGroupId`).
+2. `get_entity_metadata(entity='adGroup')` filtered by those internal ids -> gives
+   `amazonAdGroupId`.
+3. Filter the performance query on `p.adGroupId_` with those distinct **Amazon** ids.
+   `p.` is the fact table itself, so this filters it directly rather than joining ad-group metadata to do the same thing; it is also the form the backend's own split-query
+   test uses. `adGroup.adGroupId_` returns the same rows, just less directly.
+
+> ⚠️ **Skipping step 2 returns zero rows and no error.** Both `p.adGroupId_` and the
+> dimension form `adGroup.adGroupId_` hold Amazon's id on the performance side, so an
+> internal id is a valid filter that matches nothing. The
+> `UNSUPPORTED_PERFORMANCE_JOIN` error message describes only steps 1 and 3 - following it
+> literally produces an empty result that reads as "this product had no search terms", which is
+> a wrong answer, not an empty one. This is case 5 of the zero-results checklist above.
+
+Report the outcome for what it is: **search terms or targets in the ad groups that contain this
+product**. An ad group usually holds several products, so this is a scope, not an attribution -
+never state or imply that the spend or traffic belongs to that ASIN.
+
+Two giveaways in the rows themselves: **identical values repeated across products** (the same
+spend and orders on every ASIN is one value copied, not a coincidence), and **a filtered total
+larger than the unfiltered one**, which is never possible.
+
 ## Error Response Format
 
 **Every error uses a single `errorType` key.** Check `isError:true` first, then read `errorType`; depending on the error, extra fields accompany it (`requestId`, `recoveryHint`, `service`, `dimension`, `retryAfterSeconds`).

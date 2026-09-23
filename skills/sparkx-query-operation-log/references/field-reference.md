@@ -327,7 +327,9 @@ Valid values:
 
 Placement type filter. Narrows placement operations to specific placement types.
 
-**Confirmed complete enum — exactly these 4 values, no others**: `detailPageAdjustment`, `homeAdjustment`, `topSearchAdjustment`, `restOfSearchAdjustment`. Do not guess at additional values or try to infer more from `changeField` — this list is authoritative.
+**Complete enum — these 7 values**: `detailPageAdjustment`, `homeAdjustment`, `otherAdjustment`, `productPageAdjustment`, `restOfSearchAdjustment`, `siteAmazonBusinessAdjustment`, `topSearchAdjustment`. Do not guess at additional values or try to infer more from `changeField`.
+
+⚠️ **These are the change log's own names and they do not all line up with the write tool's.** The log has `topSearchAdjustment`, which matches neither SP's `topAdjustment` nor SB's `topOfSearchAdjustment`. Use this list when filtering the log, and the placement-field table in `sparkx-edit-ads`'s `references/write-campaign.md` when writing — do not map a name from one onto the other.
 
 ### ChangeLogVO Field Reference
 

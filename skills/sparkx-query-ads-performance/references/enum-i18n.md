@@ -172,13 +172,34 @@ Same values as campaignServingStatus above, plus:
 | `asin` | PAT-Individual Product | 商品-单个商品 | 商品-単一商品 |
 | `category` | PAT-Category | 商品-品类 | 商品-カテゴリ |
 
-## placement (`placement.placement_`)
+## placement (`placement.placement_`, `factEntity: "placement"`)
 
-| API value | EN | ZH | JA |
+| API value | EN (console) | ZH (console) | JA |
 |---|---|---|---|
-| `topOfSearch` | Top of Search (first page) | 搜索结果顶部（首页） | 検索結果上部（1ページ目） |
-| `productPage` | Product Pages | 商品详情页 | 商品ページ |
-| `restOfSearch` | Rest of Search | 搜索结果其余位置 | 検索結果のその他の場所 |
+| `SP-Top of Search on-Amazon` | Top of search (first page) | 搜索结果顶部（首页） | 検索結果上部（1ページ目） |
+| `SP-Detail Page on-Amazon` | Product pages | 商品页面 | 商品ページ |
+| `SP-Other on-Amazon` | Rest of search | 搜索结果的其余位置 | 検索結果ページのその他の位置 |
+| `SB-Top of Search on-Amazon` | Top of search | 搜索结果顶部 | 検索結果上部 |
+| `SB-Detail Page on-Amazon` | Product page | 商品页面 | 商品ページ |
+| `SB-Other on-Amazon` | Rest of search | 搜索结果的其余位置 | 検索結果ページのその他の位置 |
+
+The EN/ZH columns are what the customer sees on screen — report those, not the API values.
+There is no `SD-` row: Sponsored Display is outside placement reporting. `placementText` echoes
+the raw API value here, so don't rely on it for a localized label.
+
+⚠️ **`SB-Top of Search on-Amazon` is mislabelled at the source.** The bid adjustment on that
+row is SB's **首页 / Home** value, and SB's real top-of-search adjustment is missing from this
+entity entirely (SB has four placements in the console, this entity returns three). The row's
+**metrics** are fine; its `multiplier_` is not. Read SB placement adjustments from
+`get_entity_metadata(entity='placement')`, which returns all four with the right values.
+
+⚠️ **首页 means two different things.** SP's 搜索结果顶部（**首页**） is the first *page* of
+search results (EN "Top of search (first page)"); SB's **首页** is the Amazon *homepage* (EN
+"Home"). Always pair the Chinese label with its campaign type.
+
+The `placement` **metadata** entity uses a completely different value set (`topOfSearch` /
+`productPage` / …) — see `sparkx-query-entity-metadata`'s `enum-i18n.md`, and the value-space
+table in [`field-reference.md`](field-reference.md).
 
 ## portfolioServingStatus (`portfolio.portfolioServingStatus_`)
 

@@ -462,8 +462,18 @@ One row per campaign × placement combination.
 | amazonCampaignId | string | Amazon campaign ID |
 | profileId | string | returned, but **not filterable** |
 | campaignType | string | returned, but **not filterable** |
-| placement | string | `topOfSearch` / `productPage` / `restOfSearch` |
+| placement | string | SP: `topOfSearch` / `productPage` / `restOfSearch` / `siteAmazonBusiness`. SB: `topOfSearch` / `home` / `detailPage` / `other` — **four each**, and `topOfSearch` means a different placement on the two |
+| placementText | string | Localized label — **only the SP values are translated**; SB rows echo the raw value (`home`, `detailPage`, `other`). Use `enum-i18n.md` for SB |
 | multiplier | string | Bid-adjustment **percentage** as a decimal string, e.g. `"1.00"` — **it is a ratio, not a money amount** |
+| writeField | string | The `batch_update_ads` field for this placement (`topAdjustment`, `homeAdjustment`, …) — use it rather than mapping the label yourself. Comes back **empty** on SB `topOfSearch`; fall back to the placement-field table in `sparkx-edit-ads`'s `references/write-campaign.md` |
+
+**This is the authoritative source for placement bid adjustments, SB especially.** The
+`placement` **performance** entity (`get_ads_perf(factEntity='placement')`) is not: it returns
+only three rows per campaign type, uses `SP-`/`SB-`-prefixed values, and its
+`SB-Top of Search on-Amazon` row carries the **Home / 首页** adjustment instead of
+top-of-search. Measured on one campaign: this entity reported `topOfSearch` = 50%, the
+performance entity reported 0% for what it calls the same placement. Never read an SB placement
+adjustment from the performance side.
 
 ### aiGroup (AI Managed Group)
 

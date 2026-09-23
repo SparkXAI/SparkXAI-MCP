@@ -45,9 +45,16 @@
 | `campaign.campaignAiFirstOnDate_` / `campaign.campaignAiLastOnDate_` / `campaign.campaignAiLastOffDate_` / `campaign.campaignAiStudyDate_` | AI managed lifecycle dates | — |
 | `campaign.offAmazonBudgetControlStrategy_` | Off-Amazon budget strategy | `MINIMIZE_SPEND` / `MAXIMIZE_REACH` |
 | `campaign.siteRestrictions_` | Site restrictions | `AMAZON_BUSINESS` / `AMAZON_HAUL` |
-| `campaign.bidAdjustmentTopOfSearch_` | Top-of-search bid adjustment % | — |
-| `campaign.bidAdjustmentProductPage_` | Product-page bid adjustment % | — |
-| `campaign.bidAdjustmentRestOfSearch_` | Rest-of-search bid adjustment % | — |
+| `campaign.bidAdjustmentTopOfSearch_` | Top-of-search bid adjustment % — **SP only** | — |
+| `campaign.bidAdjustmentProductPage_` | Product-page bid adjustment % — **SP only** | — |
+| `campaign.bidAdjustmentRestOfSearch_` | Rest-of-search bid adjustment % — **SP only** | — |
+
+⚠️ **These three read SP's placement columns, and they come back on SB rows too, carrying a
+value that is not that campaign's configuration.** On one store every single SB campaign
+returned `50 / 0 / 0` regardless of what was actually set. Never quote them for a Sponsored
+Brands campaign — SB's placement adjustments live on entirely different fields. Read placement
+configuration, SB's especially, from `get_entity_metadata(entity='placement')`: one row per
+placement, with the correct value and a `writeField` naming the field to write.
 
 ### AdGroup
 
@@ -60,6 +67,8 @@
 | `adGroup.adGroupServingStatus_` | Serving status | — |
 | `adGroup.defaultBid_` | Default bid | — |
 | `adGroup.sdBidOptimization_` | SD bid optimization | `conversions` / `clicks` / `reach` |
+
+⚠️ **Do not add a product dimension to an ad-group query.** `productAd.asin_` / `asin.*` / `productLine.*` on `factEntity: "adGroup"` is accepted and returns the ad group's **full** spend, sales and orders on every product — no error. Use `factEntity: "productAd"` for per-product figures.
 
 ### Target
 
@@ -98,7 +107,7 @@ Only valid when `factEntity` is `keywordPlacement`. Sourced from Amazon Marketin
 | `keywordId` | `keywordId_` | Keyword ID | — |
 | `keywordText` | `keywordText_` | Keyword text | — |
 | `matchType` | `matchType_` | Match type | `EXACT` / `PHRASE` / `BROAD` (upper case here, unlike `target`'s lower-case `exact`/`phrase`/`broad`) |
-| `placement` | `placement` | Placement | Raw stream value, matched **verbatim** — see the full value list & filter caveat below. **Not** the `topOfSearch`/`productPage`/`restOfSearch` codes used by the `placement` entity. |
+| `placement` | `placement` | Placement | Raw stream value, matched **verbatim** — see the full value list & filter caveat below. ⚠️ **Three different value spaces share the name "placement"** — read the Placement section below before reusing a value that came from another entity or tool. |
 | `campaignId` | `campaignId_` | Campaign ID | — |
 | `adGroupId` | `adGroupId_` | Ad group ID | — |
 | — | `hour` | Hour of day, `0`-`23`, comes back automatically with hourly granularity | — |
@@ -116,6 +125,8 @@ Legacy and AMS-new forms can coexist in the stream and matching is exact/case-se
 
 **`campaignType` filters are dropped on this entity** (SP-only source, so nothing is pushed down): `sponsoredProducts` changes nothing, `sponsoredBrands`/`sponsoredDisplay` yields an empty result set that means "wrong entity", not "no data".
 
+⚠️ **Do not add a product dimension here either.** `productAd.asin_` / `asin.*` / `productLine.*` on this entity is accepted and repeats each keyword's full metrics on every product, with no error. This entity cannot be split by product.
+
 **Restricted metric set**, with two distinct failure modes:
 
 | Metrics | Behaviour |
@@ -132,8 +143,60 @@ Never report AI performance from this entity or divide by those values; use `fac
 | Field | Description | Enum |
 |---|---|---|
 | `placement.campaignId_` | Campaign ID | — |
-| `placement.placement_` | Placement | `topOfSearch` / `productPage` / `restOfSearch` |
-| `placement.multiplier_` | Bid adjustment % | — |
+| `placement.placement_` | Placement | `SP-Top of Search on-Amazon` / `SP-Detail Page on-Amazon` / `SP-Other on-Amazon` / `SB-Top of Search on-Amazon` / `SB-Detail Page on-Amazon` / `SB-Other on-Amazon` |
+| `placement.multiplier_` | Bid adjustment % | Negative values occur, e.g. `-99`. The console only accepts 0–900, so a negative is **not** a percentage the user set — see the note below |
+
+⚠️ **"placement" names three different value spaces. They are not interchangeable, and the
+wrong one returns zero rows with no error.**
+
+| Where | Values |
+|---|---|
+| `factEntity: "placement"` (this entity) | `SP-` / `SB-` prefix + `Top of Search on-Amazon` / `Detail Page on-Amazon` / `Other on-Amazon` |
+| `factEntity: "keywordPlacement"` | raw AMS display strings, no prefix — see the KeywordPlacement section above |
+| `get_entity_metadata(entity='placement')` | SP: `topOfSearch` / `productPage` / `restOfSearch` / `siteAmazonBusiness`; SB: `topOfSearch` / `home` / `detailPage` / `other` |
+
+So `{"placement.placement_": "topOfSearch"}` is **accepted and returns 0 rows** — that value
+belongs to the metadata tool's space. Prefer reading `placement_` out of the returned rows over
+filtering on it.
+
+**A negative `multiplier_` is not a negative bid adjustment.** `-99` shows up on real rows, and
+`get_entity_metadata(entity='placement')` returns the same `-99` for the same campaign, so it is
+the stored value rather than a reporting artefact. But the console accepts only 0–900, so it is
+not a percentage anyone configured, and what it actually encodes is **not documented anywhere we
+can check**.
+
+So: check `get_entity_metadata(entity='placement')` for that campaign — where the two tools
+disagree, its value is the one to trust. **If it comes back negative as well, the configured
+value cannot be obtained.** The metadata tool is not a fallback for this: it reads the same
+stored value, which is why it returns the same `-99`. Tell the user the bid adjustment for that
+placement is unavailable and stop there. Never render it as "−99%" or "a 99% bid reduction",
+never treat it as `0`, and never carry it into a comparison, an average or a total.
+
+⚠️ **`multiplier_` is wrong for Sponsored Brands.** SB has **four** placements in the console
+(搜索结果顶部 / 搜索结果的其余位置 / 首页 / 商品页面); this entity returns only three, and
+`SB-Top of Search on-Amazon` carries the **首页 / Home** adjustment rather than top-of-search,
+while SB's real top-of-search adjustment is absent altogether. Measured on one campaign: the
+metadata tool reported 50% for 搜索结果顶部, this entity reported 0% for what it calls the same
+placement. The **metrics** on these rows are fine; the `multiplier_` is not. For any SB
+placement adjustment, read `get_entity_metadata(entity='placement')` instead. SP's three are
+correct here.
+
+**What this entity does not cover.** Sponsored Display has no rows at all — SD is outside
+placement reporting, and the console's placement tab offers only 全部 / SP / SB. 企业购 /
+Amazon Business (`siteAmazonBusiness`, SP-only) has no performance row either. A placement
+rollup therefore does **not** add up to the profile's total spend; say so rather than
+presenting it as a complete breakdown.
+
+**An unattributed bucket exists.** Rows can come back with `placement_`, `campaignId_` and
+every campaign field `null`. On one store that bucket held 26% of SP impressions (4% of SP
+spend) and reconciled exactly against `factEntity: campaign`. Report it as its own
+"unattributed" line — never drop it silently, never fold it into a named placement.
+
+**Talk to the user in console labels, not these codes.** One trap: SP's
+搜索结果顶部（**首页**） means the first *page* of search results (EN "Top of search (first
+page)"), while SB's **首页** is the Amazon *homepage* (EN "Home"). Same Chinese word, different
+placements — always pair the label with its campaign type. Full label table in
+[`enum-i18n.md`](enum-i18n.md).
 
 ### ProductAd
 

@@ -528,7 +528,9 @@ matched. **Exact matching is still available** - pass the bare value, which maps
 `meta.hint` says `Page order is not stable.` Never take "Top N placements" from its page order.
 (The earlier gap where Sponsored Brands adjustments were not returned **has been fixed**: SB
 now expands to `topOfSearch` / `home` / `detailPage` / `other`, SP to `topOfSearch` /
-`productPage` / `restOfSearch`. Rows with no adjustment value are still skipped.)
+`productPage` / `restOfSearch` / `siteAmazonBusiness`. Rows with no adjustment value are
+still skipped.) `topOfSearch` means a different placement on SP than on SB — see
+`references/enum-i18n.md`.
 
 ## Money is per store
 

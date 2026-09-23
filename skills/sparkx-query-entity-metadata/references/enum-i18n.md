@@ -81,11 +81,37 @@ Display labels for enum values returned in the `{field}Text` companion fields. S
 
 ## placement
 
-| API value | EN | ZH | JA |
-|---|---|---|---|
-| `topOfSearch` | Top of Search (first page) | 搜索结果顶部（首页） | 検索結果上部（1ページ目） |
-| `productPage` | Product Pages | 商品详情页 | 商品ページ |
-| `restOfSearch` | Rest of Search | 搜索结果其余位置 | 検索結果のその他の場所 |
+**The value set depends on `campaignType`**, and `topOfSearch` appears in both meaning
+different things. Each row also carries `writeField`, the field name to use when writing.
+
+**SP** (`sponsoredProducts`)
+
+| API value | writeField | EN (console) | ZH (console) | JA |
+|---|---|---|---|---|
+| `topOfSearch` | `topAdjustment` | Top of search (first page) | 搜索结果顶部（首页） | 検索結果上部（1ページ目） |
+| `productPage` | `productPageAdjustment` | Product pages | 商品页面 | 商品ページ |
+| `restOfSearch` | `restOfSearchAdjustment` | Rest of search | 搜索结果的其余位置 | 検索結果ページのその他の位置 |
+| `siteAmazonBusiness` | `siteAmazonBusinessAdjustment` | Amazon Business | 企业购 | Amazon Business |
+
+**SB** (`sponsoredBrands`)
+
+| API value | writeField | EN (console) | ZH (console) | JA |
+|---|---|---|---|---|
+| `topOfSearch` | (empty — the write side is `topOfSearchAdjustment`) | Top of search | 搜索结果顶部 | 検索結果上部 |
+| `other` | `otherAdjustment` | Rest of search | 搜索结果的其余位置 | 検索結果ページのその他の位置 |
+| `home` | `homeAdjustment` | Home | 首页 | ホーム |
+| `detailPage` | `detailPageAdjustment` | Product page | 商品页面 | 商品ページ |
+
+⚠️ **首页 means two different things.** SP's 搜索结果顶部（**首页**） is the first *page* of
+search results; SB's **首页** is the Amazon *homepage* (`home`). Always pair the Chinese label
+with its campaign type, and never carry a value across campaign types.
+
+⚠️ `placementText` is only translated for the SP values — SB rows come back with the raw
+`home` / `detailPage` / `other`. Use this table for SB labels.
+
+Sponsored Display has no placement rows. The **performance** entity
+(`get_ads_perf(factEntity='placement')`) uses a different value set again (`SP-`/`SB-` prefixed
+display strings) — the two are not interchangeable.
 
 ## portfolioServingStatus
 
