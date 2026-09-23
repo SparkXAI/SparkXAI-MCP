@@ -10,7 +10,7 @@ description: >-
   for enabling or editing an existing group (use sparkx-edit-ai-group) or deleting one (use
   sparkx-delete-ai-group).
 metadata:
-  version: 1.1.3
+  version: 1.1.4
 ---
 
 # Create AI Managed Group
@@ -154,11 +154,12 @@ confirm the meaning first, then use the ad-type reference to pick the field.
    you still need an explicit yes on this full preview before calling the create tool. This
    matters most when AI will start on (`aiStatus=1`) - those switches immediately affect
    live delivery and spend.
-   - **Turn AI on only if the user explicitly asked to start it.** If they said "create
-     and start" / "启动", set AI on. If they only asked to set up / create the group or
-     place campaigns into it (or didn't say), default AI **off** (`aiStatus` / `status`
-     = 0) and state that in your confirmation. Don't start automation on settings the
-     user didn't confirm.
+   - **AI starts ON unless the user asked for it not to.** Creating a managed group is
+     taken as intent to use it, so leave `aiStatus` out (SP/SB) or send `status = 1`
+     (SD) and **say plainly in the preview that AI will begin adjusting bids and budgets
+     immediately**. Only when the user asks to set it up without starting - "先别开",
+     "create but don't start", "先不要启动" - send `0`, and confirm that back to them.
+     The preview is where they get to decline, so the sentence has to be there.
 5. **Build and call the routed tool** using the exact **write** field names + enum
    values (ad-type reference + `field-reference.md`; write names != read names).
    > **Create is non-idempotent - never blind-retry.** On any failure, timeout, or
@@ -286,10 +287,23 @@ set - especially the AI on/off (`status`) value, since a template can start AI i
 ## AI on vs off at creation
 
 `aiStatus` (SP/SB) / `status` (SD) decides whether AI starts optimizing immediately.
-Turn it on **only when the user explicitly asked to create-and-start**. If they just
-want the group set up (or didn't say), default to AI **off** and say so in your
-confirmation - turning AI on means it starts adjusting bids/budgets and spending against
-the target right away.
+**The default is ON.** Creating a managed group is treated as intent to use it, so unless
+the user says otherwise the group starts optimizing as soon as it exists - adjusting bids
+and budgets and spending against the target right away. **Say that in the preview**, in
+those terms; it is the user's one chance to decline before anything moves.
+
+Send `0` only when they ask for the group without starting it ("先别开" / "create but
+don't start"), and confirm that back to them.
+
+**The two ad types get there differently, so be explicit rather than clever:**
+
+| | Omit the field | What to send |
+|---|---|---|
+| SP/SB (`aiStatus`) | server fills in `1` | omit for on, `0` for off |
+| SD (`status`) | **no default** - falls back to a template value, or nothing | **always send it**: `1` for on, `0` for off |
+
+SD did not get the server-side default, so omitting `status` there does not mean "on" -
+it means "undefined". Send the value explicitly on SD either way.
 
 > Note: an "off" group reads back as `aiStatus=2` ("AI Turned Off"), not `0`. Don't
 > treat a non-zero `aiStatus` on read as "it's on" - `1` = running, `2` = off.

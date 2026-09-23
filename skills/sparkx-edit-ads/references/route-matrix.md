@@ -22,7 +22,7 @@ that points at the field you thought you sent.
 | 2 | `campaign` + `updateStatus` | `request.data` | SP / SB / SD | if `archived` |
 | 3 | `campaign` + `updateBiddingStrategy` | `request.data` | **SP only** | - |
 | 4 | `negativeKeyword` + `create` | `request.data` | **SP only** | - |
-| 5 | `negativeKeyword` + `updateStatus` | `request.updates` | SP / SB / SD | if `archived` |
+| 5 | `negativeKeyword` + `updateStatus` | `request.updates` | SP / SB / SD — **SB rejects `paused`** | if `archived` |
 | 6 | `negativeKeyword` + `copy` | `request.businessType` + `request.target` | SP / SB / SD | - |
 | 7 | `keyword` + `create` | `request.data` | SP / SB | - |
 | 8 | `keyword` + `updateStatus` | `request.data` | any | if `archived` |

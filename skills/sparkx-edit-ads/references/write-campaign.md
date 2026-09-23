@@ -8,7 +8,16 @@ Send `request.profileIds` and `request.data[]` with `id` (internal campaign ID),
 `profileId`, `campaignType`, `audienceId`, `audienceSegmentType`, and
 `audienceBidPercentage`. Each batch supports SP/SB only, one profile and campaignType,
 at most 200 items, and an absolute integer percentage from 0 to 900. 0 retains the
-audience binding with no uplift. This does not unbind audiences or edit placements.
+audience binding with no uplift. This does not edit placements.
+
+Only when the user explicitly requests disabling audience bid adjustment, set
+`data[].audienceBidAdjustmentEnabled=false` and omit the audience fields. Skip audience
+selection, but still show the preview and obtain confirmation: the server sends empty
+`audienceId` and `audienceSegmentType`, and `audienceBidPercentage=0`, clearing the binding.
+Non-empty audience fields or a non-zero percentage conflict with disabling and are rejected.
+With the flag true or omitted, all existing audience fields remain required. Missing fields
+or 0% alone never disable adjustment. Re-enabling requires specifying the audience and
+percentage again. SP/SB, same-profile/type and campaign-state constraints still apply.
 
 ### `audienceSegmentType` - the field the read side will not give you
 
@@ -50,7 +59,8 @@ belongs to the query, not to this campaign, and a wrong value here fails silentl
 **A resolved `audienceName` proves nothing about the type.** Amazon-built audiences resolve
 their names too. Do not infer the segment type from the presence of any enriched field.
 
-Never guess an ID or audience pool. The first call returns a preview, not a write result.
+Query campaign metadata for current binding and amcAudience for selectable IDs/types.
+Never guess an ID or audience pool. The server checks the exact audience ID against the requested profile, campaign type and pool before preview and again before submission. Missing matches or unavailable lookups block the whole batch; explicitly disabling adjustment skips the lookup. The first call returns a preview, not a write result.
 Review the target campaigns, audience IDs/types and new percentages with the user;
 then resend identical parameters with the returned `request.confirmToken`.
 The preview contains requested target values, not queried current values or audience names.

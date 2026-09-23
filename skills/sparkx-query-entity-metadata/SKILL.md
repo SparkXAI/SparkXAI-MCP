@@ -8,7 +8,7 @@ description: >-
   which ads, enabled/paused status, budget settings, bidding strategy, automation rules,
   managed group schedule, flight, seasonal plan, rule mode config, RBA rule conditions
 metadata:
-  version: 1.4.1
+  version: 1.4.2
 ---
 
 # Query Entity Metadata Skill
@@ -358,9 +358,11 @@ Returns `audienceId`, `audienceName`, and `audienceSegmentType` echoed back on e
 
 ⚠️ **Send that echoed `audienceSegmentType` back on every write that uses this
 `audienceId`** - when you create a campaign, and when you change the audience bid on an
-existing one. The two segment types are separate pools. An `audienceId` taken from one pool
-and submitted with the other is accepted, stored locally, and **never applies on Amazon** -
-nothing rejects it, so carry the pair together from this row to the write.
+existing one. The two segment types are separate pools, and **both write paths verify that the
+id belongs to the pool you name**: create checks before creating anything, and
+`updateAudienceBid` checks before the preview and again before submission. A mismatched pair
+is **rejected, and it takes the whole batch with it** - so carry the pair together from this
+row to the write rather than reconstructing the type later.
 
 This entity is the only place the type is available. It is not on the campaign row, so for a
 campaign that is already bound you have to find which pool its `audienceId` sits in by
@@ -417,6 +419,66 @@ Required `filters.asin`, plus **one of two mutually exclusive modes**:
 Neither mode given is an error naming both. Returns `suggestedBid` plus
 `suggestedBidRangeStart` / `suggestedBidRangeEnd`, with `keywordText` + `matchType` in
 keyword mode and `targetGroup` in auto mode.
+
+## Filtering by an id: the field decides the id space, and a mismatch fails silently
+
+**Both id spaces are filterable.** What matters is that the field and the value agree, and
+**the only reliable signal is the field name the value came out of** - per entity. Two
+tempting shortcuts are both wrong:
+
+- **Not digit length.** Length is an observation about today's data, not a contract.
+- **Not which tool returned it.** `get_operation_log` rows carry `entityId` (internal) *and*
+  `amazonEntityId` / `amazonCampaignId` / `amazonAdGroupId` (Amazon) side by side. "It came
+  from the log, so it is an Amazon id" is false.
+
+**The per-entity field tables in
+[`references/field-reference.md`](references/field-reference.md) are the source of truth.**
+The examples below are orientation, not a lookup table - check the entity you are actually
+querying:
+
+| Example field | Holds |
+|---|---|
+| `campaignId`, `adGroupId`, `targetId`, `keywordId`, `productAdId`, `negativeKeywordId`, `negativeTargetId`, `aiGroupId` | the **internal** id (`aiGroupId` has no Amazon counterpart) |
+| `amazonCampaignId`, `amazonAdGroupId`, `amazonKeywordId`, `amazonTargetId`, `amazonAdId`, `amazonPortfolioId` | the **Amazon** id |
+
+⚠️ **`portfolioId` means opposite things on different entities** - and this is exactly why
+the field name has to be read *per entity* rather than pattern-matched:
+
+| Where | `portfolioId` holds |
+|---|---|
+| on `campaign` | the **Amazon** portfolio id (the value that matches `portfolio.amazonPortfolioId`) |
+| on `portfolio` | the **internal** portfolio id |
+
+So filtering by an Amazon id is perfectly normal, and is the documented way in when that is
+the id you hold: filter on `amazonCampaignId`, then take the matched row's internal
+`campaignId` for anything that needs it.
+
+**The failure mode is putting a value in a field belonging to the other space**, e.g. taking
+`amazonCampaignId` off a performance or log row and passing it as `campaignId`. That filter
+is valid and passes every check - it simply matches nothing, so you get **`0` rows and no
+error**. An empty result then reads exactly like "this entity cannot be filtered by
+campaign", which is the wrong conclusion to hand the user.
+
+- **Track which field each id came out of**, and carry that with it. When a value has been
+  copied between steps and you are no longer sure, re-read it rather than guessing.
+- **Which ids a row carries varies by entity - look it up rather than assuming.** For
+  AdsList entities that have an Amazon counterpart, a row exposes the id pair for that
+  entity; parent references are generally internal-only. An `adGroup` row has `adGroupId`
+  and `amazonAdGroupId` but **no `amazonCampaignId`**, and its `campaignId` is the internal
+  parent id - so to report that parent in Amazon terms you query the campaign entity. Not
+  every entity fits the pattern: `aiGroup` has no Amazon id at all, and `placement` does
+  return `amazonCampaignId` alongside the internal one. The per-entity tables in the field
+  reference are the only reliable answer.
+- **Before reporting an empty result**, check the field/value pairing. Say "no rows matched"
+  only after that, and never generalise it into "filtering is not supported here".
+
+**This is a wrong-*value* failure, not a wrong-*field* one** - the distinction matters,
+because the next section is about the opposite case. A filter **field** that is not in the
+entity's whitelist throws; a **value** belonging to the other id space passes every check and
+just matches nothing. Loud failures you will see. This one you have to look for.
+
+⚠️ **`automationRule` accepts only `amazonCampaignId`** - it **requires** that filter and
+has no internal-id equivalent. That is a restriction specific to it, not the general rule.
 
 ## AdsList filter and sort rules (enforced - you get an error, not a silent fallback)
 

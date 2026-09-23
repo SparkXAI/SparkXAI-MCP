@@ -9,7 +9,7 @@ description: >-
   save_sp_sb_ai_managed_group (edit mode). Not for creating a group (use sparkx-create-ai-group)
   or deleting one (use sparkx-delete-ai-group).
 metadata:
-  version: 1.1.4
+  version: 1.1.5
 ---
 
 # Edit AI Managed Group
@@ -97,10 +97,14 @@ real tradeoff; see [`references/coupling-rules.md`](references/coupling-rules.md
   is an **action-space switch that *enables the AI* to pause**; turning it on does **not**
   immediately pause anything. SP only.
 - **立即暂停某个广告活动** (pause a specific campaign right now) - campaign-level, **not a
-  managed-group operation** and not settable through these tools.
-> "暂停广告活动" is ambiguous between "let AI pause campaigns" (action space) and "pause
-> this campaign now" (campaign-level, not here). **Never map it straight to a field and
-> execute - ask which is meant.**
+  managed-group operation**, so it is not settable through these tools. It **is**
+  supported, in the `sparkx-edit-ads` Skill: `batch_update_ads` with
+  `campaign` + `updateStatus`, `state: "paused"` (SP / SB / SD). Route the user there
+  rather than telling them it cannot be done.
+> "暂停广告活动" is ambiguous between "let AI pause campaigns" (action space, here)
+> and "pause this campaign now" (campaign-level, `sparkx-edit-ads`). **Never map it
+> straight to a field and execute - ask which is meant**, then act in whichever Skill
+> owns it.
 
 **"target / goal" / "目标"**: 推广目标 `targetType` (1 growth / 2 stability / 3 volume /
 4 legacy) vs 目标 ACOS/ROAS. Also "ACOS 调到 25" (a value) vs "ACOS 降 20%" (a ratio) are
@@ -202,6 +206,11 @@ separate tool: **`save_sp_sb_ai_group_schedule`**, with reads via
 **SP/SB only** - there is no SD schedule tool. If the user asks to schedule an SD group, say
 it's not available for Sponsored Display.
 
+> ⚠️ **Read "Never echo a read schedule back as a write payload" below before you send
+> anything.** Reads and writes do not share a shape: `isActive` means different things on the
+> two sides, and `aiAutomation` can come back `null`. Build write payloads from the write
+> contract, not from a read row.
+
 ### Parameters
 
 ```json
@@ -222,10 +231,11 @@ Each item:
 | Field | Type | Notes |
 |---|---|---|
 | `id` | long | **Omit/null = create**, `>0` = update that schedule |
-| `isActive` | boolean | `false` **with a valid `id` = delete** that schedule |
+| `operation` | string | `"delete"` **with a valid `id` = archive** that schedule. Omit for create/update |
+| `isActive` | boolean | **DEPRECATED but still deletes** - `false` with a valid `id` archives the schedule, same as `operation="delete"`. Don't send it; the read-side `isActive` means "in effect window", not "should be deleted" |
 | `timeType` | int | `1` = fixed date window, `2` = weekly repeat |
 | `startDate` / `endDate` | string | `YYYY-MM-DD`, `timeType=1` only |
-| `weekDays` | int[] | `timeType=2` only. **`0` = Sunday, 1-6 = Mon-Sat** |
+| `weekDays` | int[] | `timeType=2` only. **`1` = Monday … `7` = Sunday** - the same encoding the read side returns, so a value read back can be sent as-is. Values outside `[1,7]`, and duplicates, are rejected |
 | `optimizeType` | int | `1`=drive growth, `2`=control cost, `3`=volume. **`timeType=1` only - required there, rejected on `timeType=2`** |
 | `acos` | number | Target ACOS, x100 scale. Same `timeType` rule as above |
 | `aiPersonality` | int | `1`-`5`. Same `timeType` rule as above |
@@ -240,6 +250,15 @@ Each item:
    for you, which is why you must leave them out. (If the parent group's detail can't be
    read, the call fails - so make sure the group exists and is readable first.) For a
    fixed-window schedule, these three are required from you.
+
+   **So a weekly schedule cannot have its own target ACOS, goal or personality** - those
+   three always equal the parent group's. **A recurring "looser ACOS every weekend" is
+   therefore not supported**: weekly mode is the only recurring mode and it cannot carry its
+   own ACOS. Say that plainly rather than improvising around it. What exists instead:
+   change the parent group (which moves **every** weekly schedule on it), or cover **one
+   specific dated period** with a `timeType=1` window, where the three are set per schedule -
+   that is a single date range, not a weekly recurrence, so it does not add up to an ongoing
+   weekend policy.
 2. **Word-list settings are stripped silently.** `aiActionSettings.targetOptimization` and
    `brandOptimization` are removed server-side on schedules. Don't offer them, and don't
    claim they were applied.
@@ -259,14 +278,71 @@ nonsense. Check before sending:
 | 2 | `endDate - startDate` ≤ **365 days** | The backend accepts longer ranges; the UI caps at one year |
 | 3 | `acos` ∈ **(0, 1000]** | The backend does not range-check schedule ACOS |
 | 4 | No overlap between schedules (dates **and** weekdays) | The backend does reject this, but with an opaque `Schedule_Date_Overlap` - pre-checking lets you name the conflicting schedule |
-| 5 | `weekDays` ⊆ `[0..6]`, no duplicates | No backend guard |
+| 5 | `weekDays` ⊆ `[1..7]`, no duplicates | The tool does check this and rejects the call - still check before sending, so you can tell the user which day is wrong instead of relaying the error |
 
 One more interaction to surface to the user: if the group runs **bid dayparting or budget
 dayparting**, changing a weekly schedule's `weekDays` can change when those rules execute.
 The UI warns about this; say it out loud rather than letting the user discover it.
 
-Deleting is `isActive: false` + the existing `id` - state clearly to the user that you're
-removing a schedule, and read back afterwards to confirm it's gone.
+### `weekDays` uses the same encoding on both sides
+
+`1` = Monday … `7` = Sunday, on read and on write alike, so a value you read back can be
+sent unchanged. (It was `0`-`6` on the write side previously; if you have seen that, it is
+out of date.)
+
+⚠️ **Not the same as `budgetDaypartExcuteDays`.** That field - the execution days for
+budget dayparting (rule 13) - uses `1`-`6` = Mon-Sat with **`0` = Sunday** (default
+`"1,2,3,4,5,6,0"`).
+
+**This is not an oversight, and not something to "fix".** The two fields belong to
+different downstream interfaces and use different weekday conventions: schedules use `1`-`7`
+with Monday first, while `budgetDaypartExcuteDays` uses `0`-`6` with Sunday as `0`. Each is
+correct for its own endpoint.
+
+So check which field you are filling before copying a list of days from one to the other,
+and **state the days by name** in the preview ("周一、周三" / "Mon, Wed") rather than as
+numbers - by name is the only form that means the same thing on both sides, it costs
+nothing, and it lets the user catch a wrong day before it is written.
+
+### Never echo a read schedule back as a write payload
+
+⚠️ **`isActive` means opposite things on the two sides.**
+
+| | `isActive: false` means |
+|---|---|
+| **Read** (`entity='aiGroup_schedule'`) | this schedule is **not inside its effective window right now** - e.g. a fixed-date window that has not started yet, or has ended |
+| **Write** (`save_sp_sb_ai_group_schedule`) | **deletes that schedule.** Deprecated in favour of `operation: "delete"`, but **still honoured for backward compatibility** - deprecated does not mean disarmed |
+
+**So sending a read row back unchanged deletes schedules.** A fixed-date window that has
+not started yet reads as `isActive: false`, and that same value on the write side archives
+it - the one call meant to preserve it destroys it instead. The read shape is not the write
+shape in other ways too: `aiAutomation` can come back `null` on read while the write side
+expects a full config, and other fields differ in how empty values are represented.
+
+**Treat reads as information, not as payload.** Use
+`get_entity_metadata(entity='aiGroup_schedule')` to understand what exists and to show the
+user. Build anything you send **from the write contract**, and use `operation: "delete"` only
+because the user asked to delete that schedule - never derive deletion intent from a read
+row's `isActive` field. **Do not include `isActive` in a write payload at all**: there is no
+case where you need it, and the only thing it can do is delete something.
+
+### Send only the items you are creating, updating or deleting
+
+Each item is processed **independently, keyed by `id`** - the save is an upsert, not a
+replacement of the group's schedule set. **A schedule you leave out of the array is not
+affected.** So send the item you are changing and nothing else; re-sending untouched
+schedules adds risk (you would have to rebuild them from a read, which is not the write
+shape) without adding effect.
+
+Deletion is `operation: "delete"` + the existing `id`. State clearly to the user that you're
+removing a schedule, get their explicit request or confirmation for it, and read back
+afterwards to confirm it's gone. **Items marked with `operation: "delete"` skip the
+validations above** - the weekly-mode restriction and the parent-group lookup - so a delete
+never needs those fields filled in.
+
+**⚠️ Do NOT pass `isActive` from read responses back to the write tool.** The read-side
+`isActive=false` means "not in the current effect window" (e.g. future or expired schedule),
+NOT "deleted". Passing it back would silently archive the schedule.
 
 ## Templates - readable, and applicable via `templateId`
 

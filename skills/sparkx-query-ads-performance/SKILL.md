@@ -9,7 +9,7 @@ description: >-
   hourly data, by hour, intraday, AMS, Amazon Marketing Stream, keyword placement,
   vendor, seller, distributorView, sellingProgram, shipped revenue, ordered revenue, TACOS
 metadata:
-  version: 1.4.1
+  version: 1.4.2
 ---
 
 # Query Ads Performance Skill
@@ -91,7 +91,7 @@ Auxiliary tables for joining and aggregating — referenced via `select`/`filter
 | dateEnd | string | **Yes** | — | End date `YYYY-MM-DD`. Default to yesterday if user gives no end date (T+2 data delay) |
 | metrics | array[string] | **Yes** | — | Metric fields (non-empty). Must be valid for the chosen `factEntity` — see Metrics × Entity Support Matrix below |
 | userContext | string | **Yes** | — | User's original query + reason, max 100 chars |
-| select | array[string] | No | [] | Dimension fields, format `entity.field_`; omit for global aggregate (no grouping) |
+| select | array[string] | No | [] | Dimension fields, format `entity.field_`; omit for global aggregate (no grouping). **`campaignAudience` reads this as an output field whitelist of bare names instead** — see that section |
 | groupBy | array[string] | No | same as select | GROUP BY fields. Only needed explicitly when `select` contains a custom aggregate expression — otherwise auto-filled from raw dimension fields in `select` |
 | filters | object | No | {} | Filter conditions — supports simple value / operator / AND-OR nesting |
 | orderBy | array[object] | No | [] | `[{"field": "Spend", "direction": "DESC"}]` (direction ASC or DESC, default DESC) |
@@ -196,7 +196,7 @@ the same audience. Quote the name for a per-row answer, and take the ID from
 `entity: campaign` when the ID is what matters.
 
 **This data comes from a different service than every other entity**, and the contract shows
-it. Four things are not like the rest of this tool:
+it. Five things are not like the rest of this tool:
 
 **1. Metric names are SINGULAR.** `Impression`, `Click`, `TotalSales`, `TotalPurchases`,
 `TotalUnitOrdered`, `PurchasesRate` — **not** the plural `Impressions` / `Clicks` used
@@ -214,15 +214,31 @@ The 27 metrics: `Impression`, `Click`, `CTR`, `Spend`, `CPC`, `TotalPurchases`, 
 `prev<Metric>` (the preceding period of equal length) and `gap<Metric>` (percent change).
 **Do not query twice to build a comparison.** The cost is width: omitting `metrics` returns
 all 27 in all three forms, **80+ fields per row**. Pass `metrics` unless you genuinely need
-everything.
+everything — and see point 4 for dropping the comparison columns as well.
 
-**3. `select`, `groupBy` and `queryType` are rejected**, because the row granularity is fixed
-downstream. Narrow with `filters` instead. Only one `orderBy` rule is accepted, and
+**3. `groupBy` and `queryType` are rejected**, because the row granularity is fixed
+downstream. Narrow rows with `filters` instead. Only one `orderBy` rule is accepted, and
 `timeGranularity: "hourly"` is not available.
 
-**4. Paging is tighter**: `pageSize` defaults to **50** and caps at **200**, not 100/500 —
+**4. `select` works, but it means something else here.** Everywhere else it names grouping
+dimensions in `entity.field_` form. Here the granularity is fixed, so it is an **output field
+whitelist of bare names** — `campaignName`, `audienceName`, `Spend`, `prevSpend`. It cuts
+columns, never rows.
+
+That makes it the only escape from point 2: `metrics` always drags a metric's `prev` / `gap`
+along, `select` expands nothing. `select: ["campaignName", "Spend", "ACOS"]` returns exactly
+three columns instead of 80+. Reach for it whenever the user asks how something is performing
+without asking how it changed.
+
+Names are case-sensitive. Nothing is kept automatically — list `campaignId` / `audienceId`
+yourself when you need to identify the row. Unknown names are **ignored, not rejected**, and
+reported in `meta.hint`; a suspiciously narrow row means reading that hint. `rowCount`,
+`meta.total` and `hasNextPage` are unaffected, and both entry points behave identically.
+
+**5. Paging is tighter**: `pageSize` defaults to **50** and caps at **200**, not 100/500 —
 those 80+ fields per row are why. Over the cap is an error, not a silent clamp. `meta.total`
-tells you whether paging is worth it.
+tells you whether paging is worth it. The cap is set for the worst case and **does not widen
+when you pass `select`**.
 
 **`search` works only here.** A case-insensitive fuzzy match on the audience name. Every other
 entity rejects the parameter — use `filters` with `like` there.
@@ -254,7 +270,7 @@ not sum SP and SB same-SKU figures into one total.
 
 A dedicated tool of that name exists and returns exactly this data through the same
 downstream. It marks itself **superseded**: use `get_ads_perf(factEntity='campaignAudience')`.
-Both accept `search`. If you see the old tool in a client's list, prefer this entity — and if
+Both accept `search` and `select`. If you see the old tool in a client's list, prefer this entity — and if
 a user asks why two tools look identical, that is the answer.
 
 ## Hourly / AMS Data

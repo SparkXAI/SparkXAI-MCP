@@ -340,7 +340,7 @@ client-side instead. See the date note below.
 | campaignId | number | — |
 | keywordText | string | — |
 | matchType | string | `negativeExact` / `negativePhrase` |
-| negativeKeywordState | string | `enabled` / `paused` / `archived` |
+| negativeKeywordState | string | `enabled` / `paused` / `archived`. ⚠️ **A value you read is not necessarily one you can write back**: on `sponsoredBrands` rows `paused` can be read but **cannot be set** - that write is rejected for the whole batch. See `edit-ads` |
 
 Campaign-level and ad-group-level negatives live in two different tables, so `businessType`
 is part of the row's identity, not decoration.
@@ -588,10 +588,10 @@ Pagination and `orderBy` are ignored; all schedules for the group come back in o
 | Field | Type | Notes |
 |---|---|---|
 | `id` | long | Schedule ID (used as the update/delete key by the write tool) |
-| `isActive` | boolean | Whether the schedule is active |
+| `isActive` | boolean | Whether the schedule is **currently inside its effective window** - a not-yet-started or already-ended fixed-date schedule reads `false` while still existing. ⚠️ **Do not echo this into `save_sp_sb_ai_group_schedule`**: there `isActive: false` means *delete*. See the `edit-ai-group` Skill |
 | `timeType` | int | `1` = fixed date window, `2` = weekly repeat |
 | `startDate` / `endDate` | string | `timeType=1` only |
-| `weekDays` | array[int] | `timeType=2` only. `1`=Monday … `7`=Sunday |
+| `weekDays` | array[int] | `timeType=2` only. `1`=Monday … `7`=Sunday - **the same encoding `save_sp_sb_ai_group_schedule` takes**, so these values can be written back unchanged |
 | `optimizeType` | int | `1`=Drive growth/推动增长, `2`=Optimize ROAS/保持订单稳定, `3`=Promotion sales boost/活动冲量, `4`=Drive growth · Budget-utilization priority. **`timeType=2`: inherited from the parent group, read it from the group row instead. For customer output use the selected option in the user's language, not the English enum or category heading.** |
 | `acos` | number | Target ACOS. Same inheritance note as `optimizeType` |
 | `aiPersonality` | int | 1–5. Same inheritance note as `optimizeType` |

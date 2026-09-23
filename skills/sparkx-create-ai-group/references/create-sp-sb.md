@@ -30,13 +30,13 @@ if the user needs to know what's active.
 | `aiGroupName` | string | Unique per profile |
 | `acos` | number | Target ACOS on the **x100 scale** - the user's `25%` is sent as **`25`** (not `0.25`). Must be `> 0` |
 | `targetType` | int | `1`=drive growth, `2`=maintain stability, `3`=volume, `4`=legacy growth |
-| `aiStatus` | int | `0`=off, `1`=on |
 | `campaignType` | string | `"sponsoredProducts"` or `"sponsoredBrands"` |
 
 ## Common optional fields
 
 | Field | Type | Notes |
 |---|---|---|
+| `aiStatus` | int | `0`=off, `1`=on. **Omit it** - the server fills in `1` and the group starts optimizing. Send `0` only when the user asked for it not to start |
 | `campaignIds` | int[] | Campaigns to include (auto-increment IDs). Omit to create an empty group |
 | `campaignNameSign` | int | Campaign-name label: `0`=off, `1`=on |
 | `aiPersonality` | int | `1`-`5`; **must be >=3 when `targetType=3` (volume/冲量)** (front-end rule - MCP won't enforce it) |
@@ -88,7 +88,25 @@ supported (AI / Rule / none) per SP / SB / SD" matrix is in
 action-space switch (notably: **SB's BidDaypart has no AI mode**, and
 `budgetRedistribute` / `bidAmazonBusiness` are `noRule` - never attach Rule configs).
 
-## Example - create a basic SP group, AI off
+## Example - create a basic SP group
+
+`aiStatus` is omitted, so the group is created with AI on and starts optimizing
+immediately. Say that in the preview before calling this.
+
+```json
+{
+  "request": {
+    "profileId": 3721212165742,
+    "aiGroupName": "SP-Core-Keywords-US",
+    "campaignType": "sponsoredProducts",
+    "acos": 25,
+    "targetType": 1,
+    "campaignIds": [45444534]
+  }
+}
+```
+
+**Same group, but the user asked not to start it yet** - add `aiStatus: 0`:
 
 ```json
 {

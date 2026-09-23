@@ -84,6 +84,15 @@ must be filtered out when pairing a rule with this action space.
 
 ## The things that trip agents up
 
+- **The group switch is not the negative itself.** `negativeTargetStatus` here is the
+  managed group's "自动添加否定定向" switch and is **read-only through MCP** (so are the
+  word-list settings `targetOptimization` / `brandOptimization`). That does **not** mean
+  negatives are unmanageable: adding, pausing, archiving and copying individual negative
+  keywords and negative product targets all work through `batch_update_ads`
+  (`negativeKeyword` / `negativeTarget` routes) - see the `edit-ads` Skill. Read the two
+  apart before telling a user something cannot be done:
+  `negativeTargetStatus` = "let the AI add negatives" (platform UI only);
+  `negativeTargetState` = the state of one specific negative (writable).
 - **SD supports only two** - `budgetRedistribute` + `targetHarvest`. Nothing else on SD.
 - **广告位调价 (placement bids) = SP only.** Enable it via
   `aiActionSettings.bidAdPlaceStatus = 1`. **For SD and SB: skip it - do not send

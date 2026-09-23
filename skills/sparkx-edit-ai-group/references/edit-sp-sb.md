@@ -30,7 +30,8 @@ Flat operations use the type selectors and companion values inside `batchParams`
   it: no MCP tool writes rule conditions/actions. For an RBA config change, point the user to
   the platform.
 - Schedules **are** writable, but through a different tool
-  (`save_sp_sb_ai_group_schedule`) - not via these fields. See the main SKILL.md.
+  (`save_sp_sb_ai_group_schedule`) - not via these fields. See the Scheduling section in the
+  main SKILL.md; note in particular that a read row is not a write payload.
 
 ## Editable fields
 

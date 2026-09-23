@@ -88,8 +88,12 @@ result sets small.
 - The match column is `matchType` on these three entities but **`targetMatchType`** on the
   `target` entity. Using the wrong one is a hard downstream error (the filter field must be
   in that entity's whitelist), so it fails loudly rather than silently - but it does fail.
+- The targeting text column is **`targetText`** on `target` and `negativeTargetText` on
+  `negativeTarget`. There is no `targetName`, and `keywordText` does not exist on the
+  `target` entity - it belongs to `keyword`.
 - `negativeTargetState` (this entity's status) is unrelated to `negativeTargetStatus`,
-  which is an AI-managed-group on/off setting.
+  which is an AI-managed-group on/off setting. The first is writable through this tool;
+  the second is read-only and lives in `edit-ai-group`.
 - Unknown filter operators **throw**; they are not ignored. Null filter values are rejected.
 - Only the **first** `orderBy` entry is honoured; the rest are dropped silently.
 

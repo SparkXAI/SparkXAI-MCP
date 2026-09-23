@@ -27,6 +27,12 @@ Only `profileId`, `smartCreationName`, `campaignIds` are required. Everything el
 takes a platform default if omitted - only send the optional fields the user
 actually wants to set.
 
+**One exception: always send `status`.** It is optional at the interface, but omitting it
+does not give you a reliable default - it falls back to a template value if a template is
+involved, and to nothing otherwise. SD did not get the server-side "default to on" that
+SP/SB's `aiStatus` has. Send `1` to start the group, `0` when the user asked for it not
+to.
+
 ## Coupled fields (send together or not at all)
 
 - **Budget**: `budget` does nothing unless `budgetChange=true`. If the user gives a
@@ -35,7 +41,10 @@ actually wants to set.
   and `num`. A non-zero `budgetDynamicStatus` is rejected; sending its companion values
   cannot enable the feature.
 
-## Example - create an SD group with AI off, then let the user turn it on later
+## Example - create an SD group the user asked not to start yet
+
+(`status: 0`. For the normal case send `status: 1`, and say in the preview that the group
+starts optimizing immediately.)
 
 ```json
 {

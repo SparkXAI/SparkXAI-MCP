@@ -16,6 +16,23 @@
   该问题应读 `entity: campaign` 并判断 `audienceId != ""`。
   `sparkx-query-ads-performance` `1.4.0` -> `1.4.1`,
   `sparkx-query-entity-metadata` `1.4.0` -> `1.4.1`。
+- 托管组创建现在默认开启 AI，跟进服务端将 `aiStatus` 改为非必填的变更。Skill 要求
+  确认预览中写明 AI 将立即开始优化，并区分 SP/SB（省略该字段）与 SD（`status` 无服务端
+  默认值，必须显式传递）。`sparkx-create-ai-group` `1.1.3` -> `1.1.4`。
+- 排期写入跟随两项服务端修复重做。删除从 `isActive: false` 迁移到 `operation: "delete"`；
+  `isActive` 已废弃但**仍会删除**，而读取侧同名字段表示“当前不在生效窗口内”，
+  因此读取结果不得原样回写。`weekDays` 现在读写两侧都是 `1`-`7`（写入侧原为 `0`-`6`）；
+  省略的排期不受影响——保存是按 id 的 upsert，不是整批覆盖。
+  `sparkx-edit-ai-group` `1.1.4` -> `1.1.5`。
+- SB 否定关键词不再支持 `state: "paused"`，服务端在预览前即拒绝整批。归档是唯一替代
+  且不可逆，必须由用户明确选择，不得自动替换。`sparkx-edit-ads` `1.1.1` -> `1.1.2`。
+- 补齐了“返回空结果而不报错”这类失败模式的说明：ID 过滤的值属于另一个 ID 空间时，
+  筛选合法但匹配不到任何行，静默返回 0 行。空结果排查清单已涵盖该场景。
+  `sparkx-query-entity-metadata` `1.4.1` -> `1.4.2`，`sparkx-query-ads-performance` `1.4.1` -> `1.4.2`，
+  `sparkx-query-operation-log` `1.3.1` -> `1.3.2`，四个分析类 Skill `1.0.5` -> `1.0.6`。
+- 根据服务端新增的校验更正了受众绑定说明：`audienceId` 非空时 `audienceSegmentType` 必填，
+  且服务端会在创建任何活动前核对 ID 是否属于所报的受众池——配不上会拒绝整个请求，
+  而不是存下一个永不生效的绑定。`sparkx-create-campaign` `1.0.1` -> `1.0.2`。
 
 ## [1.3.0] - 2026-09-17
 

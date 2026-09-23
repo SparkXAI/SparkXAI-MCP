@@ -177,6 +177,23 @@ Sub-items count toward the 200 cap the same way as positive keywords.
 
 ## `negativeKeyword` + `updateStatus` - confirms only for `archived`
 
+SB (sponsoredBrands) negative keywords no longer support state=paused. The server rejects the entire batch before preview or execution, identifying the invalid item; no items are modified. Other campaign types retain their existing state rules. Never convert pause to archive automatically: archiving is irreversible and requires an explicit user request. That requirement is not waivable - a confirmation waiver only governs whether you stop to ask, never whether the user chose archiving at all. Historical paused records remain readable.
+
+So when the user asks to stop / pause / 停用 SB negatives, **tell them archiving is the only
+available action and that it cannot be undone, then let them choose** - they should hear it
+from you, not from the rejection. If they go ahead:
+
+1. **Find the rows** with `get_entity_metadata(entity='negativeKeyword')`, filtering on
+   `campaignType` = `sponsoredBrands` plus whatever narrows the set (`negativeKeywordState`,
+   `campaignId`, `keywordText`). Do not assemble ids by hand.
+2. **Carry each row's `businessType` across unchanged** - guessing it costs the whole batch,
+   per the disjoint-id-tables note below.
+3. **Send `state: "archived"`** and expect the two-phase flow. With no applicable waiver,
+   **state the batch size before asking for approval** - one approval covers every item and
+   none of it is reversible. With a valid waiver, state the scope and carry the token through
+   Phase 2 without pausing; the waiver removes the approval turn, never the protocol and never
+   the requirement that the user chose archiving in the first place.
+
 Payload: **`request.updates[]`** (not `data`):
 
 | Field | Type | Required | Notes |
@@ -187,7 +204,18 @@ Payload: **`request.updates[]`** (not `data`):
 | `businessType` | string | yes | **per item** here. `campaign` or `adgroup` (lowercase g) |
 | `state` | string | yes | `enabled` / `paused` / `archived` |
 
-`businessType` selects between two tables with disjoint id spaces - echo metadata.
+`businessType` selects between two tables with **disjoint id spaces**, so it decides where
+the id is looked up. Send the wrong one and the id is not in the table being searched, so the
+pre-write guard cannot resolve its owning campaign and **rejects the whole batch before
+anything is written** (`Batch rejected: unable to resolve owning campaign ...` - see
+[`archived-guard.md`](archived-guard.md)). It is a loud, all-or-nothing failure, not a call
+that succeeds without effect. Echo
+back the `businessType` that `get_entity_metadata(entity='negativeKeyword')` returned on that
+row - do not infer it from whether `adGroupId` looks populated.
+
+⚠️ **The ad-group value is `adgroup`, all lowercase** - not `adGroup`. It is the one
+lowercase enum in a codebase that is camelCase everywhere else, so it is easy to "correct"
+into a value that does not exist.
 
 An older spec version claimed SB + `businessType=campaign` is rejected on this route. **It
 is not** - that restriction exists only on `copy`. Do not pre-filter those items away; if

@@ -9,7 +9,7 @@ description: >-
   existing ones (use sparkx-edit-ads), for AI managed groups (use sparkx-create-ai-group), or
   for reading data (use sparkx-query-ads-performance / sparkx-query-entity-metadata).
 metadata:
-  version: 1.0.1
+  version: 1.0.2
 ---
 
 # Create Sponsored Products campaigns
@@ -146,31 +146,37 @@ On a Seller profile a pair that is not found is **rejected**. Read SKUs from
 error means *retry*, not *change the ASIN*. Resending a different ASIN because a lookup
 failed is how you end up advertising the wrong product.
 
-## Audience targeting is optional, and unverified
+## Audience targeting is optional, and verified
 
 **Three fields, one atomic group.** Configuring an audience means sending `audienceId`,
 `audienceSegmentType` **and** `audienceBidPercentage` together, or none of them.
 `audienceBidPercentage` is an integer 0-900 **sent as a string**; `audienceSegmentType` is
 `SPONSORED_ADS_AMC` or `BEHAVIOR_DYNAMIC`.
 
-**Only two of the three are enforced.** The tool rejects an `audienceId` without an
-`audienceBidPercentage`, but **`audienceSegmentType` is optional in the validator** - leave it
-out and the request passes, then the downstream applies its own default,
-`SPONSORED_ADS_AMC`. Bind an Amazon-built audience without saying so and you get a success
-response for targeting that never runs. (The edit path, `batch_update_ads` +
-`updateAudienceBid`, does require it. Creation is the looser of the two - do not take that as
-permission to omit it.)
+**All three are enforced.** An `audienceId` without an `audienceBidPercentage` is rejected,
+and **`audienceSegmentType` is required whenever `audienceId` is set** - there is no default
+to fall back on.
 
-⚠️ **Nothing validates `audienceId`** - not this tool, not the downstream. An id that is
-invented, or taken from the other segment pool, is **accepted, stored locally, and never
-applies on Amazon**. You will see a successful response for a campaign whose audience
-targeting silently does nothing.
+**The server checks that the id really belongs to the pool you named.** Before any campaign is
+created it looks the `audienceId` up in the audience list for that `profileId`,
+`campaignType` and `audienceSegmentType`. An id from the other pool, or one that no longer
+appears in the list, is **rejected**; so is a lookup that fails or comes back empty. The check
+covers the whole request, so **one bad binding stops every campaign in the batch**.
 
-So copy **`audienceId` and `audienceSegmentType` from one and the same**
-`get_entity_metadata(entity='amcAudience')` row - that entity echoes the type on every row
-exactly so the pair travels together. **Never substitute that query's default type for the
-campaign's real one**: `SPONSORED_ADS_AMC` is the default *of the lookup*, not a fact about
-the audience you picked.
+A wrong pool therefore fails loudly now rather than silently - but that does not make guessing
+cheap, because the rejection costs the entire batch. Copy **`audienceId` and
+`audienceSegmentType` from one and the same** `get_entity_metadata(entity='amcAudience')`
+row - that entity echoes the type on every row exactly so the pair travels together.
+**Never substitute that query's default type for the campaign's real one**:
+`SPONSORED_ADS_AMC` is the default *of the lookup*, not a fact about the audience you picked.
+
+**There is no "audience off" flag here.** To create without an audience, omit all three
+fields. (`audienceBidAdjustmentEnabled` exists only on the edit path, for clearing a binding
+that already exists.)
+
+⚠️ **A successful write still does not prove Amazon applied the binding.** Validation
+confirms the id belongs to the pool, not that the targeting went live. Don't report it as
+confirmed on Amazon's side from the write response alone.
 
 ### ⚠️ `portfolioId` wants the **Amazon** portfolio id, and it is verified
 

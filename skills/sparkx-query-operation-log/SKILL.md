@@ -7,7 +7,7 @@ description: >-
   budget adjustment, AI auto-adjustment, pause/enable records, operation audit,
   modification timeline, ad adjustment log
 metadata:
-  version: 1.3.1
+  version: 1.3.2
 ---
 
 # Query Operation Log Skill

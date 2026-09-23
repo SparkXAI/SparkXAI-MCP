@@ -128,14 +128,13 @@ and `offAmazonBudgetControlStrategy` illegal - omit them all.
 
 | Field | Type | Notes |
 |---|---|---|
-| `audienceId` | string | **not verified by anything** - see SKILL.md |
+| `audienceId` | string | **verified** - the server checks it belongs to this `profileId` + `campaignType` + `audienceSegmentType` before creating anything |
 | `audienceBidPercentage` | string | an integer 0-900 **sent as a string** |
-| `audienceSegmentType` | enum | `SPONSORED_ADS_AMC` / `BEHAVIOR_DYNAMIC`. Must come from the **same** `amcAudience` row as the `audienceId` |
+| `audienceSegmentType` | enum | `SPONSORED_ADS_AMC` / `BEHAVIOR_DYNAMIC`. **Required whenever `audienceId` is set**, and must come from the **same** `amcAudience` row as the `audienceId` |
 
-**All three together, or none.** The validator only enforces `audienceId` <->
-`audienceBidPercentage`; `audienceSegmentType` is optional there and defaults to
-`SPONSORED_ADS_AMC` downstream, which silently mis-binds an Amazon-built audience. Treat the
-trio as atomic anyway - see SKILL.md.
+**All three together, or none** - and all three are enforced. A mismatched pool, an id missing
+from the list, or a failed lookup **rejects the whole request**, not just that campaign. Omit
+all three to create without an audience; there is no separate off switch here. See SKILL.md.
 
 ## Ad group
 
