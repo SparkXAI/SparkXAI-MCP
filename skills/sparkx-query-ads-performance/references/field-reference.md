@@ -143,15 +143,15 @@ Never report AI performance from this entity or divide by those values; use `fac
 | Field | Description | Enum |
 |---|---|---|
 | `placement.campaignId_` | Campaign ID | — |
-| `placement.placement_` | Placement | `SP-Top of Search on-Amazon` / `SP-Detail Page on-Amazon` / `SP-Other on-Amazon` / `SB-Top of Search on-Amazon` / `SB-Detail Page on-Amazon` / `SB-Other on-Amazon` |
-| `placement.multiplier_` | Bid adjustment % | Negative values occur, e.g. `-99`. The console only accepts 0–900, so a negative is **not** a percentage the user set — see the note below |
+| `placement.placement_` | Placement | `SP-Top of Search on-Amazon` / `SP-Detail Page on-Amazon` / `SP-Other on-Amazon` / `SB-Top of Search on-Amazon` / `SB-Homepage on-Amazon` / `SB-Detail Page on-Amazon` / `SB-Other on-Amazon` |
+| `placement.multiplier_` | Bid adjustment % | Percentage scale (`50` = +50%), 0–900. `null` means the stored value was out of range — see the note below |
 
 ⚠️ **"placement" names three different value spaces. They are not interchangeable, and the
 wrong one returns zero rows with no error.**
 
 | Where | Values |
 |---|---|
-| `factEntity: "placement"` (this entity) | `SP-` / `SB-` prefix + `Top of Search on-Amazon` / `Detail Page on-Amazon` / `Other on-Amazon` |
+| `factEntity: "placement"` (this entity) | `SP-` / `SB-` prefix + `Top of Search on-Amazon` / `Detail Page on-Amazon` / `Other on-Amazon`, plus `SB-Homepage on-Amazon` |
 | `factEntity: "keywordPlacement"` | raw AMS display strings, no prefix — see the KeywordPlacement section above |
 | `get_entity_metadata(entity='placement')` | SP: `topOfSearch` / `productPage` / `restOfSearch` / `siteAmazonBusiness`; SB: `topOfSearch` / `home` / `detailPage` / `other` |
 
@@ -159,27 +159,16 @@ So `{"placement.placement_": "topOfSearch"}` is **accepted and returns 0 rows** 
 belongs to the metadata tool's space. Prefer reading `placement_` out of the returned rows over
 filtering on it.
 
-**A negative `multiplier_` is not a negative bid adjustment.** `-99` shows up on real rows, and
-`get_entity_metadata(entity='placement')` returns the same `-99` for the same campaign, so it is
-the stored value rather than a reporting artefact. But the console accepts only 0–900, so it is
-not a percentage anyone configured, and what it actually encodes is **not documented anywhere we
-can check**.
+**A `null` `multiplier_` means the adjustment is unavailable.** The server returns any stored
+value outside 0–900 (historically `-99`) as `null`, here and in
+`get_entity_metadata(entity='placement')` alike. Report that placement's adjustment as
+unavailable - never as 0%, and leave it out of comparisons, averages and totals.
 
-So: check `get_entity_metadata(entity='placement')` for that campaign — where the two tools
-disagree, its value is the one to trust. **If it comes back negative as well, the configured
-value cannot be obtained.** The metadata tool is not a fallback for this: it reads the same
-stored value, which is why it returns the same `-99`. Tell the user the bid adjustment for that
-placement is unavailable and stop there. Never render it as "−99%" or "a 99% bid reduction",
-never treat it as `0`, and never carry it into a comparison, an average or a total.
-
-⚠️ **`multiplier_` is wrong for Sponsored Brands.** SB has **four** placements in the console
-(搜索结果顶部 / 搜索结果的其余位置 / 首页 / 商品页面); this entity returns only three, and
-`SB-Top of Search on-Amazon` carries the **首页 / Home** adjustment rather than top-of-search,
-while SB's real top-of-search adjustment is absent altogether. Measured on one campaign: the
-metadata tool reported 50% for 搜索结果顶部, this entity reported 0% for what it calls the same
-placement. The **metrics** on these rows are fine; the `multiplier_` is not. For any SB
-placement adjustment, read `get_entity_metadata(entity='placement')` instead. SP's three are
-correct here.
+**Sponsored Brands has four placement rows**, each carrying its own adjustment:
+`SB-Top of Search on-Amazon` (搜索结果顶部), `SB-Homepage on-Amazon` (首页),
+`SB-Detail Page on-Amazon` (商品页面) and `SB-Other on-Amazon` (搜索结果的其余位置). Earlier
+versions returned only three SB rows and put the Home value on the top-of-search row; an SB
+placement adjustment pulled before that fix is not comparable with today's.
 
 **What this entity does not cover.** Sponsored Display has no rows at all — SD is outside
 placement reporting, and the console's placement tab offers only 全部 / SP / SB. 企业购 /

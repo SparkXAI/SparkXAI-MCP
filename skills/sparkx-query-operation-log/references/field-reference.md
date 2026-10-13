@@ -66,7 +66,7 @@ Campaign types:
 
 Operator filter. Always pass an object with explicit `operator` and `values`:
 ```json
-{"operator": "IN", "values": ["ai", "manual"]}
+{"operator": "IN", "values": ["ai", "automation"]}
 ```
 Use `"operator": "NOT_IN"` to exclude values instead.
 
@@ -84,6 +84,13 @@ Valid values:
 | Labels | labels |
 | System | system |
 | Specific user | user email address (pass as one of the `values`) |
+
+**`manual` is narrower than "a person did it".** The server turns `manual` into a match on
+rows whose `changedBy` is literally `Manual`. Changes made by a named platform user are recorded
+with that user's **email** in `changedBy` and are **not** returned by `manual` (production,
+2026-10: every human budget change in one store was email-attributed, and `manual` returned
+none of them). To get all human changes, omit `changeBy` and classify `changedBy` client-side -
+an email, `Manual`, or `Amazon Console` - or pass the specific user's email.
 
 ### actionType
 
@@ -353,7 +360,7 @@ Placement type filter. Narrows placement operations to specific placement types.
 | countryCode | string | Country code |
 | **currencyCode** | string | **Currency of this row's monetary change** (e.g. `"USD"`/`"JPY"`), mapped from `countryCode`. Always local currency — there is no cross-profile USD conversion for logs |
 | createdDate | string | Operation timestamp, `yyyy-MM-dd HH:mm:ss`. **⚠️ Timezone is not fixed** — `aiGroup` rows are UTC always; `campaign`/`adGroup`/`target`/`placement` rows are **store-local when you pass one `profileId`** and **UTC when you pass several**. Verified 2026-08 on a US (`America/Los_Angeles`) profile: the same pause record returned `2026-08-24 00:01:06` for one profileId and `2026-08-24 07:01:06` for two. Always label the zone, never merge single- and multi-profile results, and remember a mixed-entity response can contain both clocks in one time-sorted list (so it is not reliably chronological). See SKILL.md → "createdDate Timezone" |
-| changedBy | string | Who made the change: `ai`/`manual`/`automation`/etc, or a user identifier |
+| changedBy | string | Who made the change, as a **display value** - `AI`, `Manual`, `Automation`, `AI-Custom Rule`, `Budget Management`, `Lock Ranking`, `Amazon Console`, `API`, `Labels`, `System` - or a platform user's **email**. These are not the lowercase `changeBy` filter values; see the `changeBy` note above |
 | aiGroupScheduleId | long | Schedule ID (present on aiGroup-related logs) |
 
 ---

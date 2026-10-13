@@ -4,12 +4,12 @@ description: >-
   Generate a monthly ad performance recap for ads managers / account managers at month-end.
   Includes full-month KPIs (MoM + YoY), goal attainment, structural breakdown (campaign type /
   site / portfolio share), product analysis (Top ASIN changes, new products, long-tail), keyword
-  analysis (Top keywords, new keyword opportunities, negative-keyword candidates), an issues list
-  with attribution, and next-month structural recommendations. Use when the user says "出个月报",
+  performance (Top keywords; search-term negatives / harvesting go to sparkx-search-term-diagnosis),
+  an issues list with attribution, and next-month structural recommendations. Use when the user says "出个月报",
   "月度复盘", "这个月表现如何", "monthly report". Not for weekly recaps (use sparkx-weekly-ads-report) or
   quarterly/QBR-level strategic review (use quarterly-ads-report, not yet built).
 metadata:
-  version: 1.0.6
+  version: 1.1.0
 ---
 
 # Monthly Ads Report
@@ -72,6 +72,55 @@ Case 4's threshold exists because this is a customer-facing report: a silent mul
 
 **Determining whether to include an AI-managed section**: call `get_entity_metadata` (`entity: aiGroup`, filtered to the relevant `profileIds`; **add `filters: {"aiStatus": 1}`, or fully paginate — default page size is 100, so a running AI group sitting past page 1 would otherwise be missed and the section wrongly skipped**) — if any returned row has `aiStatus: 1`, include an AI-managed performance callout in the KPI section; otherwise omit it. **This check only decides whether to show the callout — it doesn't supply the callout's actual data.** For the content itself, add `AISales`/`AIACOS`/`AIROAS` to Steps 2a/2b/2c's existing `metrics` list (these are campaign-level-only metrics per the platform notes, which is already `factEntity: campaign` for these calls, so no separate call is needed) whenever the callout applies, and report those alongside the regular KPI table — don't include the callout with only a "yes, AI management is on" statement and no actual performance figures.
 
+## Shared Rules: Target ACOS, Thresholds, Managed Groups, Promotions
+
+These rules match `sparkx-search-term-diagnosis` and `sparkx-promo-reset`, so the same store
+gets the same numbers whichever skill answers. Those two skills are separate installs: mention
+them as "if installed", and when the user doesn't have them, say what to look at instead -
+never promise to run a skill that may not be there.
+
+- **One target ACOS.** Use the store-wide target the user gives (ask "整店希望 ACOS 控制在多少"
+  when a threshold depends on it); without one, use the store's own ACOS for the period and say
+  so where the threshold is first used. Never use managed groups' `targetAcos` as thresholds -
+  one store can have dozens, from single digits to over 200%, and rank-push or launch groups set
+  it high on purpose.
+- **"High spend, zero orders" means spend >= `T`**, where `T` = average order value x target
+  ACOS = `(Sales / Conversions) x target ACOS` over the report's scope and period (target ACOS as
+  a fraction: `get_ads_perf`'s `ACOS` value `35` is `0.35`). `T` is one order's allowed spend -
+  the entity already spent what an order may cost and got none. It works in every currency and
+  price range, so there is no fixed money floor. No orders or no sales in the period -> `T`
+  can't be derived; say so instead of flagging.
+- **Campaigns in a running managed group get group-level advice.** A campaign's group is
+  `campaign.aiGroupId_` in `get_ads_perf` (or `aiGroupId` on `get_entity_metadata`'s `campaign`
+  entity; an unmanaged campaign has `0`); the group's `aiStatus` comes from
+  `get_entity_metadata` (`entity: aiGroup`). The AI sets those campaigns' bids and budgets, so a
+  manual bid or budget change gets overwritten: recommend the group's levers instead (target
+  ACOS, group budget, an action-space switch) or say the AI is handling it. **No bid advice with
+  numbers anywhere**; for an unmanaged campaign give at most a direction ("consider lowering
+  bids on ..."). Keyword-level actions (pausing a zero-order exact keyword, negatives) need
+  keyword and search-term data - point to `sparkx-search-term-diagnosis` (if installed).
+- **People vs machines in the operation log.** Query without `changeBy` and classify
+  `changedBy` client-side: an email, `Manual` or `Amazon Console` is a person; everything else
+  (`AI`, `Automation`, `AI-Custom Rule`, `Budget Management`, `Lock Ranking`, `API`, `Labels`,
+  `System`) is a machine. `changeBy=manual` misses changes recorded under a user's email. Inside
+  managed groups the AI moves `currentBudget` every hour and those rows are also
+  `Budget Increased` - leave them out of counts and "what changed" lists (a person's budget
+  change is on `dailyBudget`). Group setting changes (target ACOS, personality, switches) are
+  `aiGroup` rows, not campaign rows; their timestamps are UTC, while campaign rows are
+  store-local when one profile is queried - label the clock.
+- **Promotions distort period comparisons - but only the user confirms one.** Signals that
+  one may be involved: the period or its baseline overlaps a major event (Prime Day, Prime Big
+  Deal Days, Black Friday / Cyber Monday), or the operation log shows a burst of human budget /
+  bid increases in or shortly before it. A signal is not a verdict: still report every anomaly
+  and decline, label the affected ones "possibly promotion-related", and ask the user. Only
+  after the user confirms, say so at the top and treat the swing as promo-driven. After a
+  confirmed promotion whose human increases haven't been reversed, mention that
+  `sparkx-promo-reset` (if installed) restores them.
+
+In the monthly report: when `monthlyTarget` is an ACOS target, that is the target ACOS above.
+When the user confirms a promotion in this month or last month, MoM is misleading - put the
+YoY column first when it was pulled.
+
 ## Workflow
 
 ### Step 1 · Define Time Windows
@@ -115,7 +164,7 @@ No dimension in `select` — global aggregate across all campaigns. **If the AI-
   "factEntity": "adGroup",
   "dateStart": "{this month start}",
   "dateEnd": "{this month end}",
-  "select": ["adGroup.adGroupId_", "adGroup.adGroupName_", "campaign.campaignId_", "campaign.campaignName_", "campaign.campaignType_", "portfolio.portfolioId_", "portfolio.portfolioName_", "profile.countryCode_"],
+  "select": ["adGroup.adGroupId_", "adGroup.adGroupName_", "campaign.campaignId_", "campaign.campaignName_", "campaign.campaignType_", "campaign.aiGroupId_", "portfolio.portfolioId_", "portfolio.portfolioName_", "profile.countryCode_"],
   "metrics": ["Impressions", "Clicks", "Spend", "Sales", "Conversions"],
   "pageSize": 500,
   "userContext": "Monthly report - this month's adGroup-level data for structure analysis"
@@ -143,13 +192,11 @@ No dimension in `select` — global aggregate across all campaigns. **If the AI-
 
 **i. Keyword-level performance**: `get_ads_perf` with `factEntity: target`, `queryType: keyword`, this month's window, `select` including `target.targetId_`/`target.targetText_`/`target.targetMatchType_`, metrics `Impressions/Clicks/Spend/Sales/Conversions/ACOS`.
 
-**j. Search-term data (feeds new-keyword and negative-keyword candidates)**: `get_ads_perf` with `factEntity: searchTerm`, this month's window, `select` including `query_`/`matchType_`/`targetId_`/`adGroupId_`/`campaignId_`, metrics `Impressions/Clicks/Spend/Sales/Conversions/ACOS`.
-
-**k. This month's operation log** (feeds Step 8's attribution): `get_operation_log`, this month's window, no `changeBy` filter (capture manual + AI + automation), `pageSize: 200`. **Check `truncated`** — if `true`, follow `sparkx-query-operation-log`'s "Getting a Complete Count" procedure (split into non-overlapping sub-windows) rather than treating one page as the full month.
+**k. Operation log** (feeds Step 8's attribution and the promotion signal): `get_operation_log` from 7 days before last month's start through this month's end (within the 90-day cap), no `changeBy` filter, `pageSize: 200`. Attribution uses this month's rows; the earlier rows only feed the promotion signal for the MoM baseline. The YoY baseline has no log here - for it, rely on the event calendar and ask; classify people vs machines and drop the hourly `currentBudget` rows per "Shared Rules". **Check `truncated`** — if `true`, follow `sparkx-query-operation-log`'s "Getting a Complete Count" procedure (split into non-overlapping sub-windows) rather than treating one page as the full month.
 
 **Step 2k as a whole is best-effort, not a hard dependency for the rest of the report.** If splitting into sub-windows still times out or keeps erroring, don't let it block the rest of the report from completing — produce Steps 3-7/9 normally and mark Step 8's attribution as "operation log data incomplete this month" (or similar, in the report's own language) rather than failing the entire report over one section.
 
-**Fully paginate (d)/(e)/(f)/(g)/(i)/(j) before analyzing** — loop `page` while `hasNextPage` is `true`. **If full pagination across many profiles/entities would be impractical at scale**, you may fall back to a spend-ranked sample (top N by `Spend`/`TotalSalesAmount` via `orderBy` + a capped `pageSize`) instead of the full population — but this fallback **must be disclosed explicitly** in the relevant section (e.g. "structure breakdown based on top-spend sample, not full population"), stating concretely what was actually covered (how many profiles/entities, how many pages, whether `hasNextPage` was still `true` when you stopped), never silently presented as complete. **A degraded or failed section (structure, product, or keyword analysis) must not fail the whole report** — produce whatever sections do have complete data normally, and present only the affected section as partial/unavailable rather than aborting report generation entirely.
+**Fully paginate (d)/(e)/(f)/(g)/(i) before analyzing** — loop `page` while `hasNextPage` is `true`. **If full pagination across many profiles/entities would be impractical at scale**, you may fall back to a spend-ranked sample (top N by `Spend`/`TotalSalesAmount` via `orderBy` + a capped `pageSize`) instead of the full population — but this fallback **must be disclosed explicitly** in the relevant section (e.g. "structure breakdown based on top-spend sample, not full population"), stating concretely what was actually covered (how many profiles/entities, how many pages, whether `hasNextPage` was still `true` when you stopped), never silently presented as complete. **A degraded or failed section (structure, product, or keyword analysis) must not fail the whole report** — produce whatever sections do have complete data normally, and present only the affected section as partial/unavailable rather than aborting report generation entirely.
 
 ### Step 3 · Full-Month KPIs (MoM + YoY)
 
@@ -194,15 +241,15 @@ Report both months' share percentages and the point-change (e.g. "SP share: 62% 
 
 **Top keyword performance**: from Step 2i, rank by Spend or Sales, report Impressions/Clicks/Spend/Sales/ACOS per keyword. If a MoM comparison is wanted, pull the same-shape data for last month and join by `target.targetId_` the same way as Step 6.
 
-**New keyword opportunities**: from Step 2j's search-term data, find search terms with strong performance (e.g. meaningful Conversions and non-zero-Sales ACOS at or below account average — see the zero-Sales handling below) that **do not already exist as an explicit keyword target in the same adGroup**. Cross-reference against `get_entity_metadata` (`entity: target`, `filters: {"targetMatchType": {"in": ["exact", "phrase", "broad"]}, "adGroupId": {"in": [...]}}`) — **narrow by the specific `adGroupId`(s) the search term actually appeared under** (Step 2j's own `adGroupId_` field on that row), not a bare account-wide `targetMatchType` filter. The same search-term text can legitimately be a promoted keyword in one adGroup and not yet promoted in another; without narrowing by adGroup, a term already targeted elsewhere in the account would be wrongly excluded here, or a genuinely-new-to-this-adGroup term could be wrongly treated as already covered. **Narrowing by adGroup alone isn't sufficient** — that call returns the adGroup's existing keyword targets, but you still need to check whether *this specific search term* is among them: normalize both sides (case-fold, trim whitespace) and compare each search term's `query_` against the returned targets' `target.targetText_` for an exact match. Only a search term with no exact-text match among that adGroup's existing keyword targets counts as genuinely new; only flag those.
+**Search-term negatives and harvesting are out of scope here.** Doing them properly needs brand terms, a whitelist, own ASINs, the exact keywords already running, match-type sources and order thresholds by product stage - that is `sparkx-search-term-diagnosis` (if installed). In the report, add one line pointing to it ("要看该否哪些词、哪些词值得单独投，可以跑搜索词诊断"), and offer to run it for the same month.
 
-**Zero-Sales ACOS handling** (applies to both Step 2i and Step 2j wherever `ACOS` is used to rank or filter): a row with `Sales = 0` has an undefined `ACOS` (division by zero) — never treat it as "infinite" or sort it to the extreme end of an ACOS-based ranking. Exclude zero-Sales rows from any ACOS-based comparison (like the "new keyword opportunities" filter above); they belong in the negative-keyword-candidate check below instead, which is keyed on Spend + near-zero Conversions, not ACOS.
-
-**Negative-keyword candidates**: from Step 2j, search terms with meaningful Spend and zero (or near-zero) Conversions over the full month — same underlying logic as a high-spend/zero-order anomaly, applied at the search-term level. **Currency-aware, same caveat as the weekly skill**: don't hardcode a bare dollar figure as the "meaningful spend" floor if the store is in a non-USD currency — use a floor that's actually meaningful in that store's local currency (or the account's typical spend distribution), and for a multi-profile USD-aggregated report, a USD floor is reasonable.
+**Zero-Sales ACOS handling** (Step 2i): a keyword with `Sales = 0` has an undefined `ACOS` - never treat it as "infinite" or sort it to the extreme end of an ACOS ranking; show its Spend and "no sales" instead.
 
 ### Step 8 · Issues List + Attribution
 
 Compile the notable findings from Steps 3/5/6/7 (e.g. "ACOS worsened driven by a mix shift toward SD," "ASIN X's sales collapsed," "Portfolio Y's share shrank") and cross-reference Step 2k's operation log for changes in the same window that might explain them.
+
+Correlate with **human** changes first (people's budget / bid / status / managed-group setting changes); the AI's own adjustments are its normal operation, not a finding on their own. If the month or its baseline covers a promotion **the user confirmed**, attribute the swing to it before anything else; an unconfirmed signal only gets the "possibly promotion-related" label (see "Shared Rules").
 
 **Correlation, not causation** — same discipline as the weekly skill: say "ACOS rose in the same window a bid change was recorded on this campaign" rather than "the bid change caused the ACOS rise," unless the operation log pinpoints the exact change and the timing lines up precisely enough to say so with confidence.
 
@@ -211,8 +258,8 @@ Compile the notable findings from Steps 3/5/6/7 (e.g. "ACOS worsened driven by a
 Derive 3-6 structural-adjustment recommendations from Steps 5-8, e.g.:
 - Structural share shift toward an underperforming type → recommend rebalancing budget back toward the higher-ROAS type
 - A long-tail concentration finding → recommend consolidating spend toward top performers or testing budget on emerging mid-tier ASINs
-- New keyword opportunities found → recommend promoting them to explicit keyword targets
-- Negative-keyword candidates found → recommend adding them as negatives
+- Search-term work (negatives, harvesting) → recommend running `sparkx-search-term-diagnosis` (if installed) for the month
+- Campaigns in a running managed group → recommend the group's levers, not bids / budgets (see "Shared Rules")
 
 **Every recommendation must have**: action + target (specific campaign/ASIN/keyword) + evidence (data) — same requirement as the weekly skill.
 
@@ -310,11 +357,7 @@ Remember: **the section headers and labels below are structural placeholders (sh
 ### Top Keywords
 {table}
 
-### New Keyword Opportunities
-{list — search terms not yet promoted to explicit targets}
-
-### Negative-Keyword Candidates
-{list — high spend, ~zero conversions}
+{Only if sparkx-search-term-diagnosis is installed: one line pointing to it for search-term negatives / harvesting, and offer to run it for this month. Otherwise omit this line}
 
 ## 6. Issues List
 
@@ -351,14 +394,13 @@ Output JSON schema:
   },
   "keywordAnalysis": {
     "topKeywords": [...],
-    "newOpportunities": [...],
-    "negativeCandidates": [...]
+    "searchTermPointer": null
   },
   "issues": [{"issue": "...", "evidence": "...", "correlatedChange": "..."}],
   "nextMonthPlan": [{"priority": 1, "action": "...", "target": "...", "evidence": "..."}]
 }
 ```
-`kpiCards[].momValue`/`momPct` and `yoyValue`/`yoyPct` should be `null` for whichever baseline `compareBaseline` didn't request (e.g. all four stay populated for `mom+yoy`, but both `yoyValue` and `yoyPct` are `null` throughout when `compareBaseline=mom`) — never fabricate a value for a baseline that wasn't computed. `momValue`/`yoyValue` carry the baseline period's own raw figure (not just the % change), matching the markdown template's "raw value / % change" cell format.
+`keywordAnalysis.searchTermPointer` is `"sparkx-search-term-diagnosis"` only when that skill is installed, otherwise `null`. `kpiCards[].momValue`/`momPct` and `yoyValue`/`yoyPct` should be `null` for whichever baseline `compareBaseline` didn't request (e.g. all four stay populated for `mom+yoy`, but both `yoyValue` and `yoyPct` are `null` throughout when `compareBaseline=mom`) — never fabricate a value for a baseline that wasn't computed. `momValue`/`yoyValue` carry the baseline period's own raw figure (not just the % change), matching the markdown template's "raw value / % change" cell format.
 
 ## Data Boundaries
 
@@ -367,7 +409,7 @@ Output JSON schema:
 - **No structural analysis below the AdGroup/portfolio/campaign-type level** — SKU-level margin/profitability analysis is out of scope
 - **Cannot reliably compute "real-time remaining budget"** — same caveat as sparkx-weekly-ads-report; `dailyBudget`/`currentBudget` are configuration values, not a live spend ledger
 - **`get_entity_metadata` has no historical-snapshot capability** — "this month's config vs last month's config" can only be inferred from `get_operation_log`'s change records, not from querying current config as if it were historical
-- **New-keyword and negative-keyword candidates are heuristic suggestions**, not a guarantee of correctness — always show the underlying data (spend, conversions) so the customer can judge, don't present them as an automated decision
+- **No search-term negatives or harvesting** — those come from `sparkx-search-term-diagnosis` (if installed), which applies brand / whitelist / exact-keyword checks this report doesn't
 
 ## Example Call
 
@@ -399,3 +441,5 @@ Follows the shared error envelope used by all three underlying tools (`isError`/
 - Quarterly/QBR strategic review → `quarterly-ads-report` (not yet built)
 - Deep root-cause attribution on a single campaign → [ACOS root-cause investigation example](../sparkx-query-ads-performance/references/example-acos-root-cause-investigation.md)
 - SKU-level margin/profitability analysis (needs the customer's own cost data, not just ad data)
+- Search-term negatives and harvesting → `sparkx-search-term-diagnosis` (if installed)
+- Restoring bids / budgets / managed-group settings after a promotion → `sparkx-promo-reset` (if installed)

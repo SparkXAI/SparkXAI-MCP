@@ -2,11 +2,11 @@
 
 把 SparkX AI 的广告能力接进你自己的 AI Agent（WorkBuddy、Claude、ChatGPT 等），数据从此融入你的工作流——大白话查数据、做分析、算真账，还能和你自己的成本、利润、目标放在一起算。完成授权后，无需反复登录平台、导出表格或在系统之间来回切换。
 
-当前版本 v1.3.0 支持数据查询、AI 托管组管理、SP Campaign 创建和 Amazon Sponsored Ads 广告实体编辑。可创建包含广告组、推广商品、投放与广告位设置的 SP Campaign，也可修改 Campaign 预算、状态和 SP 竞价策略，管理关键词与 Target 的状态和竞价，以及推广商品和否定投放。暂不支持创建 SB/SD Campaign 或使用独立删除操作，但支持通过状态更新归档 Campaign。
+当前版本 v1.3.1 支持数据查询、AI 托管组管理、SP Campaign 创建和 Amazon Sponsored Ads 广告实体编辑。可创建包含广告组、推广商品、投放与广告位设置的 SP Campaign，也可修改 Campaign 预算、状态和 SP 竞价策略，管理关键词与 Target 的状态和竞价，以及推广商品和否定投放。暂不支持创建 SB/SD Campaign 或使用独立删除操作，但支持通过状态更新归档 Campaign。
 
 ---
 
-## v1.3.0 能帮你做什么
+## v1.3.1 能帮你做什么
 
 - **用自然语言查你的数据**——直接问「上周各 campaign 按 ACOS 排个序」「这个产品线最近 8 周的 TACOS 趋势」，完成授权后无需反复登录或导表。
 - **结合你自己的数据算真账**——把你的成本 / 毛利 / 目标交给 AI，让它拉广告花费：「按真实毛利，哪些 campaign 在亏钱——砍还是加？」这种需要把广告数据和你自己的业务数据合起来算的问题，平台单独算不出来。
@@ -14,6 +14,8 @@
 - **管理 AI 托管组**——在明确确认后创建、编辑或删除托管组，并在操作后回查实际状态。
 - **创建 SP Campaign**——创建包含广告组、推广商品、自动/关键词/商品投放、否定投放和广告位设置的 SP Campaign，执行前先展示完整结构。
 - **编辑线上广告实体**——修改 Campaign 预算、状态、SP 竞价策略、广告位加价和 AMC 受众加价，调整关键词或 Target 竞价，并管理推广商品和否定投放。写操作会直接在线上账号生效，执行前必须确认对象和具体变更。
+- **诊断搜索词**——按固定规则给搜索词分类，结合店铺客单价与目标 ACOS 推导门槛，识别浪费花费、否词候选、扶正候选和精准词碎片。
+- **安全复位大促调整**——找回大促期间人为修改的出价、预算、广告位溢价和托管组设置，可全部复位，也可按大促后表现分阶段回落；执行前预览、执行后回读。
 
 ### 你能查询和管理什么
 
@@ -79,7 +81,7 @@ SparkX AI MCP 支持 OAuth 和 MCP Token 两种授权方式。
 2. 调用 `get_user_authorized_context` 验证，返回店铺列表即为成功。
 3. 读取 `skills/manifest.json`，将已安装 Skill 的本地 `SKILL.md` frontmatter 中的 `metadata.version` 与 manifest 中同名 Skill 的版本比较。本地版本较低时列出并提醒用户更新；版本相同、未安装或无法读取时不要误报。
 4. 直接安装 8 个必装 Skills：3 个查询 Skills，以及 `sparkx-create-ai-group`、`sparkx-edit-ai-group`、`sparkx-delete-ai-group`、`sparkx-edit-ads`、`sparkx-create-campaign`，无需再次询问用户。
-5. 介绍 4 个可选 Skills（广告周报、广告月报、广告结构分析、商品诊断），仅安装用户确认需要的项目。
+5. 介绍 6 个可选 Skills（广告周报、广告月报、广告结构分析、商品诊断、搜索词诊断、大促调整复位），仅安装用户确认需要的项目。
 
 根据当前客户端的实际配置方式写入正确文件。不同客户端可能使用 `mcp.json`、`.mcp.json`、`mcp_config.json`、`config.toml` 或 `config.yaml`，不要混淆。
 
@@ -108,14 +110,16 @@ MCP 的 Tool 决定 AI"能拿到什么数据"，Skill 决定 AI"把数据用得�
 | [sparkx-edit-ads](skills/sparkx-edit-ads/) | `batch_update_ads` | 编辑线上 Campaign 设置、关键词和 Target 竞价/状态、推广商品及否定投放；受保护操作需要明确的两阶段确认 |
 | [sparkx-create-campaign](skills/sparkx-create-campaign/) | `create_sp_sb_campaign` | 创建 SP Campaign，包括广告组、推广商品、自动/关键词/商品投放、否定投放、广告位和可选 AMC 受众设置 |
 
-**可选（4 个）**——进阶分析场景，装完必装 Skills 后按需添加：
+**可选（6 个）**——进阶分析与运营场景，装完必装 Skills 后按需添加：
 
 | Skill | 用途 |
 |-------|------|
 | [sparkx-weekly-ads-report](skills/sparkx-weekly-ads-report/) | 广告周报：KPI 环比、7 天趋势、异常摘要、Top 变化榜、下周行动建议 |
 | [sparkx-monthly-ads-report](skills/sparkx-monthly-ads-report/) | 广告月报：全月 KPI（环比 + 同比）、结构拆解、商品与关键词分析 |
-| [sparkx-ads-structure-analysis](skills/sparkx-ads-structure-analysis/) | 广告结构分析：按广告类型 / 站点 / 组合 / 工作日 / 小时等维度定位结构错配 |
+| [sparkx-ads-structure-analysis](skills/sparkx-ads-structure-analysis/) | 广告结构分析：按广告类型 / 站点 / 组合 / 工作日 / 小时及 Campaign 体量分层等维度定位结构错配 |
 | [sparkx-product-diagnosis](skills/sparkx-product-diagnosis/) | 商品诊断：ASIN 健康度分层、变体对比、去留优化建议 |
+| [sparkx-search-term-diagnosis](skills/sparkx-search-term-diagnosis/) | 搜索词诊断：按固定规则分类搜索词，并结合店铺门槛输出花费分布、否词候选、扶正候选和精准词碎片 |
+| [sparkx-promo-reset](skills/sparkx-promo-reset/) | 大促调整复位：找回大促期间的人为修改与大促前配置，可全部复位或按大促后表现分阶段回落，并在执行前预览、执行后回读 |
 
 **安装方式**（任选其一）：
 

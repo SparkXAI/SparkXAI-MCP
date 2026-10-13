@@ -7,7 +7,7 @@ description: >-
   budget adjustment, AI auto-adjustment, pause/enable records, operation audit,
   modification timeline, ad adjustment log
 metadata:
-  version: 1.3.2
+  version: 1.3.3
 ---
 
 # Query Operation Log Skill
@@ -65,7 +65,7 @@ See the Tool Selection Decision Tree above if the user's ask might belong to `ge
   "profileIds": [1234567890123456],
   "entities": ["entity_type_list"],
   "resourceIds": [{"idEntity": "campaign", "ids": [123456]}],
-  "changeBy": {"operator": "IN", "values": ["ai", "manual"]},
+  "changeBy": {"operator": "IN", "values": ["ai", "automation"]},
   "actionType": {"operator": "IN", "values": ["Bid Increased"]},
   "operationType": {"operator": "IN", "values": ["Campaign Paused"]},
   "campaignTypes": ["campaign_type_list"],
@@ -126,7 +126,7 @@ See the Tool Selection Decision Tree above if the user's ask might belong to `ge
         "countryCode": "US",
         "currencyCode": "USD",
         "createdDate": "2024-06-15 14:30:00",
-        "changedBy": "ai"
+        "changedBy": "AI"
       }
     ],
     "rowCount": 1
@@ -232,18 +232,22 @@ There is no server-side `groupBy` for this tool — to answer "how many budget c
 }
 ```
 
-**Budget increases made manually by users (not AI/automation):**
+**Budget increases made by people (not AI/automation):**
 ```json
 {
   "profileIds": [4404871489220462],
   "dateStart": "2026-06-01",
   "dateEnd": "2026-06-30",
+  "entities": ["campaign"],
   "actionType": {"operator": "IN", "values": ["Budget Increased"]},
-  "changeBy": {"operator": "IN", "values": ["manual"]},
-  "pageSize": 100,
-  "userContext": "Manual budget increases this month"
+  "pageSize": 1000,
+  "userContext": "Budget increases made by people this month"
 }
 ```
+No `changeBy` filter: `manual` misses changes recorded under a user's email (see
+[`field-reference.md`](references/field-reference.md) -> changeBy). Keep rows whose `changedBy`
+is an email, `Manual` or `Amazon Console`, and whose `changeField` is `dailyBudget` - in AI
+managed groups, AI's hourly `currentBudget` rows also land under `Budget Increased`.
 
 ## Notes
 

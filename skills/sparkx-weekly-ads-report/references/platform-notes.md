@@ -339,10 +339,12 @@ This tool *may* also emit an outer `currency`, inferred from the rows: if every 
 ### Confirmed ×100 percentage metrics
 
 Checked one by one against the SQL the server builds: `ACOS`, `CTR`, `CVR`, `AdsCVR`, `TACOS`,
-`ShippedTACOS`, `OrderedTACOS`, `NTBOrdersRate`, `NTBUnitsRate`, `NTBSalesRate`,
+`ShippedTACOS`, `OrderedTACOS`, `AIACOS`, `DPVR`, `NTBOrdersRate`, `NTBUnitsRate`, `NTBSalesRate`,
 `ViewableImpressionsRate`, `AdsSalesRate`, `AdsOrdersRate`, `AdsUnitsRate`,
-`AdsSalesSameSKURate`, `AdsOrdersSameSKURate`, `Video5SecondViewRate` and
-`UnitSessionPercentage` all end in `* 100`. `aiGroup.targetAcos_` on
+`AdsSalesSameSKURate`, `AdsOrdersSameSKURate`, `Video5SecondViewRate`,
+`UnitSessionPercentage` and `UnavailabilityRate` all end in `* 100`. `BuyBoxPercentage` comes
+out on the same scale: its source column is already 0–100, and the expression divides by 100
+only to weight by page views, then multiplies back (prod source median 96.4). `aiGroup.targetAcos_` on
 `get_entity_metadata` is on the same scale.
 
 For the fields listed above:
@@ -353,14 +355,39 @@ For the fields listed above:
 - **Filters take the same ×100 number, with no `%` in the JSON**: `{"ACOS": {"<": 20}}` means
   "under 20%". `{"ACOS": {"<": 0.2}}` means "under 0.2%", which is almost never intended.
 
-Do not expand this rule to every ratio-shaped name. `VTR`, `vCTR`, `TopOfSearchIS`,
-`BuyBoxPercentage`, and `UnavailabilityRate`, for example, are read or aggregated from
-source values rather than calculated with `* 100` in the same metric-expression block.
-Follow their field-specific contract; do not rescale them merely because their names imply
-a rate or percentage.
+**`UnavailabilityRate` changed scale.** It used to come back as a 0–1 ratio rounded to two
+decimals (`0.99`); it is now on the same ×100 scale as the fields above (`99.29` = 99.29%), and
+its filters take the ×100 number too (`{"UnavailabilityRate": {">": 20}}` = over 20%). A figure
+pulled before the change is a hundredth of today's - convert it before comparing.
 
-`ROAS`, `CPC`, `CPA` are **not percentages** — plain ratios or currency-per-unit (e.g.
-`ROAS: 5.68`).
+### Passed through from the source, already 0–100
+
+`VTR` and `TopOfSearchIS` get no `* 100` here, but their source columns are themselves on a
+0–100 scale (prod samples: `VTR` median 22.5; `TopOfSearchIS` 5.09 / 44.82 / 69.98, max 100).
+Show them with `%` and don't rescale them, exactly like the list above.
+
+- **`VTR` is summed across rows**, not averaged. One entity on one day stays within 0–100;
+  a query that rolls several days or entities into one row can return more than 100, which is
+  no longer a rate. Break it down by day and entity, and don't present a rolled-up value above
+  100 as a percentage.
+
+### `vCTR` - don't use it as a percentage
+
+`vCTR` is also passed through, but its source values are out of range for any rate (prod raw
+rows: 99th percentile around 4696, max 80000). That is an upstream calculation problem, not a
+scale this service applies. Don't show it as a percentage, don't apply thresholds to it, and
+don't rescale or clip it to make it look plausible. If the user asks for it, give the raw number
+and say the field's calculation is under review.
+
+### Everything else
+
+Do not infer a field's scale from its name. A field not covered above has no confirmed scale -
+follow its field-specific contract, and do not rescale it merely because its name implies a
+rate or percentage.
+
+`ROAS`, `AIROAS`, `CPC`, `CPA`, `CPO` are **not percentages** — plain ratios or currency-per-unit (e.g.
+`ROAS: 5.68`). Neither is `vCPM`: its expression multiplies by 1000, because it is a cost per
+thousand viewable impressions - never append `%` to it.
 
 ## Multi-Profile Row Attribution
 

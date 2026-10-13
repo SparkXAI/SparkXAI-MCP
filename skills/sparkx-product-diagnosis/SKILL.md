@@ -9,7 +9,7 @@ description: >-
   "ASIN health check". Not for account-wide structural share analysis (use sparkx-ads-structure-analysis)
   or periodic WoW/MoM recaps (use sparkx-weekly-ads-report / sparkx-monthly-ads-report).
 metadata:
-  version: 1.0.6
+  version: 1.1.0
 ---
 
 # Product Diagnosis
@@ -43,7 +43,7 @@ Rewritten against the new tool's conventions from the start — carries forward 
 **Not for**:
 - Account-wide spend/efficiency structure by campaign type / site / portfolio → `sparkx-ads-structure-analysis`
 - Periodic WoW/MoM cadence recaps → `sparkx-weekly-ads-report` / `sparkx-monthly-ads-report`
-- Keyword/search-term level diagnosis → a dedicated skill (not yet built)
+- Keyword/search-term level diagnosis → `sparkx-search-term-diagnosis` (if installed) (it can be scoped to one product or parent ASIN)
 
 ## Input Parameters
 
@@ -74,6 +74,55 @@ Always call `get_user_authorized_context` first to get the authorized `profiles`
 **`parentAsin`** — roll up to the parent level. Query `get_ads_perf` (`factEntity: asin`) with `select` including `asin.parent_asin_`, and aggregate child-ASIN rows under the same parent client-side (this tool has no native `factEntity: parentAsin` for performance data — only `get_entity_metadata`'s `asin` entity nests parent-ASIN fields alongside child fields, and that's metadata, not performance metrics).
 
 **`variant`** — compare sibling child ASINs under one parent. **Requires an anchor**: either the user names a specific parent ASIN, or names one child ASIN (resolve its `parentAsin` via `get_entity_metadata` first — plain camelCase, that tool's convention, not `get_ads_perf`'s `asin.parent_asin_` — then pull all children under that parent). Don't attempt a "variant" comparison across the whole catalog at once — it's inherently a one-parent-at-a-time comparison; if the user wants this for many parents, run it once per parent and present each as its own comparison, not a single merged table.
+
+## Shared Rules: Target ACOS, Thresholds, Managed Groups, Promotions
+
+These rules match `sparkx-search-term-diagnosis` and `sparkx-promo-reset`, so the same store
+gets the same numbers whichever skill answers. Those two skills are separate installs: mention
+them as "if installed", and when the user doesn't have them, say what to look at instead -
+never promise to run a skill that may not be there.
+
+- **One target ACOS.** Use the store-wide target the user gives (ask "整店希望 ACOS 控制在多少"
+  when a threshold depends on it); without one, use the store's own ACOS for the period and say
+  so where the threshold is first used. Never use managed groups' `targetAcos` as thresholds -
+  one store can have dozens, from single digits to over 200%, and rank-push or launch groups set
+  it high on purpose.
+- **"High spend, zero orders" means spend >= `T`**, where `T` = average order value x target
+  ACOS = `(Sales / Conversions) x target ACOS` over the report's scope and period (target ACOS as
+  a fraction: `get_ads_perf`'s `ACOS` value `35` is `0.35`). `T` is one order's allowed spend -
+  the entity already spent what an order may cost and got none. It works in every currency and
+  price range, so there is no fixed money floor. No orders or no sales in the period -> `T`
+  can't be derived; say so instead of flagging.
+- **Campaigns in a running managed group get group-level advice.** A campaign's group is
+  `campaign.aiGroupId_` in `get_ads_perf` (or `aiGroupId` on `get_entity_metadata`'s `campaign`
+  entity; an unmanaged campaign has `0`); the group's `aiStatus` comes from
+  `get_entity_metadata` (`entity: aiGroup`). The AI sets those campaigns' bids and budgets, so a
+  manual bid or budget change gets overwritten: recommend the group's levers instead (target
+  ACOS, group budget, an action-space switch) or say the AI is handling it. **No bid advice with
+  numbers anywhere**; for an unmanaged campaign give at most a direction ("consider lowering
+  bids on ..."). Keyword-level actions (pausing a zero-order exact keyword, negatives) need
+  keyword and search-term data - point to `sparkx-search-term-diagnosis` (if installed).
+- **People vs machines in the operation log.** Query without `changeBy` and classify
+  `changedBy` client-side: an email, `Manual` or `Amazon Console` is a person; everything else
+  (`AI`, `Automation`, `AI-Custom Rule`, `Budget Management`, `Lock Ranking`, `API`, `Labels`,
+  `System`) is a machine. `changeBy=manual` misses changes recorded under a user's email. Inside
+  managed groups the AI moves `currentBudget` every hour and those rows are also
+  `Budget Increased` - leave them out of counts and "what changed" lists (a person's budget
+  change is on `dailyBudget`). Group setting changes (target ACOS, personality, switches) are
+  `aiGroup` rows, not campaign rows; their timestamps are UTC, while campaign rows are
+  store-local when one profile is queried - label the clock.
+- **Promotions distort period comparisons - but only the user confirms one.** Signals that
+  one may be involved: the period or its baseline overlaps a major event (Prime Day, Prime Big
+  Deal Days, Black Friday / Cyber Monday), or the operation log shows a burst of human budget /
+  bid increases in or shortly before it. A signal is not a verdict: still report every anomaly
+  and decline, label the affected ones "possibly promotion-related", and ask the user. Only
+  after the user confirms, say so at the top and treat the swing as promo-driven. After a
+  confirmed promotion whose human increases haven't been reversed, mention that
+  `sparkx-promo-reset` (if installed) restores them.
+
+In product diagnosis a promotion in the **comparison** window is the common trap: the post-promo
+drop makes healthy products look Declining. When there is a signal, keep the Declining label but
+mark it "possibly post-promotion" and ask; drop the label only after the user confirms.
 
 ## Workflow
 
@@ -121,7 +170,7 @@ Scope this call per `scope`:
 
 **d. Eligibility/inventory config** (feeds Step 5's diagnostic card): `get_entity_metadata` (`entity: asin`), for the ASINs flagged in Step 3 as Declining (or explicitly in scope via `underperformingOnly`, per Step 5) — pull `asinInventoryStatus`, `asinSpEligibilityStatus`/`asinSbEligibilityStatus`/`asinSdEligibilityStatus`, `asinIsDelete`. Only pull this for flagged ASINs, not the whole catalog — it's diagnostic detail, not part of the ranking.
 
-**e. Operation log for flagged ASINs** (feeds Step 5): `get_operation_log`, the analysis window, `resourceIds` scoped to `campaignId`/`adGroupId` (resolve each flagged ASIN → its `campaignId`/`adGroupId` via `get_entity_metadata`'s `productAd` entity first, since `get_operation_log` takes IDs, not ASINs directly). **`resourceIds.idEntity` has no `productAd` value** (see `sparkx-query-operation-log`'s field reference) — don't resolve to `amazonAdId` and try to pass it in; use `idEntity: "campaign"`/`"adGroup"` with the resolved `campaignId`/`adGroupId` instead. This returns all operations on that campaign/adGroup, not narrowed to just the one product ad — say so if the customer needs to know the result isn't ASIN-exclusive. **Check `truncated`** and follow the standard split-and-recurse procedure if so.
+**e. Operation log for flagged ASINs** (feeds Step 5 and the promotion signal): `get_operation_log`, from 7 days before the comparison window through the end of the analysis window (split if that exceeds 90 days), `resourceIds` scoped to `campaignId`/`adGroupId` (resolve each flagged ASIN → its `campaignId`/`adGroupId` via `get_entity_metadata`'s `productAd` entity first, since `get_operation_log` takes IDs, not ASINs directly). **`resourceIds.idEntity` has no `productAd` value** (see `sparkx-query-operation-log`'s field reference) — don't resolve to `amazonAdId` and try to pass it in; use `idEntity: "campaign"`/`"adGroup"` with the resolved `campaignId`/`adGroupId` instead. This returns all operations on that campaign/adGroup, not narrowed to just the one product ad — say so if the customer needs to know the result isn't ASIN-exclusive. **Also pull the managed-group rows**: for campaigns in a managed group (`aiGroupId` on the `campaign` entity), query `resourceIds: [{"idEntity": "aiGroup", "idType": "increment", "ids": [...]}]` - a target-ACOS or switch change on the group is invisible in the campaign rows. Classify people vs machines per "Shared Rules". **Check `truncated`** and follow the standard split-and-recurse procedure if so.
 
 **⚠️ Steps 2c/2d/2e above are written for `granularity=asin`/`variant` (child-ASIN identity). Under `granularity=parentAsin`, each needs a parent-level adjustment — don't run them unchanged and silently produce child-level diagnostics under a parent-level report:**
 
@@ -141,14 +190,24 @@ Either way, when the list is long: split into chunks for the `in` filter rather 
 
 **Ranking table**: sort by the requested/default metric (`Spend` unless the user asked for `Sales`/`ACOS` ranking specifically), showing `Spend`/`TotalSalesAmount`/`ACOS`/`TACOS` per ASIN. **Zero-denominator handling — `ACOS` and `TACOS` have different denominators, don't conflate them**: an ASIN with `Sales = 0` (ad-attributed sales) has undefined `ACOS`; an ASIN with `TotalSalesAmount = 0` (total business sales) has undefined `TACOS` — these can differ (e.g. an ASIN can have `Sales = 0` this period while still showing organic `TotalSalesAmount`, or vice versa). Check each independently and report "no ad sales this period" / "no total sales this period" as appropriate, never a fabricated ratio for either. If `TotalSalesAmount` is zero across every row, report that no total sales were returned for the window; do not infer a Seller/Vendor field mismatch or switch metric families solely from that result.
 
-**Lifecycle segmentation** — classify each analysis entity (a child ASIN under `granularity=asin`/`variant`, or a parent ASIN under `granularity=parentAsin` — don't revert to child-level classification just because the underlying rows started as child-ASIN data) into exactly one tier:
-- **新品 (New)**: identified in Step 2c (opened within the analysis window). Takes priority over other tiers — a new product's low volume is expected, not "long-tail" or "declining."
-- **明星 (Star)**: top spend-share band **and** efficiency at or better than the catalog average (ACOS at or below average, or TACOS trending down if available) — meaningfully contributing **and** performing well.
-- **腰部 (Core)**: meaningful volume, efficiency roughly at the catalog average — the bulk of a healthy catalog, not itself a finding.
-- **长尾 (Long-tail)**: low spend/sales share, has existed longer than the "new" window, performance roughly stable (not declining) — low-volume but not necessarily unhealthy.
-- **濒死 (Declining)**: this-period `Sales`/`Conversions` meaningfully down vs. the prior period (Step 2b), **and** not a new product. Use the same join-by-ID, zero-denominator-aware period-comparison discipline as [sparkx-query-ads-performance's Period-over-Period and Top Movers example](../sparkx-query-ads-performance/references/example-period-comparison-top-movers.md) — an ASIN with `Sales = 0` in the prior period and `Sales = 0` now is "flat/no activity," not "declining."
+**Lifecycle segmentation** — default cutoffs below; state them in the output, and use the user's own if given. Rank entities by this period's `Spend` (descending). "Top X% of spend" means the **smallest prefix of that ranking whose cumulative share reaches X%, including the row that crosses X%** - so if the first product alone is 60% of spend, it is the whole top 50%. Apply the tiers in this order, first match wins: New → Declining → Star → Core → Long-tail.
 
-**Currency-aware thresholds throughout**: define "meaningful" band cutoffs (spend share, ACOS deviation from average) proportionally, not as a hardcoded absolute dollar figure — a fixed-dollar cutoff breaks for non-USD single-store analyses the same way it would in the other skills in this family.
+| Tier | Default rule |
+|---|---|
+| New | opened within the analysis window (Step 2c) |
+| Declining | prior-period orders >= 3 **and** this period's orders <= 70% of the prior period's (raw counts; not a New product) |
+| Star | in the top 50% of spend (see above) **and** ACOS <= target ACOS |
+| Core | in the top 80% of spend |
+| Long-tail | the rest |
+
+Classify each analysis entity (a child ASIN under `granularity=asin`/`variant`, or a parent ASIN under `granularity=parentAsin` — don't revert to child-level classification just because the underlying rows started as child-ASIN data) into exactly one tier:
+- **新品 (New)**: identified in Step 2c (opened within the analysis window). Takes priority over other tiers — a new product's low volume is expected, not "long-tail" or "declining."
+- **濒死 (Declining)**: ad orders (`Conversions`) fell to 70% or less of the prior period's, from at least 3 (Step 2b). Use the same join-by-ID, zero-denominator-aware period-comparison discipline as [sparkx-query-ads-performance's Period-over-Period and Top Movers example](../sparkx-query-ads-performance/references/example-period-comparison-top-movers.md) — an ASIN with 0 orders in both periods is "flat/no activity," not "declining." Check the comparison window for a promotion first (see "Shared Rules").
+- **明星 (Star)**: in the top 50% of spend (the prefix rule above), **and** ACOS at or below the target ACOS — meaningfully contributing **and** performing well.
+- **腰部 (Core)**: the rest of the top 80% of spend (same prefix rule) — the bulk of a healthy catalog, not itself a finding.
+- **长尾 (Long-tail)**: everything below that — low-volume but not necessarily unhealthy.
+
+**No fixed money cutoffs**: the tiers use spend shares, order counts and the target ACOS; zero-order checks use `T` (see "Shared Rules"), so the rules hold in any currency.
 
 ### Step 4 · Variant Comparison (if `granularity=variant`)
 
@@ -167,8 +226,8 @@ If none of the above turns up anything, say so plainly ("no inventory/eligibilit
 
 Derive one verdict per flagged ASIN (and optionally per healthy-tier ASIN if the user wants a full-catalog verdict, not just the problems):
 - **保 (Keep)**: Star or healthy Core tier — no action needed, or note it as a candidate for the *other* skill (`sparkx-ads-structure-analysis`) if there's a structural budget-reallocation angle.
-- **优 (Optimize)**: Declining or underperforming Core/Long-tail with a fixable driver identified in Step 5 (e.g. restock, bid adjustment, buy-box recovery) — action + evidence.
-- **撤 (Cut)**: persistent zero-conversion high-spend with no fixable driver found, or long-tail with negligible volume and no growth signal — action + evidence.
+- **优 (Optimize)**: Declining or underperforming Core/Long-tail with a fixable driver identified in Step 5 (e.g. restock, buy-box recovery, a managed-group setting) — action + evidence. Bid / budget advice follows "Shared Rules" (group levers for managed campaigns, no numbers). For traffic-side problems, suggest running `sparkx-search-term-diagnosis` (if installed) scoped to this product.
+- **撤 (Cut)**: zero orders with spend >= `T` in **both** this and the prior period, and no fixable driver found; or long-tail with negligible volume and no growth signal — action + evidence.
 
 **Every recommendation must have**: action + target ASIN + evidence (data), same requirement as the other skills in this family.
 
@@ -302,5 +361,5 @@ Follows the shared error envelope used by both underlying tools (`isError`/`erro
 
 - Account-wide structural share analysis → `sparkx-ads-structure-analysis`
 - Periodic WoW/MoM cadence recaps → `sparkx-weekly-ads-report` / `sparkx-monthly-ads-report`
-- Search-term/keyword-level diagnosis → a dedicated skill (not yet built)
+- Search-term/keyword-level diagnosis → `sparkx-search-term-diagnosis` (if installed)
 - SKU-level margin/profitability (needs the customer's own cost data)

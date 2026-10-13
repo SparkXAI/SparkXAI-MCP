@@ -12,20 +12,12 @@
 }
 ```
 
-**Same intent, but restricted to manual (human) changes only** — combine `operationType` with `changeBy`:
-
-```json
-{
-  "profileIds": [4404871489220462],
-  "dateStart": "2026-06-01",
-  "dateEnd": "2026-06-30",
-  "campaignTypes": ["sponsoredProducts"],
-  "operationType": {"operator": "IN", "values": ["DailyBudget Increased", "DailyBudget Decreased"]},
-  "changeBy": {"operator": "IN", "values": ["manual"]},
-  "pageSize": 200,
-  "userContext": "Manual SP budget adjustments only, excluding AI/automation"
-}
-```
+**Same intent, but only changes made by people** — run the query above and filter the rows
+client-side: keep `changedBy` = an email, `Manual` or `Amazon Console`, and `changeField` =
+`dailyBudget` (in AI managed groups, AI's hourly `currentBudget` rows carry the same
+`operationType`). Do **not** add `"changeBy": {"operator": "IN", "values": ["manual"]}` for
+this: `manual` matches only rows recorded as `Manual` and drops every change recorded under a
+user's email (see [`field-reference.md`](field-reference.md) -> changeBy).
 
 Note: `operationType` (fine-grained) is more precise than `actionType` (coarse categories like `"Budget Increased"`) — use `operationType` when you need to isolate a specific sub-case.
 

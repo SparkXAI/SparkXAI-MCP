@@ -5,16 +5,22 @@ arguments go inside a single `request` object. **Create mode is triggered by lea
 `aiGroupId` empty (omit it or set `0`)** - a positive `aiGroupId` means edit, which
 belongs to the `sparkx-edit-ai-group` skill.
 
-Create mode is **AI mode only**. Use `aiActionSettings.xxxStatus` for the action-space
-on/off switch. When that action space has a corresponding `aiAutomation` mode field,
-set it to `0` (AI); never set it to `1` (Rule/RBA). Rule condition/action configs cannot be
-written through this tool (they *can* be read - see `sparkx-query-entity-metadata`).
+The `aiAutomation` **you pass is AI mode only**. Use `aiActionSettings.xxxStatus` for the
+action-space on/off switch. When that action space has a corresponding `aiAutomation` mode
+field, set it to `0` (AI); never set it to `1` (Rule/RBA) - a `1` is rejected. Rule
+condition/action configs cannot be written through your parameters (they *can* be read -
+see `sparkx-query-entity-metadata`).
 
 **Template-based creation is supported**: pass `templateId` (>0) and the template's config
 becomes the baseline, with any field you send explicitly overriding it. Read templates first
-with `get_ai_group_template`. One hard restriction: a template whose rule 4 / rule 5 is
-bound to specific campaigns and ad groups (`isSelf=2`, rule enabled) is rejected. See the
-main SKILL.md section "Creating from a template".
+with `get_ai_group_template`; for a system preset also pass `isSystemTemplate=1`. Archived
+templates (`status=2`) are rejected. **The one exception to "AI mode only"**: if you don't
+pass `aiAutomation`, the template's automation rules are carried over as-is, including
+Rule-mode rules (`status=1`) with their condition/action - tell the user in the preview.
+One hard restriction: a template whose rule 4 / rule 5 is bound to specific campaigns and
+ad groups (`isSelf=2`, rule enabled) is rejected. See the main SKILL.md section "Creating
+from a template", and [`template-guide.md`](template-guide.md) for recommending one by
+campaign purpose.
 
 **If you send no `aiActionSettings` at all, the server fills in ad-type-appropriate
 defaults** (an SB-specific default set for `sponsoredBrands`, otherwise the SP set). That's
@@ -36,7 +42,7 @@ if the user needs to know what's active.
 
 | Field | Type | Notes |
 |---|---|---|
-| `aiStatus` | int | `0`=off, `1`=on. **Omit it** - the server fills in `1` and the group starts optimizing. Send `0` only when the user asked for it not to start |
+| `aiStatus` | int | `0`=off, `1`=on. **Omit it** - the server fills in `1` and the group starts optimizing. Send `0` only when the user asked for it not to start. A template never sets it |
 | `campaignIds` | int[] | Campaigns to include (auto-increment IDs). Omit to create an empty group |
 | `campaignNameSign` | int | Campaign-name label: `0`=off, `1`=on |
 | `aiPersonality` | int | `1`-`5`; **must be >=3 when `targetType=3` (volume/冲量)** (front-end rule - MCP won't enforce it) |
@@ -76,10 +82,14 @@ SP-only `aiActionSettings` fields (complete list as enforced):
 Sending `0` (or `null` for the numeric ones) is accepted - only an *enabled* value trips the
 check. Best practice is to omit them entirely on SB.
 
-**Template exception**: applying an SP template to an SB group (`templateId` set, and
-`aiActionSettings` **omitted**) does not fail - the server zeroes those SP-only fields for
-you. Send `aiActionSettings` yourself and you lose that: the template's action-space config
-is skipped and your values go through the check above.
+**Templates get the same check on create**: creating an SB group from a template that has
+any of these SP-only fields on is **rejected**, listing the fields - the create path validates,
+it does not zero them for you. Create the SB group without the template **and with
+`aiStatus=0`**, apply the template through `sparkx-edit-ai-group` (the edit path zeroes the
+SP-only fields instead), read it back, and turn AI on only once the user confirms - see
+[`template-guide.md`](template-guide.md) -> "A new SB group from a template". (If
+you send `aiActionSettings` with `templateId` on create, the template's action-space config is
+skipped and your values go through the check above.)
 
 When the user is on SB and asks for one of these, tell them it isn't available for
 Sponsored Brands rather than sending it and letting the whole call fail. The full "which capability is

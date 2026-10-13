@@ -5,11 +5,12 @@ description: >-
   ACOS/ROAS, budget, turn its AI on/off, personality, adjust SP/SB campaign membership, and
   the AI action space (bid / budget / target / structure optimization) - for one group or
   many at once (bulk). Use when the user wants to modify / adjust / 修改 / 调整 / 批量改 an
-  existing group's settings or automations. SD uses edit_sd_ai_managed_group; SP/SB uses
+  existing group's settings or automations, or asks how a group should be set up (suggests a
+  matching platform template - optional). SD uses edit_sd_ai_managed_group; SP/SB uses
   save_sp_sb_ai_managed_group (edit mode). Not for creating a group (use sparkx-create-ai-group)
   or deleting one (use sparkx-delete-ai-group).
 metadata:
-  version: 1.1.5
+  version: 1.2.0
 ---
 
 # Edit AI Managed Group
@@ -349,38 +350,97 @@ NOT "deleted". Passing it back would silently archive the schedule.
 - **Read** with `get_ai_group_template`: no args = list (`searchName` fuzzy match,
   `createdBy`, `page`, `pageLimit` default 50, `applyFlag=1` to include system presets);
   `templateId` = full detail of one. This is a read behind the **write** scope.
+- **System presets need `isSystemTemplate=1`.** Each list item carries `isSystemTemplate`
+  (1 = system preset, 0 = user template). Pass `isSystemTemplate=1` together with
+  `templateId` both when reading the detail and when applying it; without it a system
+  template ID returns `Template_Not_Exist` (the error says to retry with
+  `isSystemTemplate=1`). Omit it (or send 0) for user templates; other values are rejected.
+- **Archived templates can't be applied.** Detail `status=2` (archived) can be read but is
+  rejected by the write tools. Template `status` (0 active / 1 paused / 2 archived) is the
+  template's own state, never the group's AI on/off.
 - **Apply** by passing `templateId` (>0) to `edit_sd_ai_managed_group` or
-  `save_sp_sb_ai_managed_group`. It supplies `acos`, `optimizeType`, `status`,
+  `save_sp_sb_ai_managed_group`. It supplies `acos`, `optimizeType`,
   `budgetDynamicStatus`, `numType`, `num`, `campaignNameSign`, `targetHarvestStatus`,
   `budgetRedistributeStatus`, `aiPersonality` plus action-space/automation config.
-- **Explicit params beat template values**; omitted fields fall back to the template.
-- **Priority: `templateId` > `operation` > plain field edit.** If you pass both `templateId`
-  and a batch `operation`, the template path wins and the operation is ignored - never send
-  both expecting both to apply.
+  **AI on/off is not taken from the template**: omit `status` (SD) / `aiStatus` (SP/SB) and
+  the group keeps its current AI state.
+- **SD template edit needs the groups' AI already on.** Groups whose AI is off/cancelled are
+  skipped by the server when config fields are sent (counted as failed), even if you also
+  send `status=1`. Turn AI on in a separate edit first.
+- **SP/SB template edit rejects Rule-mode templates.** If you don't pass `aiAutomation` and
+  the template has any automation rule with `status=1` (Rule mode - e.g. Budget Daypart
+  rule 13 in system templates 12 and 13), the whole call is rejected before anything is
+  written. The error lists the rules and gives three ways out: (1) create a **new** group
+  from the template (`aiGroupId=0`), where Rule rules are carried over; (2) apply the
+  template to this group in the platform UI; (3) retry with an explicit `aiAutomation`
+  (e.g. the listed rules set to `0` = AI) - the template's automation rules are then ignored
+  entirely while the rest of the template still applies. **Present these options and get
+  the user's choice before retrying**; option 3 changes what the user asked for. A template
+  with only AI rules (`status=0`) applies them by rule type - this can switch some of the
+  group's rules Rule -> AI (rule 17 back to AI needs a valid `numType`/`num`, or the server
+  errors); rules the template doesn't contain stay as they are.
+- **Explicit params beat template values; the template only overrides what it actually
+  contains.** Priority is your params > values present in the template > the group's current
+  config. Fields the template doesn't carry, automation rules it doesn't contain, and AI
+  on/off keep the group's current values.
+- **SP/SB: one call can apply a template and change single switches.** Pass `templateId` plus
+  `aiActionSettings` with just the switches to change - the server merges current config <-
+  template <- your values, field by field. (Create works differently - see
+  `sparkx-create-ai-group`.)
+- **`templateId` vs batch `operation` - the order differs by tool, so never send both.**
+  SD (`edit_sd_ai_managed_group`): `templateId` > `operation` > plain field edit - the template
+  path runs and the operation is ignored. SP/SB (`save_sp_sb_ai_managed_group`): `operation` >
+  `templateId` - the batch operation runs and the template is ignored.
 - **Cross-type apply is supported and sanitized for you.** A template isn't bound to an ad
   type; applying an SP template to an SB group zeroes the template's SP-only fields
   (`bidAmazonBusinessStatus`, `btb*`, `bidDaypartStatus`,
   `bidPerformanceStrictAcosStatus`, `bidAdPlace*`, `tos`/`pdp`/`ros` bounds,
-  `structPause*`) rather than failing. **This applies only when you omit
-  `aiActionSettings`.** Send `aiActionSettings` yourself and the template's action-space
-  config is skipped entirely (yours wins, no merge) and the SB compatibility check applies
-  as usual - an SP-only field with a non-zero value then fails the whole call. Don't
-  hand-build `aiActionSettings` on a cross-type template apply, and tell the user which
-  parts of the template won't carry over.
-- **Hard error**: a template whose target-harvest (rule 4) or negative-target (rule 5) config
-  is bound to specific campaigns/ad groups (`isSelf=2`, rule enabled) is rejected, because
-  this tool can't carry the bindings. Tell the user to apply that template in the UI or pick
-  one using "current object" scope.
+  `structPause*`) rather than failing. This holds when you also send `aiActionSettings`:
+  the template's values are merged in and sanitized, and only SP-only switches **you** turn
+  on go through the SB compatibility check (an enabled one fails the whole call). Tell the
+  user which parts of the template won't carry over. (Creating an SB group from such a
+  template is rejected instead - that's a create-path rule.)
+- **Campaign-bound harvest / negative rules (SP/SB)**: a template whose target-harvest
+  (rule 4) or negative-target (rule 5) config is bound to specific campaigns/ad groups
+  (`isSelf=2`, rule enabled) is rejected **only when you don't pass `aiAutomation`** (the
+  template's rules would be inherited, and this tool can't carry the bindings). Passing
+  `aiAutomation` makes the server ignore the template's automation rules entirely, so the
+  call can go through - but that drops the template's rules, which changes what the user
+  asked for. Offer: apply the template in the UI, pick one using "current object" scope, or
+  apply it without the template's automation rules - and get the user's choice first.
 - **No template writes.** You cannot create, edit, delete, or "save as" a template through
   MCP. Read + apply only.
 
-Because a template can flip AI on and rewrite several settings at once, read its detail and
-show the user what will change **before** applying it to an existing group.
+Because a template can rewrite several settings at once, read its detail (with
+`isSystemTemplate=1` for a system preset) and show the user what will change **before**
+applying it to an existing group: compare it with the group's current settings, and name any
+Rule-mode automation rules (SP/SB rejects those - see above). **Pass `acos` explicitly**: show
+the group's current target ACOS and the template's value and ask which to keep - a template's
+value is a generic starting point and may not fit the user's margin.
+
+### Recommending a template (optional, never forced)
+
+When the user asks how a group should be set up ("这个组该怎么设", "帮我看看设置"), or is
+hand-changing several action-space switches at once, you may suggest the system template that
+matches what the group's campaigns are for - once. Don't suggest one for a single-value change
+(target ACOS, budget, personality, one switch), when the user named a template or said not to
+use one, or after they declined. Every suggestion offers three choices: use this template /
+pick another / keep editing it myself. How to identify the purpose, the purpose -> template
+table with the reasons to give, and the apply steps:
+[`references/template-guide.md`](references/template-guide.md).
 
 ## RBA mode restriction
 
 - The tool may switch an existing group from **RBA (Rule mode) to AI mode**.
-- It must **not** switch a group from **AI mode to RBA**.
+- It must **not** switch a group from **AI mode to RBA**. The `aiAutomation` you pass may
+  only contain `0`; a `1` is rejected.
+- **On edit, every rule keeps its current mode** unless you set it to `0` (Rule -> AI).
+  Rules you omit are left as they are - a Rule-mode rule stays Rule.
+- **Turning an action-space switch on restores that space's existing mode.** If
+  `aiActionSettings.xxxStatus` goes to `1` (from your params or from a template) and the
+  group's matching rule is `status=1`, that action space comes back in **Rule** mode with
+  its old conditions. Check the group's `aiAutomation` before enabling a switch, and tell the
+  user if it will resume as Rule.
 - **RBA configuration is readable, but not writable.** A rule-mode group's actual conditions,
   actions, condition items, time periods and hour matrices come back from
   `get_entity_metadata(entity='aiGroup')` under `aiAutomation.{ruleType}` - so you *can* show
@@ -531,3 +591,4 @@ value as a write value** - look up the correct write value for the exact path yo
 - [`references/budget-limits.md`](references/budget-limits.md) - site/account-type budget ranges (front-end rules MCP bypasses)
 - [`references/enum-i18n.md`](references/enum-i18n.md) - 中文 <-> English <-> code
 - [`references/platform-notes.md`](references/platform-notes.md) - shared write-tool behavior (MCP-bypass principle, silent-ignore rule, envelope, errors)
+- [`references/template-guide.md`](references/template-guide.md) - recommending a system template by campaign purpose: when to offer it, purpose -> template table with reasons, identifying the purpose, what to say, and how to apply it

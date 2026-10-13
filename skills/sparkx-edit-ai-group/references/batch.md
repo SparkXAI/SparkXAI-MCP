@@ -64,16 +64,16 @@ Everything inside `request`; **Flat** operation params go in `batchParams`,
 > `targetPausedAdd`). Deserialization ignores case and underscores, so the UPPER_SNAKE_CASE
 > names above work too. An unrecognized value fails with `Unknown BatchOperationType: x`.
 
-> **⚠️ Word-list-related operations are unreliable in batch mode - avoid them.**
-> `NEGATIVE_TARGET`, `BRAND_TARGET`, `TARGET_PAUSED_ADD` and `TARGET_HARVEST_ACTION` touch
-> word-list config, which the SP/SB tool no longer accepts as input, and at least some of
-> them are rejected outright in batch mode. Server-side sources are inconsistent about
-> exactly which of the four are refused, so **treat all four as unavailable in batch**: do
-> them one group at a time in the platform, or tell the user word-list settings aren't
-> editable here. Don't probe production to find out which one works.
+> **⚠️ Word-list-related batch operations are rejected on SP/SB.** `save_sp_sb_ai_managed_group`
+> refuses `TARGET_HARVEST_ACTION`, `NEGATIVE_TARGET`, `BRAND_TARGET` and `TARGET_PAUSED_ADD`
+> before anything is written (they touch word-list / target-optimization settings). Tell the
+> user to change these in the platform. To only turn harvesting on/off, use `targetHarvest`.
+> On SD, `NEGATIVE_TARGET`, `BRAND_TARGET` and `TARGET_PAUSED_ADD` are not supported by
+> `edit_sd_ai_managed_group`; `TARGET_HARVEST_ACTION` is accepted there.
 
-> **`templateId` overrides `operation`.** If both are present, the template path runs and
-> the batch operation is ignored. Never send both.
+> **Never send `templateId` and `operation` together - which one wins depends on the tool.**
+> SD: `templateId` wins and the batch operation is ignored. SP/SB: `operation` wins and the
+> template is ignored.
 
 ## Flat operation parameter map
 
