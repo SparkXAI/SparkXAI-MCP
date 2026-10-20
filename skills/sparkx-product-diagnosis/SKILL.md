@@ -9,7 +9,7 @@ description: >-
   "ASIN health check". Not for account-wide structural share analysis (use sparkx-ads-structure-analysis)
   or periodic WoW/MoM recaps (use sparkx-weekly-ads-report / sparkx-monthly-ads-report).
 metadata:
-  version: 1.1.0
+  version: 1.1.2
 ---
 
 # Product Diagnosis
@@ -74,6 +74,34 @@ Always call `get_user_authorized_context` first to get the authorized `profiles`
 **`parentAsin`** — roll up to the parent level. Query `get_ads_perf` (`factEntity: asin`) with `select` including `asin.parent_asin_`, and aggregate child-ASIN rows under the same parent client-side (this tool has no native `factEntity: parentAsin` for performance data — only `get_entity_metadata`'s `asin` entity nests parent-ASIN fields alongside child fields, and that's metadata, not performance metrics).
 
 **`variant`** — compare sibling child ASINs under one parent. **Requires an anchor**: either the user names a specific parent ASIN, or names one child ASIN (resolve its `parentAsin` via `get_entity_metadata` first — plain camelCase, that tool's convention, not `get_ads_perf`'s `asin.parent_asin_` — then pull all children under that parent). Don't attempt a "variant" comparison across the whole catalog at once — it's inherently a one-parent-at-a-time comparison; if the user wants this for many parents, run it once per parent and present each as its own comparison, not a single merged table.
+
+## "Which variant should get the budget?"
+
+The question behind a variant comparison is usually not "which one is worse" but "where should
+the money go". Answer it, but be exact about what can actually be moved.
+
+**There is no per-ASIN budget.** Budget lives on the campaign (`dailyBudget`); a product has
+none. So a budget recommendation is always one of three shapes, and you should name which one
+you mean:
+
+| What the user wants | What that actually is |
+|---|---|
+| Spend more on variant A | raise the budget of the campaign(s) where A is the product being advertised |
+| Stop wasting on variant B | pause or archive B's product ad, or move it out of a shared ad group |
+| Split budget between variants | only possible if they sit in **different** campaigns - otherwise the campaign budget is shared and cannot be apportioned |
+
+⚠️ **Check whether the variants share a campaign before promising anything.** Siblings very
+often sit in one ad group, and then "give A more budget" is not available at all - the honest
+answer is "these two share a campaign budget; to fund them separately they have to be split
+into different campaigns first". Query `get_entity_metadata(entity='productAd')` for the ASINs
+and compare their `adGroupId` / `campaignId`.
+
+⚠️ **Do not attribute a shared campaign's spend to one variant.** When several ASINs run in one
+campaign, campaign- or ad-group-level metrics belong to the whole set. For per-product figures
+use `factEntity: "productAd"`; see the fan-out rules in `sparkx-query-ads-performance`.
+
+State the comparison before the recommendation: each variant's own spend, sales and ACOS from
+`productAd` rows, then what you suggest moving and what that costs the other variant.
 
 ## Shared Rules: Target ACOS, Thresholds, Managed Groups, Promotions
 

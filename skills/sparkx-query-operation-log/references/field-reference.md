@@ -362,7 +362,41 @@ Placement type filter. Narrows placement operations to specific placement types.
 | createdDate | string | Operation timestamp, `yyyy-MM-dd HH:mm:ss`. **⚠️ Timezone is not fixed** — `aiGroup` rows are UTC always; `campaign`/`adGroup`/`target`/`placement` rows are **store-local when you pass one `profileId`** and **UTC when you pass several**. Verified 2026-08 on a US (`America/Los_Angeles`) profile: the same pause record returned `2026-08-24 00:01:06` for one profileId and `2026-08-24 07:01:06` for two. Always label the zone, never merge single- and multi-profile results, and remember a mixed-entity response can contain both clocks in one time-sorted list (so it is not reliably chronological). See SKILL.md → "createdDate Timezone" |
 | changedBy | string | Who made the change, as a **display value** - `AI`, `Manual`, `Automation`, `AI-Custom Rule`, `Budget Management`, `Lock Ranking`, `Amazon Console`, `API`, `Labels`, `System` - or a platform user's **email**. These are not the lowercase `changeBy` filter values; see the `changeBy` note above |
 | aiGroupScheduleId | long | Schedule ID (present on aiGroup-related logs) |
+| operationSource | string | Which surface the change was made from (`MCP`, `PAGE`, `FEISHU`, and older values such as `platform` / `automation`). **Read-only and not filterable**; `null` means not recorded, not "manual" - see the section below |
 
 ---
+
+### `operationSource` - where the change was made from
+
+This field says which surface an operation came from: the web console, MCP, Feishu, and so on.
+It is useful, but it has three properties that make a naive reading wrong.
+
+**1. It is read-only. There is no filter for it.** `get_operation_log` takes no source
+parameter, so "show me only the changes made through MCP" cannot be pushed down - pull the rows
+and group them client-side, and say that is what you did.
+
+**2. MCP's own writes are tagged, including managed groups.** Every write path this server
+offers stamps the source on the request, so a change you made through MCP comes back as `MCP` -
+advertising entities and AI managed groups alike, on create, edit and batch. Verified end to end
+against the operation log.
+
+**But `null` still means "not recorded", not "done by a human".** Rows written before the field
+existed carry `null`, and so does anything whose upstream did not supply a source. Treat `null`
+as no information: don't read it as manual, as console, or as "not MCP". If the answer depends
+on who made a change, use `changedBy` - that field is populated far more consistently - and use
+`operationSource` to say *where from* once you already know *what* happened.
+
+**3. The values are not a closed set.** The field carries whatever the downstream stored, and
+two vocabularies share it: the older `platform` / `amazon` / `automation` / `recommendations`
+(*where* the change originated) and the newer `MCP` / `PAGE` / `FEISHU` (*which surface inside
+the platform*). A row reading `automation` tells you a rule made the change but not which
+surface configured it. Report the value you got; don't map it onto a list of your own, and
+don't assume a value you haven't seen is impossible.
+
+**What it is good for**, within those limits: saying which surface a change came from once
+you have the row, and separating rule-driven rows from human ones alongside `changedBy`.
+**What it is not good for**: filtering (there is no parameter), counting usage across a
+period (older rows carry no source, so any total is a floor), or any claim that rests on
+`null` meaning something.
 
 **Enum i18n**: When presenting enum values to the user or translating between API values and display labels, consult [`enum-i18n.md`](enum-i18n.md) for the complete ZH/EN/JA mapping of all enum fields documented above.

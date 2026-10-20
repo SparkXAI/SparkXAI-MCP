@@ -89,7 +89,8 @@ Use this map for SD at the top level and for SP/SB inside `batchParams`:
 | `TARGET_HARVEST` | `targetHarvestStatus` |
 | `DYNAMIC_BUDGET` | `budgetDynamicStatus`; when enabling, also `numType` + `num` |
 | `CAMPAIGN_NAME_SIGN` | `campaignNameSign`; when disabling, also `campaignNameRecoveryType` |
-| `AI_PERSONALITY` | `aiPersonality` (`1`-`5`; at least `3` for volume mode) |
+| `AI_PERSONALITY` | `aiPersonality` (`1`-`5`; at least `3` for volume mode). **Legacy accounts only** - rejected where personality is set per action space; that route is `actionSpaceIntensity`, see [`ai-personality.md`](ai-personality.md) |
+| `actionSpaceIntensity` | `actionSpaces` (list of action-space names, or `["all"]`) + `intensity` (`1`-`5`, required). **Per-action-space accounts only.** `["all"]` with any SB id in `ids` fails the whole batch - see [`ai-personality.md`](ai-personality.md) |
 
 The containers differ, but the mutual-exclusion rules do not: never send both
 `budget` and `budgetRatio`, `acos` and `acosRatio`, or `roas` and `roasRatio`.

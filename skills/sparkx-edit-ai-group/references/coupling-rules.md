@@ -74,8 +74,17 @@ faster when ACOS is badly off target. Field: `bidPerformanceStrictAcosStatus` (`
 - **SP only** - SB and SD do not support it; don't send it for them.
 - **Requires ALL of these together, or it will NOT trigger** (don't claim it's active
   otherwise): `targetType=2` (Maintain Stability / 保持订单稳定) **and** `bidPerformanceStatus=1`
-  (按表现调价 on, AI mode) **and** `aiPersonality >= 3`. Enabling it means setting/confirming
-  all three; `aiPersonality` 1-2 never triggers it.
+  (performance bidding on, AI mode) **and** an AI personality of at least `3` on performance
+  bidding. Enabling it means setting/confirming all three; a personality of 1-2 never
+  triggers it. **Which field carries that personality depends on the account.**
+  - **Legacy accounts**: the group-level `aiPersonality`.
+  - **Accounts that set personality per action space**: `bidPerformanceAiPersonality`.
+    The group-level `aiPersonality` is still returned by a read on these accounts, but it
+    is read-only and **no longer drives this rule** - don't evaluate the condition from it.
+  - **When you can't tell**: a missing `*AiPersonality` field does **not** prove the
+    account is legacy - a failed capability lookup returns the legacy shape too. Treat the
+    rule as **not satisfied** unless one of the two readings clearly meets `>= 3`, and say
+    which reading you used. See [`ai-personality.md`](ai-personality.md).
 - **Auto Pacing wins:** if the group's `isAutoPacing` is on, Strict ACOS is **paused** until
   Auto Pacing is turned off. Read `isAutoPacing` and tell the user if it will be suppressed.
 - **Scope:** affects **base bid only** (not targeting / budget / negatives); no weekday

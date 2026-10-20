@@ -8,7 +8,7 @@ description: >-
   which ads, enabled/paused status, budget settings, bidding strategy, automation rules,
   managed group schedule, flight, seasonal plan, rule mode config, RBA rule conditions
 metadata:
-  version: 1.4.3
+  version: 1.4.5
 ---
 
 # Query Entity Metadata Skill
@@ -386,6 +386,32 @@ Required `filters.asin`. Returns `keywordText`, `matchType`, `suggestedBid`,
 `suggestedBidRangeStart` / `suggestedBidRangeEnd`, `keywordTranslation` and
 `recommendationRank`. Rank is the downstream's ordering - respect it rather than re-sorting
 by bid.
+
+**The rows drop straight into a campaign.** `matchType` comes back lower-case
+(`exact` / `phrase` / `broad`), which is exactly what `create_sp_sb_campaign` takes in
+`keywords[].matchType`, and `suggestedBid` is the bid for that keyword **at that match type** -
+the same keyword is priced differently per match type, so carry the pair together and never
+reuse one match type's bid for another.
+
+**Suggesting keywords for a new campaign, end to end:**
+
+1. `get_entity_metadata(entity='suggestedKeyword', filters={"asin": "<the ASIN(s) to advertise>"})`
+   - one `profileId` only, not paginated, returns every row at once.
+2. Show the user a shortlist in `recommendationRank` order with the bid for each match type, and
+   let them choose. Do not silently take the top N.
+3. Put the chosen rows into `keywords[]` of `create_sp_sb_campaign`. **The field names are
+   not the same on both sides** - map them one by one:
+
+   | Row from `suggestedKeyword` | Field in `keywords[]` |
+   |---|---|
+   | `keywordText` | `keywordText` |
+   | `matchType` | `matchType` |
+   | **`suggestedBid`** | **`bid`** |
+
+   There is no `suggestedBid` field on `keywords[]`; sending the row unchanged drops the bid.
+
+`suggestedBid` on its own entity prices **your** keywords instead
+(`filters.keyword` + `filters.matchType`); use that when the user brings their own list.
 
 ### `suggestedTarget` - product **and** category suggestions
 

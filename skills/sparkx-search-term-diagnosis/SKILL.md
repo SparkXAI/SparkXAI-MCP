@@ -12,7 +12,7 @@ description: >-
   marketplace structure (sparkx-ads-structure-analysis) or ASIN health
   (sparkx-product-diagnosis).
 metadata:
-  version: 1.0.0
+  version: 1.0.2
 ---
 
 # Search Term Diagnosis (搜索词流量结构诊断)

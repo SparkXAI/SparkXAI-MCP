@@ -9,7 +9,7 @@ description: >-
   existing ones (use sparkx-edit-ads), for AI managed groups (use sparkx-create-ai-group), or
   for reading data (use sparkx-query-ads-performance / sparkx-query-entity-metadata).
 metadata:
-  version: 1.0.2
+  version: 1.0.4
 ---
 
 # Create Sponsored Products campaigns
@@ -51,6 +51,8 @@ rest".
    two stores are two calls.
 2. `get_entity_metadata(entity='asin')` -> the ASINs you will promote, and **their SKUs on a
    Seller profile**. Do not invent SKUs; see "Seller vs Vendor" below.
+   **An ASIN that returns nothing may be a parent** - see "A parent ASIN cannot be advertised"
+   below before telling the user it doesn't exist.
 3. If the user asked for keyword or product-target suggestions, the suggestion entities live
    in `sparkx-query-entity-metadata`. All of them need exactly one `profileId`, but **their
    mandatory filters differ - they are not interchangeable**:
@@ -145,6 +147,35 @@ On a Seller profile a pair that is not found is **rejected**. Read SKUs from
 ⚠️ **If the catalog lookup itself fails, the call is rejected too** (nothing is created). That
 error means *retry*, not *change the ASIN*. Resending a different ASIN because a lookup
 failed is how you end up advertising the wrong product.
+
+## A parent ASIN cannot be advertised - expand it to its children
+
+`get_entity_metadata(entity='asin')` lists **advertisable products**, and a parent ASIN is not
+one of them: Amazon advertises the child (variation) ASINs, never the parent. So a user who
+hands you a parent gets an empty lookup, which reads as "this product doesn't exist" when it
+actually means "this one can't be advertised, but its children can".
+
+**When `{"asin": "<value>"}` returns no rows, re-query by parent before concluding anything:**
+
+```
+get_entity_metadata(entity='asin', filters={"parentAsin": "<the same value>"})
+```
+
+- **Rows come back** -> it is a parent. **Deduplicate the rows** (the same child can appear more
+  than once), then show the children - ASIN and title - and ask which ones to advertise.
+- **Still nothing** -> it genuinely isn't in this profile's catalog. Say so; don't guess at a
+  different ASIN.
+
+⚠️ **Do not substitute silently.** "Couldn't find it, so I advertised all its children" is a
+different campaign from the one the user asked for, and a parent can have many children. Expand,
+show, and let them choose - the preview is where they see what will actually be promoted.
+
+⚠️ **Do not decide parentage from the field alone.** A standalone product with no variations
+comes back with `parentAsin` equal to its own `asin`. The only reliable test is the pair of
+queries above: not found as `asin`, found as `parentAsin`.
+
+This is a lookup detail, not a reason to change the product. The "lookup failure means retry,
+not a different ASIN" rule above still applies.
 
 ## Audience targeting is optional, and verified
 

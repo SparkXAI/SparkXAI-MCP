@@ -45,7 +45,7 @@ if the user needs to know what's active.
 | `aiStatus` | int | `0`=off, `1`=on. **Omit it** - the server fills in `1` and the group starts optimizing. Send `0` only when the user asked for it not to start. A template never sets it |
 | `campaignIds` | int[] | Campaigns to include (auto-increment IDs). Omit to create an empty group |
 | `campaignNameSign` | int | Campaign-name label: `0`=off, `1`=on |
-| `aiPersonality` | int | `1`-`5`; **must be >=3 when `targetType=3` (volume/冲量)** (front-end rule - MCP won't enforce it) |
+| `aiPersonality` | int | `1`-`5`; **must be >=3 when `targetType=3` (volume/冲量)** (front-end rule - MCP won't enforce it). ⚠️ **Rejected on accounts that set personality per action space** - send the `*AiPersonality` fields inside `aiActionSettings` instead; see [`ai-personality.md`](ai-personality.md) |
 | `preAddCampaignNums` | int | Pre-add campaign count |
 | `aiAutomation` | object | AI/Rule mode fields: create may use only `0`=AI; never `1`=Rule/RBA. See field-reference |
 | `aiActionSettings` | object | Supported action-space config (bid / struct / budget / target optimization). See field-reference |
@@ -140,5 +140,19 @@ Success returns `data.result.aiGroupId`. Then verify with the full-signature rea
 filters={"aiGroupName": {"like": "%SP-Core-Keywords-US%"}}, userContext='verify created group')`
 and exact-match the name in the results (the filter is a substring `like`).
 
-> Reminder: a group created with `aiStatus=0` reads back as `aiStatus=2`
-> ("AI Turned Off") - that's expected, it is off.
+> Reminder: a group created with `aiStatus=0` **reads back as `0`** ("never turned on"),
+> not as `2`. Both mean AI is not running; the distinction only matters because of the
+> two notes below.
+>
+> ⚠️ **`2` is a read-side value only. Never send it back into a write.** The write
+> side takes `0` (off) and `1` (on); `2` is what the read side uses to distinguish
+> "was turned off" from "never turned on" (`0`). Echoing a group you just read into an
+> edit therefore carries a value the write contract does not define, and nothing in the
+> tool layer validates it. Build the write payload from what you intend - `0` or `1` -
+> not from the row you read. Same trap as `isActive` on schedules.
+>
+> ⚠️ **A group that was never turned on does not stay at `0`.** Known downstream
+> behaviour: a group reading `aiStatus=0` is stored as `aiStatus=2` after **any** edit,
+> even one that never mentions `aiStatus`. So a later read showing `2` does not prove
+> someone turned AI off - it may only mean the group was edited once. Both values mean
+> AI is not running; don't narrate `0` -> `2` to the user as a change they made.

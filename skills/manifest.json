@@ -1,12 +1,12 @@
 {
   "$schema_note": "Machine-readable manifest of SparkX AI MCP official skills. Version fields must stay in sync with each skill's SKILL.md frontmatter (`metadata.version`).",
   "manifest_version": 1,
-  "updated_at": "2026-10-13",
-  "release": "v1.3.1",
+  "updated_at": "2026-10-20",
+  "release": "v1.3.2",
   "skills": [
     {
       "name": "sparkx-query-ads-performance",
-      "version": "1.4.3",
+      "version": "1.4.5",
       "required": true,
       "mcp_tools": ["get_ads_perf"],
       "scopes": ["amazon_sa_performance_data:read"],
@@ -15,7 +15,7 @@
     },
     {
       "name": "sparkx-query-entity-metadata",
-      "version": "1.4.3",
+      "version": "1.4.5",
       "required": true,
       "mcp_tools": ["get_entity_metadata"],
       "scopes": ["amazon_sa_ads_configuration:read"],
@@ -24,7 +24,7 @@
     },
     {
       "name": "sparkx-query-operation-log",
-      "version": "1.3.3",
+      "version": "1.3.5",
       "required": true,
       "mcp_tools": ["get_operation_log"],
       "scopes": ["amazon_sa_ads_logs:read"],
@@ -33,25 +33,25 @@
     },
     {
       "name": "sparkx-create-ai-group",
-      "version": "1.2.0",
+      "version": "1.2.2",
       "required": true,
-      "mcp_tools": ["create_sd_ai_managed_group", "save_sp_sb_ai_managed_group", "save_sp_sb_ai_group_schedule", "get_ai_group_template"],
+      "mcp_tools": ["create_sd_ai_managed_group", "save_sp_sb_ai_managed_group", "save_sp_sb_ai_group_schedule", "get_ai_group_template", "get_sp_sb_ai_personality_recommendation"],
       "scopes": ["amazon_sa_managed_group:write"],
       "path": "sparkx-create-ai-group",
       "description": "Create SP, SB, or SD AI managed groups and assign campaigns after explicit confirmation, optionally from a platform template recommended by campaign purpose, and with an SP/SB schedule."
     },
     {
       "name": "sparkx-edit-ai-group",
-      "version": "1.2.0",
+      "version": "1.2.2",
       "required": true,
-      "mcp_tools": ["edit_sd_ai_managed_group", "save_sp_sb_ai_managed_group", "save_sp_sb_ai_group_schedule", "get_ai_group_template"],
+      "mcp_tools": ["edit_sd_ai_managed_group", "save_sp_sb_ai_managed_group", "save_sp_sb_ai_group_schedule", "get_ai_group_template", "get_sp_sb_ai_personality_recommendation"],
       "scopes": ["amazon_sa_managed_group:write"],
       "path": "sparkx-edit-ai-group",
       "description": "Edit one or multiple AI managed groups with confirmation and read-back verification; apply templates (recommended by campaign purpose) and manage SP/SB group schedules."
     },
     {
       "name": "sparkx-delete-ai-group",
-      "version": "1.0.7",
+      "version": "1.0.9",
       "required": true,
       "mcp_tools": ["delete_ai_managed_group"],
       "scopes": ["amazon_sa_managed_group_delete:write"],
@@ -60,7 +60,7 @@
     },
     {
       "name": "sparkx-edit-ads",
-      "version": "1.1.2",
+      "version": "1.1.4",
       "required": true,
       "mcp_tools": ["batch_update_ads"],
       "scopes": ["amazon_sa_campaign_edit:write"],
@@ -69,7 +69,7 @@
     },
     {
       "name": "sparkx-create-campaign",
-      "version": "1.0.2",
+      "version": "1.0.4",
       "required": true,
       "mcp_tools": ["create_sp_sb_campaign"],
       "scopes": ["amazon_sa_campaign_create:write"],
@@ -78,7 +78,7 @@
     },
     {
       "name": "sparkx-weekly-ads-report",
-      "version": "1.1.0",
+      "version": "1.1.2",
       "required": false,
       "mcp_tools": ["get_ads_perf", "get_entity_metadata", "get_operation_log"],
       "scopes": ["amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read"],
@@ -87,7 +87,7 @@
     },
     {
       "name": "sparkx-monthly-ads-report",
-      "version": "1.1.0",
+      "version": "1.1.2",
       "required": false,
       "mcp_tools": ["get_ads_perf", "get_entity_metadata", "get_operation_log"],
       "scopes": ["amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read"],
@@ -96,7 +96,7 @@
     },
     {
       "name": "sparkx-ads-structure-analysis",
-      "version": "1.1.0",
+      "version": "1.1.2",
       "required": false,
       "mcp_tools": ["get_ads_perf", "get_entity_metadata"],
       "scopes": ["amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read"],
@@ -105,7 +105,7 @@
     },
     {
       "name": "sparkx-product-diagnosis",
-      "version": "1.1.0",
+      "version": "1.1.2",
       "required": false,
       "mcp_tools": ["get_ads_perf", "get_entity_metadata", "get_operation_log"],
       "scopes": ["amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read"],
@@ -114,7 +114,7 @@
     },
     {
       "name": "sparkx-search-term-diagnosis",
-      "version": "1.0.0",
+      "version": "1.0.2",
       "required": false,
       "mcp_tools": ["get_ads_perf", "get_entity_metadata"],
       "scopes": ["amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read"],
@@ -123,7 +123,7 @@
     },
     {
       "name": "sparkx-promo-reset",
-      "version": "1.0.0",
+      "version": "1.0.2",
       "required": false,
       "mcp_tools": ["get_operation_log", "get_ads_perf", "get_entity_metadata", "batch_update_ads", "save_sp_sb_ai_managed_group", "edit_sd_ai_managed_group"],
       "scopes": ["amazon_sa_ads_logs:read", "amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_campaign_edit:write", "amazon_sa_managed_group:write"],

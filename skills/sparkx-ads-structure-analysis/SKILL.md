@@ -10,7 +10,7 @@ description: >-
   sparkx-weekly-ads-report / sparkx-monthly-ads-report / a lighter ad-hoc analysis skill), product-level diagnosis
   (use sparkx-product-diagnosis), or search-term diagnosis (use sparkx-search-term-diagnosis).
 metadata:
-  version: 1.1.0
+  version: 1.1.2
 ---
 
 # Ads Structure Analysis
@@ -88,6 +88,24 @@ Constraints you must respect and disclose:
 - **T+2 delay** hits hardest here: the most recent hours are incomplete, so drop or label the trailing partial day rather than reporting a fake evening collapse.
 - **Timezone is not stated** for hourly buckets, so avoid strong claims like "spend peaks at 8pm local"; describe the shape ("a clear evening peak") and note the hour labels' zone is unconfirmed.
 
+**What you can actually change after reading an hourly pattern.** Finding a dead window is
+only useful if something can act on it, and MCP's reach here is narrower than the platform's:
+
+| | Writable through MCP |
+|---|---|
+| Turn AI bid-dayparting on/off | ✅ `aiActionSettings.bidDaypartStatus` on the managed group |
+| Turn AI budget-dayparting on/off | ✅ `aiActionSettings.budgetDaypartStatus` |
+| How aggressive each is | ✅ the matching AI personality field |
+| Which days budget-dayparting runs | ✅ `aiAutomation.budgetDaypartExcuteDays` |
+| **A specific hour-by-hour schedule** | ❌ not writable - no tool writes the hour matrix |
+| **Rule mode for dayparting** | ❌ `1` = Rule mode is rejected by the tool; only `0` (AI mode) |
+| **Campaign-level hourly bid multipliers** | ❌ `batch_update_ads` has no dayparting route |
+
+So the useful recommendation is usually "hand the pattern to AI dayparting and set how
+aggressive it should be", not "set 8pm to -40%". When the user wants a specific hour schedule,
+say plainly that it has to be set in the platform, and offer the AI route as the alternative -
+don't describe an hour matrix you cannot write.
+
 A keyword × placement structural view is also possible (`factEntity: "keywordPlacement"`, SP only, hourly, ≤7 days) — see `sparkx-query-ads-performance`'s hourly/AMS example. Note its AI metrics are placeholders (`AISpend`/`AISales` = 0, `AIACOS`/`AIROAS` = null), so don't put AI columns in that table.
 
 **`campaignTier`** — campaigns ranked by spend and cut into five bands, to see whether efficiency
@@ -103,6 +121,27 @@ campaign-level window totals and band them client-side (Step 2 and "Campaign tie
 **`weekdayWeekend`**: use the `dayOfWeek` breakdown above, then bucket further into two groups (Mon-Fri vs Sat-Sun) rather than 7 separate days, if that's what the user actually asked ("workday vs weekend" is coarser than "which specific day of the week").
 
 **Companion breakdowns customers often ask for alongside `campaignType`**: the product's own "Campaign Type Analysis" dashboard template pairs the campaign-type view with a **targeting-type breakdown** (manual vs auto — covered here via `spDeepDive`) and a **search-term match-type breakdown** (broad/phrase/exact, etc.). The second one is **not covered by this skill** — `sparkx-search-term-diagnosis` (if installed) covers it (spend by match-type source). If a customer's ask naturally extends into match-type territory (e.g. "结构分析完了，再看看搜索词匹配类型"), say plainly that this skill's scope stops at campaign/targeting-type structure and point them to that skill instead of folding match-type analysis into this output.
+
+## Before recommending that something be stopped
+
+A structural analysis often ends in "this campaign isn't earning its share". Two things to get
+right before that becomes an action.
+
+**1. Check what depends on it.** Stopping a campaign stops every ad group, product ad and
+keyword under it, and a product advertised *only* there loses all its advertising. Read
+`get_entity_metadata(entity='productAd')` for the campaign and say which ASINs go dark - and
+whether any of them run nowhere else. A long-tail campaign is often the only place a long-tail
+product is advertised.
+
+**2. There is no delete, and archiving is the irreversible one.** `batch_update_ads` takes
+`enabled`, `paused` and `archived` - nothing hard-deletes. So the choice is:
+
+- **pause** - reversible, the default recommendation for "stop spending on this"
+- **archive** - **cannot be undone**, and it is what the user means by "delete". Never pick it
+  for them: say it is irreversible, say what pausing would do instead, and let them choose.
+
+Recommend pausing unless the user asked to clean up permanently. Either way the usual
+confirmation rules in `sparkx-edit-ads` apply - this skill analyses, it does not write.
 
 ## Shared Rules: Target ACOS, Thresholds, Managed Groups, Promotions
 

@@ -168,6 +168,8 @@ larger than the unfiltered one**, which is never possible.
 | `timeout` | Query timeout | Narrow the range and retry |
 | `service_unavailable` | Backend data source unavailable | ClickHouse connection pool exhausted — transient, retry shortly |
 | `auth_service_unavailable` | Auth service unavailable | Auth check failed closed (503) — transient, retry shortly |
+| `capability_unavailable` | Capability check unavailable | A dependent capability lookup failed; the request was **not executed** — retry the same call unchanged later (`service: Auth_Service`, message `能力查询暂不可用，请稍后重试`) |
+| `query_shape_unsupported` | The entity combination cannot be joined | **Not retryable — change the query, not the timing.** The requested `factEntity` and dimensions cannot be connected: either a granularity rule blocked the path or the entities are unrelated. Messages read `Cannot connect CTEs: [...]` or `Cannot connect all terminal nodes, remaining: [...]`. Drop the dimension that doesn't belong to the fact entity's own hierarchy, or query it separately and join the results yourself. Previously this came back as `business_error`, so older advice to "retry" does not apply |
 
 **The configured rate-limit policy** (token-bucket, per 60s window). Whether limiting is switched on is an environment setting, so you may never hit these — but plan against them rather than assuming they're off:
 

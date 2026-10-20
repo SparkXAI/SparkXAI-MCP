@@ -196,6 +196,7 @@ placements — always pair the label with its campaign type. Full label table in
 | `productAd.asin_` | ASIN | — |
 | `productAd.sku_` | SKU | — |
 | `productAd.productAdState_` | State | `enabled` / `paused` / `archived` |
+| `productAd.campaignType_` | Campaign type of the parent campaign | `sponsoredProducts` / `sponsoredBrands` / `sponsoredDisplay` |
 
 ### ASIN (child)
 

@@ -10,7 +10,7 @@ description: >-
   those uses sparkx-create-ai-group / sparkx-edit-ai-group / sparkx-delete-ai-group. Not for
   reading data (use sparkx-query-ads-performance / sparkx-query-entity-metadata).
 metadata:
-  version: 1.1.2
+  version: 1.1.4
 ---
 
 # Edit Ads
@@ -373,6 +373,40 @@ These words map to different routes, and choosing wrong changes live spend:
   **neither is idempotent** - running "increaseAmount 10" twice adds 20.
 
 If a request could mean more than one of these, **stop and ask**.
+
+## Competitor-ASIN targeting, end to end
+
+"Target my competitors" is three steps across three tools, and the middle one is the step people
+skip. Each tool lives in a different skill, so say which you are using.
+
+**1. Find candidates** - `get_entity_metadata(entity='suggestedTarget')` with `filters.asin`
+set to the products being advertised (`sparkx-query-entity-metadata`). Rows come back in two
+kinds: `targetType: "product"` carries an `asin` you can target, `targetType: "category"`
+carries a category and is only usable when `canBeTargeted` is true. Keep both kinds in front of
+the user unless they asked for one - the product rows *are* the competitor suggestions.
+
+The suggestions are Amazon's, not a competitor analysis: they are products Amazon considers
+adjacent, which usually includes the user's own ASINs. Drop their own products before calling
+anything a competitor.
+
+**2. Evaluate what is already running** before adding more -
+`get_ads_perf(factEntity: "target", queryType: "product")` gives spend, sales and ACOS per
+product target. A competitor target that has spent without converting is the argument for
+lowering or pausing it; one converting below target ACOS is the argument for raising its bid.
+Adding new targets while existing ones are bleeding just spreads the budget thinner.
+
+**3. Adjust** through `batch_update_ads`' target routes - bid changes and status changes, with
+the usual two-phase confirmation. See `references/write-target.md` for the exact route and
+fields.
+
+⚠️ **Targeting a competitor is not free traffic.** Product targeting generally converts worse
+than brand or category keywords, so show the user the expected cost before the write: what the
+bid is, roughly what it will spend, and what it is displacing. "Add 20 competitor ASINs" with no
+bid discussion is how a budget disappears overnight.
+
+⚠️ **New targets need a bid.** `suggestedBid` on manual product targeting is not available
+before the campaign exists, so for targets added to a *new* campaign there is no suggestion to
+fall back on - use the ad group's default bid or ask, and say which you did.
 
 ## What these files do not tell you
 

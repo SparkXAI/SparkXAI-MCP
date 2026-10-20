@@ -51,6 +51,12 @@ Top-level: `aiStatus` (`0`=off, `1`=on), `targetType` (`1` growth / `2` stabilit
 `aiPersonality` (`1`-`5`, **>=3 when `targetType=3`**), and the nested
 `aiActionSettings` / `aiAutomation` objects.
 
+⚠️ **`aiPersonality` is group-level and belongs to legacy accounts.** On an account that
+sets personality per action space it is rejected before any downstream call, and the 12
+`*AiPersonality` fields inside `aiActionSettings` take its place. You cannot tell which
+kind of account you are on in advance - read [`ai-personality.md`](ai-personality.md) before
+sending either form.
+
 ## Changing campaign membership - don't assume append
 
 The tool describes `campaignIds` as "campaigns to include; omit to keep current". It is
@@ -99,6 +105,10 @@ always uses the other tool (`edit_sd_ai_managed_group`) - never in the same call
 
 (`targetType=3` volume requires `aiPersonality >= 3` - 4 is fine.) Then verify by
 reading the group back and confirming `targetType`/`aiPersonality` changed.
+
+**This example is the legacy-account shape.** On a per-action-space account the same call
+is rejected for carrying `aiPersonality`; send `bidPerformanceAiPersonality` and the other
+relevant fields inside `aiActionSettings` instead - see [`ai-personality.md`](ai-personality.md).
 
 > Reminder: if the group's AI is running (`aiStatus=1`), some changes may be silently
 > skipped - verify, and don't turn AI off on your own to force them.

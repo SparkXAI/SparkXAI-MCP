@@ -6,6 +6,33 @@ unsupported ones; **MCP does not** - so before enabling any action-space switch,
 it's actually supported for this group's `campaignType`. If it isn't, tell the user
 it's not supported for that ad type and don't send it.
 
+## What AI is allowed to do by default
+
+**On create, an omitted `aiActionSettings` is not "everything off".** The server fills in a
+default action space, and for SP most of it is on:
+
+| Switch | SP default | SB default |
+|---|---|---|
+| `bidPerformanceStatus` - bid by performance | **on** | **on** |
+| `bidDaypartStatus` - dayparting bids | **on** | off |
+| `bidAdPlaceStatus` - placement bids | **on** | not supported |
+| `bidAmazonBusinessStatus` - Amazon Business bids | **on** | not supported |
+| `budgetDaypartStatus` - dayparting budget | **on** | **on** |
+| `budgetRedistributeStatus` - redistribute budget | **on** | **on** |
+| `budgetDynamicStatus` - dynamic budget | off | off |
+| `structPauseProductStatus` - **pause products** | **on** | not supported |
+| `structPauseCampaignStatus` - **pause campaigns** | **on** | not supported |
+
+So an SP group created without `aiActionSettings` starts with **8 of 9 switches on**, including
+the two that stop delivery. Combined with AI starting on by default, "just create the group"
+means AI may pause a product or a campaign without the user having asked for that specifically.
+
+**Name the delivery-affecting ones in the preview.** A user told "AI will adjust bids and
+budgets" has not been told it can also turn their products off. If they want bidding only, send
+`structPauseProductStatus: 0` and `structPauseCampaignStatus: 0` explicitly on create.
+
+On **edit**, omitted switches keep their current values - the defaults above apply to create only.
+
 **Two different failure modes, depending on the field:**
 
 - **SP-only fields on an SB group are now rejected outright.** The call fails with

@@ -11,7 +11,7 @@ description: >-
   creates the group itself - it is NOT for enabling or editing an existing group (use
   sparkx-edit-ai-group) or deleting one (use sparkx-delete-ai-group).
 metadata:
-  version: 1.2.0
+  version: 1.2.2
 ---
 
 # Create AI Managed Group
@@ -90,7 +90,10 @@ confirm the meaning first, then use the ad-type reference to pick the field.
   excepted) - see "AI on vs off at creation" below and the preview step.
 - **"ACOS 优先模式 / strict ACOS / ACOS priority"** (`bidPerformanceStrictAcosStatus`) - a
   sub-switch of 按表现调价, **SP only**, and only triggers with `targetType=2` +
-  `bidPerformanceStatus=1` + `aiPersonality>=3`. It's a tradeoff (may underspend / reduce
+  `bidPerformanceStatus=1` + an AI personality of at least `3` on 按表现调价 - which
+  field that is depends on the account: group-level `aiPersonality` on legacy
+  accounts, `bidPerformanceAiPersonality` where personality is set per action space
+  ([`references/ai-personality.md`](references/ai-personality.md)). It's a tradeoff (may underspend / reduce
   orders) - confirm with the user before enabling. See
   [`references/coupling-rules.md`](references/coupling-rules.md).
 
@@ -129,10 +132,11 @@ confirm the meaning first, then use the ad-type reference to pick the field.
      filters={"aiGroupName": {"like": "%<name>%"}}, userContext='...')`, then compare names
      **exactly** in the returned rows. If an exact match exists, ask for a different
      name rather than letting the create fail.
-   - **Name not blank, and ≤ 200 characters.** Reject a pure-whitespace / trims-to-empty
-     name yourself - the UI blocks it, MCP doesn't. The UI also caps the name at **200
-     characters**; the API doesn't state a limit, so treat 200 as the safe ceiling and
-     shorten with the user's agreement rather than sending something longer. A duplicate
+   - **Name not blank, and ≤ 200 characters.** The tool now enforces both **before any
+     downstream call**: the name is trimmed and rejected past 200 characters on create,
+     edit and template mode, and a blank name is rejected on edit. Still check it
+     yourself - a name the user has to shorten is better discussed before the write than
+     relayed back as an error. A duplicate
      name comes back from the backend as `aiGroupName is exist` (code `124025`) - the
      pre-flight check above is what keeps you from hitting it.
    - **Already-managed campaigns (checkable).** A campaign already in another managed
@@ -148,7 +152,9 @@ confirm the meaning first, then use the ad-type reference to pick the field.
    without waiting for a reply - what you show does not shrink, only the wait goes away.
    Echo the
    **complete** config, not just the basics: ad type, group name, the campaigns (by
-   name), `targetType`/`optimizeType`, target ACOS, budget settings, `aiPersonality`,
+   name), `targetType`/`optimizeType`, target ACOS, budget settings, **the AI
+   personality in whichever form this account uses** (the group-level `aiPersonality`,
+   or the per-action-space values - see [`references/ai-personality.md`](references/ai-personality.md)),
    `campaignNameSign`, and **every supported action-space switch you're enabling**
    (bid / budget / target / struct optimization). For anything you're not
    setting, say it will use the platform default - but **don't invent specific default
@@ -160,8 +166,12 @@ confirm the meaning first, then use the ad-type reference to pick the field.
    live delivery and spend.
    - **AI starts ON unless the user asked for it not to.** Creating a managed group is
      taken as intent to use it, so leave `aiStatus` out (SP/SB) or send `status = 1`
-     (SD) and **say plainly in the preview that AI will begin adjusting bids and budgets
-     immediately**. Only when the user asks to set it up without starting - "先别开",
+     (SD) and **say plainly in the preview what AI will start doing immediately**. For
+     SP that is more than bids and budgets: the default action space also lets AI
+     **pause products and pause campaigns** (see "What AI is allowed to do by default"
+     in `references/action-space-matrix.md`). Name the delivery-affecting ones, not
+     just "adjust bids and budgets" - that sentence understates it, and the preview
+     is the user's only chance to decline. Only when the user asks to set it up without starting - "先别开",
      "create but don't start", "先不要启动" - send `0`, and confirm that back to them.
      The preview is where they get to decline, so the sentence has to be there.
      **One exception you initiate yourself - staged flows (SP/SB only):** when the final
@@ -195,7 +205,15 @@ confirm the meaning first, then use the ad-type reference to pick the field.
      are only partly known and the backend may enforce them, so relay backend range
      errors rather than hard-blocking on an incomplete table
      ([`references/budget-limits.md`](references/budget-limits.md)).
-   - **aiPersonality** `1`-`5`, and **>=3 when `targetType=3` (volume / 冲量)**.
+   - **AI personality** `1`-`5`. Which field carries it depends on the account:
+     group-level `aiPersonality` (**>=3 when `targetType=3` volume / 冲量**) on legacy
+     accounts, or the per-action-space `*AiPersonality` fields inside
+     `aiActionSettings` where those are in use - sending the wrong one is rejected
+     before any write. **On a legacy account, send nothing if the user didn't ask to change
+     it. On an intensity-enabled account you cannot skip it on a create** - at least one
+     applicable `*AiPersonality` must hold a `1`-`5` after any template is merged in, so ask,
+     or take the recommendation, or use a template that carries them.
+     See [`references/ai-personality.md`](references/ai-personality.md).
    - **Coupled fields** - enabling a switch requires its companion fields, and any
      range must have min <= max (see [`references/coupling-rules.md`](references/coupling-rules.md)).
    - **Invalid values are rejected by the backend now - but pre-validate anyway** so the
@@ -233,8 +251,12 @@ confirm the meaning first, then use the ad-type reference to pick the field.
      setting couldn't be independently confirmed" rather than treating omission as a
      failed write.
    - **Created from a template: show what is actually in effect** - goal, target ACOS,
-     AI 人格 as its number (e.g. "AI 人格：4"), AI status and each action-space switch, from the
-     read-back, and point out anything that differs from the preview.
+     AI status, each action-space switch, and the AI personality **in the form the
+     read-back actually returned**: one number for a group-level `aiPersonality`
+     ("AI 人格：4"), or action space by action space when the row carries the
+     per-action-space fields ("按表现调价：4、定向收割：2 …"). There is no single
+     effective personality on those accounts, so do not collapse them into one number.
+     Point out anything that differs from the preview.
    - If operation-log read access is available, query `get_operation_log` and confirm
      the create is recorded against an identifiable token user. The server supplies
      `changedBy`; never send or fabricate it. If logs cannot be read, state that audit
@@ -377,8 +399,11 @@ don't start"), and confirm that back to them.
 Both ad types now default to on, so the only call that needs the field is "create but
 don't start": send `0` (`aiStatus` on SP/SB, `status` on SD).
 
-> Note: an "off" group reads back as `aiStatus=2` ("AI Turned Off"), not `0`. Don't
-> treat a non-zero `aiStatus` on read as "it's on" - `1` = running, `2` = off.
+> Note: on read, `1` = running while **both `0` and `2` mean AI is not running** -
+> `0` is "never turned on", `2` is "turned off". A group created with `0` reads back
+> as `0` until it is edited; any edit stores it as `2`, even one that never mentions
+> `aiStatus`. Never read a non-zero `aiStatus` as "it is on", and never infer from `2`
+> that someone deliberately turned it off.
 
 ## Enum discipline
 
@@ -471,6 +496,7 @@ come back generic - so still map the common ones yourself:
 - [`references/field-reference.md`](references/field-reference.md) - exact **write** field names + enum values (write names != read names)
 - [`references/action-space-matrix.md`](references/action-space-matrix.md) - which action-space capabilities are supported (AI / Rule / none) per SP / SB / SD
 - [`references/coupling-rules.md`](references/coupling-rules.md) - companion-field couplings, the 按表现调预算 / 预算重新分配 scope relationship, and group-total-budget rescale behavior
+- [`references/ai-personality.md`](references/ai-personality.md) - per-action-space AI personality vs the legacy group-level field, the 12 fields and SB's subset, and `get_sp_sb_ai_personality_recommendation`
 - [`references/budget-limits.md`](references/budget-limits.md) - site/account-type budget ranges (front-end rules MCP bypasses)
 - [`references/enum-i18n.md`](references/enum-i18n.md) - 中文 <-> English <-> code mapping (parse Chinese requests -> codes; render codes -> Chinese)
 - [`references/platform-notes.md`](references/platform-notes.md) - shared write-tool behavior (auth, response envelope, timeout, error shape)
