@@ -1,12 +1,12 @@
 {
   "$schema_note": "Machine-readable manifest of SparkX AI MCP official skills. Version fields must stay in sync with each skill's SKILL.md frontmatter (`metadata.version`).",
   "manifest_version": 1,
-  "updated_at": "2026-10-20",
-  "release": "v1.3.2",
+  "updated_at": "2026-10-21",
+  "release": "v1.3.3",
   "skills": [
     {
       "name": "sparkx-query-ads-performance",
-      "version": "1.4.5",
+      "version": "1.4.6",
       "required": true,
       "mcp_tools": ["get_ads_perf"],
       "scopes": ["amazon_sa_performance_data:read"],
@@ -15,7 +15,7 @@
     },
     {
       "name": "sparkx-query-entity-metadata",
-      "version": "1.4.5",
+      "version": "1.4.6",
       "required": true,
       "mcp_tools": ["get_entity_metadata"],
       "scopes": ["amazon_sa_ads_configuration:read"],
@@ -96,7 +96,7 @@
     },
     {
       "name": "sparkx-ads-structure-analysis",
-      "version": "1.1.2",
+      "version": "1.1.3",
       "required": false,
       "mcp_tools": ["get_ads_perf", "get_entity_metadata"],
       "scopes": ["amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read"],
@@ -105,12 +105,12 @@
     },
     {
       "name": "sparkx-product-diagnosis",
-      "version": "1.1.2",
+      "version": "1.2.0",
       "required": false,
       "mcp_tools": ["get_ads_perf", "get_entity_metadata", "get_operation_log"],
       "scopes": ["amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read"],
       "path": "sparkx-product-diagnosis",
-      "description": "Diagnose ASIN-level health: lifecycle tiering, variant comparison, diagnostic cards for underperformers, keep/optimize/cut recommendations."
+      "description": "Diagnose ASIN-level health: portfolio tiering plus a separate lifecycle stage from SP advertising age and total-sales trend, variant comparison, diagnostic cards for underperformers, keep/optimize/cut recommendations."
     },
     {
       "name": "sparkx-search-term-diagnosis",

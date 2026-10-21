@@ -2,14 +2,15 @@
 name: sparkx-product-diagnosis
 description: >-
   Diagnose product-level (ASIN) health: rank products by spend/sales/ACOS, segment the catalog into
-  a lifecycle tier (star / core / long-tail / new / declining), compare sibling variants under a
-  parent ASIN, produce a diagnostic card for flagged underperformers (inventory/eligibility/buy-box
+  a portfolio tier (star / core / long-tail) and, separately, a lifecycle stage
+  (new / growth / mature / declining) from SP advertising age and total-sales trend, compare sibling
+  variants under a parent ASIN, produce a diagnostic card for flagged underperformers (inventory/eligibility/buy-box
   issues, correlated operation-log changes), and give keep/optimize/cut recommendations. Use when
   the user asks "我哪些 ASIN 有问题", "变体谁在拖后腿", "新品该不该继续投", "product diagnosis",
   "ASIN health check". Not for account-wide structural share analysis (use sparkx-ads-structure-analysis)
   or periodic WoW/MoM recaps (use sparkx-weekly-ads-report / sparkx-monthly-ads-report).
 metadata:
-  version: 1.1.2
+  version: 1.2.0
 ---
 
 # Product Diagnosis
@@ -55,6 +56,7 @@ Rewritten against the new tool's conventions from the start — carries forward 
 | `topN` | int | No | 20 | Only used when `scope=topN` |
 | `specifiedAsins` | array[string] | No | — | Only used when `scope=specifiedAsins` |
 | `dateStart` / `dateEnd` | string (`YYYY-MM-DD`) | No | Trailing 30 days ending yesterday | The analysis window — must satisfy the 90-day span / 15-month lookback caps like any other `get_ads_perf` call |
+| `classificationRules` | object | No | the defaults in Step 3 | Customer overrides for either axis — any of `starSpendPrefix`, `coreSpendPrefix`, `newSpAgeDays`, `minValidWeeks`, `decliningSlopeMax`, `decliningDrawdownMin`, `cliffDrawdownMin`, `growthSlopeMin`, `stockoutDaysMax`. Whatever the customer supplies wins; everything they leave out keeps the default. **Echo the values you actually used in the output either way**, so a reader never has to guess which set produced the labels |
 
 ### Resolving `profileIds`
 
@@ -148,9 +150,15 @@ never promise to run a skill that may not be there.
   confirmed promotion whose human increases haven't been reversed, mention that
   `sparkx-promo-reset` (if installed) restores them.
 
-In product diagnosis a promotion in the **comparison** window is the common trap: the post-promo
-drop makes healthy products look Declining. When there is a signal, keep the Declining label but
-mark it "possibly post-promotion" and ask; drop the label only after the user confirms.
+In product diagnosis a promotion is the common trap, and it bites in two different places:
+
+- **In the comparison window**, the post-promo drop makes a healthy product's period-over-period
+  figures look like a collapse.
+- **Anywhere in Step 2f's 12-week series**, a promotion week can become the series peak, which
+  inflates the drawdown gate and pushes the lifecycle stage to Declining on its own — see Step 3.
+
+When there is a signal either way, keep the label but mark it "possibly post-promotion", name
+the week, and ask; drop the label only after the user confirms.
 
 ## Workflow
 
@@ -158,7 +166,9 @@ mark it "possibly post-promotion" and ask; drop the label only after the user co
 
 Default: trailing 30 days ending yesterday (T+2 delay — note if the window's end is within 2 days of today, the most recent day(s) may be incomplete). If the user gives an explicit range, confirm it satisfies the 90-day span / 15-month lookback caps before issuing the call; split into multiple ≤90-day calls if it doesn't, per the standard procedure.
 
-**Also define a comparison window** (immediately preceding period, same length) — needed for Step 3's "declining" lifecycle tier and Step 5's diagnostic correlation. Same equal-length-prior-period discipline as the report skills.
+**Also define a comparison window** (immediately preceding period, same length) — needed for Step 5's diagnostic correlation and the period-over-period figures in the ranking. Same equal-length-prior-period discipline as the report skills.
+
+**And a separate 12-week lifecycle lookback**, which is *not* derived from either of the above — see Step 2f. Step 3's lifecycle stage is built on that window alone, so that a 7-day report and a 90-day report return the same stage for the same product.
 
 ### Step 2 · Pull Data
 
@@ -186,7 +196,7 @@ Scope this call per `scope`:
 - `topN` → `orderBy` on the primary ranking metric (default `Spend` descending), `pageSize` = `max(1, min(topN, 500))` — `get_ads_perf` rejects a `pageSize` of `0`, a negative number, or anything over `500` with `invalid_params` (it does **not** clamp), so both ends need guarding: a `topN` of `0` must not become `pageSize: 0`, and if `topN > 500`, keep `pageSize: 500` and loop `page` while `hasNextPage` to collect the remainder instead of requesting an oversized page
 - `all` → fully paginate, no `orderBy` requirement, disclosed sampling fallback applies at scale
 - `specifiedAsins` → `filters: {"asin.asin_": {"in": [...]}}`, batched per "Batching Large ASIN Lists" below if the list is long
-- `underperformingOnly` → pull the full/sampled population first (Step 3-4 needs the full picture to correctly classify "underperforming" relative to the rest of the catalog), then filter to the flagged tiers when presenting — don't pre-filter the query itself on a guessed threshold before you've computed the lifecycle tiers
+- `underperformingOnly` → pull the full/sampled population first (Step 3-4 needs the full picture to correctly classify "underperforming" relative to the rest of the catalog), then filter to the **flagged set defined in Step 3** when presenting — don't pre-filter the query itself on a guessed threshold before you've computed both axes
 
 **`granularity=variant` overrides the above regardless of `scope`**: add `filters: {"asin.parent_asin_": "{anchored parentAsin}"}` to this call (on top of, not instead of, whatever `scope` would otherwise apply) so it returns only the anchored parent's own children — not a `topN`/`all` sweep of the whole catalog. Resolve the anchor's `parentAsin` first (per "Granularity" above) before issuing this call.
 
@@ -194,17 +204,79 @@ Scope this call per `scope`:
 
 **b. Prior-period ASIN performance** — same shape as (a), `dateStart`/`dateEnd` shifted to the comparison window, same `select`/`filters` so the two periods are comparable.
 
-**c. New-product identification**: `get_entity_metadata` (`entity: asin`). **`asinOpenDate` is NOT a filterable field**, so don't filter the call on it. Pull the asin metadata for the current analysis set (**fully paginate — loop `page` while `hasNextPage` is `true`; default page size is 100, so a catalog past one page silently truncates otherwise**), then read the returned `asinOpenDate` and filter to the analysis window **client-side**. `asinOpenDate` is a datetime-with-timezone string, e.g. `"2026-06-01 00:00:00 PST"` (not `YYYYMMDD`, not `YYYY-MM-DD`; `campaignStartDate` is a string of no guaranteed shape, which is a different problem again), so parse it and mind the **PST timezone**. **Under `scope=specifiedAsins` or `granularity=variant`, scope this pull to the current analysis set** (the user's specified ASIN list, or the anchored parent's children) — don't scan the whole catalog and then tag "New" onto ASINs that aren't part of what's being analyzed.
+**c. New-product identification**: `get_entity_metadata` (`entity: asin`). **`asinOpenDate` is NOT a filterable field**, so don't filter the call on it. Pull the asin metadata for the current analysis set (**fully paginate — loop `page` while `hasNextPage` is `true`; default page size is 100, so a catalog past one page silently truncates otherwise**), then read the returned `asinOpenDate` and apply the **New** cutoff **client-side**. **The cutoff is a fixed age (90 days by default), not the analysis window.** Tying it to the window was wrong in both directions: a 7-day window made almost nothing New, and a 12-month window made a year-old product New.
 
-**d. Eligibility/inventory config** (feeds Step 5's diagnostic card): `get_entity_metadata` (`entity: asin`), for the ASINs flagged in Step 3 as Declining (or explicitly in scope via `underperformingOnly`, per Step 5) — pull `asinInventoryStatus`, `asinSpEligibilityStatus`/`asinSbEligibilityStatus`/`asinSdEligibilityStatus`, `asinIsDelete`. Only pull this for flagged ASINs, not the whole catalog — it's diagnostic detail, not part of the ranking.
+> **⚠️ `asinOpenDate` is the SP go-live date, not the date the product was first listed.** The column behind it is `sp_open_date`, for both `asinOpenDate` and `parentAsinOpenDate`. An ASIN that sold for years and only recently started running Sponsored Products carries a recent `asinOpenDate` and would be labelled New. So call this **SP advertising age** in the output, never "listing age", and **falsify it against Step 2f's own series**: if the weeks before `asinOpenDate` already carry `TotalSalesAmount`, the product is not new - it is newly advertised. Report it as **newly advertised, not a new product** and classify it on the trend instead.
 
-**e. Operation log for flagged ASINs** (feeds Step 5 and the promotion signal): `get_operation_log`, from 7 days before the comparison window through the end of the analysis window (split if that exceeds 90 days), `resourceIds` scoped to `campaignId`/`adGroupId` (resolve each flagged ASIN → its `campaignId`/`adGroupId` via `get_entity_metadata`'s `productAd` entity first, since `get_operation_log` takes IDs, not ASINs directly). **`resourceIds.idEntity` has no `productAd` value** (see `sparkx-query-operation-log`'s field reference) — don't resolve to `amazonAdId` and try to pass it in; use `idEntity: "campaign"`/`"adGroup"` with the resolved `campaignId`/`adGroupId` instead. This returns all operations on that campaign/adGroup, not narrowed to just the one product ad — say so if the customer needs to know the result isn't ASIN-exclusive. **Also pull the managed-group rows**: for campaigns in a managed group (`aiGroupId` on the `campaign` entity), query `resourceIds: [{"idEntity": "aiGroup", "idType": "increment", "ids": [...]}]` - a target-ACOS or switch change on the group is invisible in the campaign rows. Classify people vs machines per "Shared Rules". **Check `truncated`** and follow the standard split-and-recurse procedure if so.
+> **⚠️ One ASIN returns several rows, one per SKU, each with its own `asinOpenDate`.** The child-side query is not deduplicated, so a 12-ASIN request can come back as 22 rows with three different dates for the same ASIN (some on `Inactive` SKUs). **Take the earliest `asinOpenDate` across an ASIN's rows** - that is when this ASIN first went live on SP; the later ones are re-listings of individual SKUs. Picking whichever row arrives first, or the `Active` one, gives a different answer run to run.
+
+> **⚠️ `parentAsinOpenDate` is not reproducible and must not decide a parent's New stage.** The parent side is deduplicated with `any(sp_open_date)`, which returns an arbitrary SKU's value and can differ between two identical calls. Under `granularity=parentAsin`, derive the parent's SP age as the **minimum of its children's `asinOpenDate`** instead, and say that is how it was derived. `asinOpenDate` is a datetime-with-timezone string, e.g. `"2026-06-01 00:00:00 PST"` (not `YYYYMMDD`, not `YYYY-MM-DD`; `campaignStartDate` is a string of no guaranteed shape, which is a different problem again), so parse it and mind the **PST timezone**. **Under `scope=specifiedAsins` or `granularity=variant`, scope this pull to the current analysis set** (the user's specified ASIN list, or the anchored parent's children) — don't scan the whole catalog and then tag "New" onto ASINs that aren't part of what's being analyzed.
+
+**d. Stock cover and eligibility** — **two separate pulls, in this order. Don't merge them**: Axis B's stockout check feeds the flagged set, so scoping the stock-cover pull to flagged rows would be circular (a row cannot be flagged until it has been checked, and it cannot be checked until it is flagged).
+
+- **d1 — stock cover, for the whole analysis set** (feeds Axis B, before any stage is assigned): `get_entity_metadata` (`entity: asin`), scoped to the analysis set and fully paginated. **The `select` depends on `granularity`** — the stockout gate needs the figure for the entity being classified, and under `granularity=parentAsin` that entity is the parent:
+  - `granularity=asin` / `variant` — `select: ["asin", "asinDayAvailability30", "asinInventoryStatus"]`
+  - `granularity=parentAsin` — `select: ["parentAsin", "parentAsinDayAvailability30", "parentAsinInventoryStatus"]`, then **deduplicate by `parentAsin`**: rows come back at child/SKU grain, so a parent with four children repeats its own figures four times. Counting those repeats, or averaging them, is not a different number — it is the same number counted several times.
+  Keep `select` narrow either way rather than pulling the whole row for every ASIN in the catalog.
+  ⚠️ **Do not compute the parent's available days from its children's.** They use different formulas: a parent is `floor(summedStock / summedDailyRate)` (each child contributes its own daily sales rate to the denominator), a child is `floor(stock x days / units)`. The field reference's own example gives a parent **34** days where its four children read **33 / 33 / 33 / 39** — neither the sum, the average, nor the minimum of the children reproduces it. Query the parent field.
+  ⚠️ **`asinDayAvailability30` is per ASIN, but `asinInventoryStatus` is per SKU** — the same ASIN's rows repeat one identical availability figure while their statuses differ (a real ASIN came back `Active`, `Inactive`, `Inactive`). Collapse the availability by taking any row's value, and collapse the status as **`Active` if any SKU is `Active`**: one discontinued SKU does not make the ASIN unavailable. Never average or count the repeated availability rows.
+  ⚠️ **A missing availability field means unknown, not zero.** Vendor profiles and Seller profiles without SP-API authorization omit the whole inventory group (`meta.hint` names those profileIds), and `asinDayAvailability30` / `parentAsinDayAvailability30` are also `null` when the product had no sales to project from. Say the stockout check could not be run rather than treating absence as "in stock".
+- **d2 — eligibility, for Step 3's flagged set only** (feeds Step 5's diagnostic card, not the ranking and not either axis): `asinSpEligibilityStatus`/`asinSbEligibilityStatus`/`asinSdEligibilityStatus`. This is diagnostic detail — don't pull it for the whole catalog.
+- **d3 — deleted-ASIN probe, flagged set only.** ⚠️ **`asinIsDelete` cannot be selected from `get_entity_metadata`.** It is a **filter parameter only**; it is not in that entity's output field list, and putting it in `select` is **silently ignored** (the server replies `Unknown select fields ignored: [asinIsDelete]` in `meta.hint`, and the call otherwise succeeds — so a "not deleted" conclusion drawn from its absence is worthless). Ask the question as a filter instead, in its own call:
+  ```json
+  {"entity": "asin", "filters": {"asin": {"in": ["<flagged ASINs>"]}, "asinIsDelete": 1}, "select": ["asin", "sku"]}
+  ```
+  Every ASIN that comes back is deleted; an empty result means none of them are. Rows are per SKU, so dedupe by `asin`. (The selectable `asinIsDelete` lives on the **`get_ads_perf`** side as the dimension `asin.asinIsDelete_` — a different tool with a different field set, which is why the name looks available but isn't here.)
+
+**e. Operation log for flagged ASINs** (feeds Step 5 and the promotion signal): `get_operation_log`, from 7 days before the comparison window through the end of the analysis window (split if that exceeds 90 days), `resourceIds` scoped to `campaignId`/`adGroupId` (resolve each flagged ASIN → its `campaignId`/`adGroupId` via `get_entity_metadata`'s `productAd` entity first, since `get_operation_log` takes IDs, not ASINs directly). **`resourceIds.idEntity` has no `productAd` value** (see `sparkx-query-operation-log`'s field reference) — don't resolve to `amazonAdId` and try to pass it in; use `idEntity: "campaign"`/`"adGroup"` with the resolved `campaignId`/`adGroupId` instead.
+
+⚠️ **The `productAd` resolution is far bigger than it looks, and it decides whether this step is worth running at all.** A real six-ASIN flagged set resolved to **1,556 product-ad rows across 144 campaigns**, and **one** ASIN alone sat in **120 campaigns and 177 ad groups**. So:
+- **Paginate the resolution** (`total` and `hasNextPage` are both returned) and count the distinct campaigns **per ASIN** before querying any log.
+- **Above ~20 campaigns for one ASIN, don't run the campaign-scoped log for it.** The result would be dominated by operations on campaigns that have nothing to do with this product, and presenting that as "correlated changes" is worse than presenting nothing. Say the ASIN is spread across N campaigns so campaign-level history isn't attributable to it, and fall back to what *is* ASIN-specific: the `productAdState` spread from this same resolution (how many of its product ads are enabled/paused/archived) and the carrying campaigns' current `campaignState`.
+- **`campaignName` is NOT selectable on `productAd`** — the available fields are `adGroupId`, `amazonAdId`, `asin`, `campaignId`, `campaignType`, `productAdId`, `productAdState`, `profileId`, `sku`, and anything else in `select` is silently dropped with a `meta.hint`. Since the output must name entities rather than show bare IDs, follow the resolution with one `get_entity_metadata` (`entity: campaign`) call over the distinct `campaignId`s for `campaignName`, `campaignState`, `aiGroupId` and `dailyBudget` — that one call also supplies Step 5's "is it even still being advertised" check and the managed-group lookup below, so it is not an extra round trip.
+
+⚠️ **A campaign-scoped query does not only return campaign rows.** Scoping `resourceIds` to `idEntity: "campaign"` returned **`PORTFOLIO`-entity rows** (a `Portfolio Out of Budget` event on the portfolio those campaigns belong to) and no campaign rows at all. Read `entity` on every row and label it — a portfolio-level budget event is a genuine finding but it is **not** evidence about this ASIN, or even about these campaigns specifically. And an empty campaign-row result does not mean nothing happened: for managed campaigns the changes are on the group (see below). Beyond that, the campaign/adGroup result is not narrowed to the one product ad — say so whenever the customer might read it as ASIN-exclusive. **Also pull the managed-group rows**: for campaigns in a managed group (`aiGroupId` on the `campaign` entity), query `resourceIds: [{"idEntity": "aiGroup", "idType": "increment", "ids": [...]}]` - a target-ACOS or switch change on the group is invisible in the campaign rows. Classify people vs machines per "Shared Rules". **Check `truncated`** and follow the standard split-and-recurse procedure if so.
 
 **⚠️ Steps 2c/2d/2e above are written for `granularity=asin`/`variant` (child-ASIN identity). Under `granularity=parentAsin`, each needs a parent-level adjustment — don't run them unchanged and silently produce child-level diagnostics under a parent-level report:**
 
-- **New (2c)**: use the parent's own `parentAsinOpenDate`, not any individual child's `asinOpenDate`. A parent can have a mix of long-standing and newly-added children; don't infer the parent's "New" status from whichever child happens to be queried first, or from an arbitrary child. If a customer specifically wants to know "which children under this parent are new," report that as a supplementary note on the parent's diagnostic card, not as the parent's own tier.
-- **Eligibility/inventory (2d)**: prefer the parent-level fields — `parentAsinInventoryStatus`, `parentAsinSpEligibilityStatus`/`parentAsinSbEligibilityStatus`/`parentAsinSdEligibilityStatus` — as the primary signal for the parent's diagnostic card. **There is no `parentAsinIsDelete` field** (`get_entity_metadata`'s documented parent-ASIN fields don't include a parent-level delete flag — only the child-level `asinIsDelete` exists) — don't invent one; if deletion status matters at the parent level, check whether *all* children are individually `asinIsDelete=1` instead. If the parent-level status looks healthy but the parent's aggregated performance is still flagged as Declining/underperforming, additionally check the individual children's `asinInventoryStatus`/eligibility (from 2d's child-level pull) to find which specific child is actually driving the problem, and list it as supporting detail under the parent's card.
+- **New (2c)**: use the **earliest `asinOpenDate` across the parent's children**, and **not** `parentAsinOpenDate` — that column is `any(sp_open_date)` and returns an arbitrary child's value, so it is neither the earliest nor stable between calls (see 2c). The intent behind the old "use the parent's own field" rule still holds and is what the minimum delivers: don't infer the parent's status from whichever child happens to be queried first, or from an arbitrary one. A parent can mix long-standing and newly-added children, so the earliest child is the one that dates the parent — a parent is only New when **every** child is. If a customer specifically wants to know "which children under this parent are new," report that as a supplementary note on the parent's diagnostic card, not as the parent's own stage.
+- **Stock cover (d1)**: already handled by d1's `granularity=parentAsin` branch above — `parentAsinDayAvailability30` and `parentAsinInventoryStatus`, deduplicated by `parentAsin`. Don't re-pull it here, and don't fall back to the children's `asinDayAvailability30` for the parent's stockout gate.
+- **Eligibility (d2)**: prefer the parent-level fields — `parentAsinSpEligibilityStatus`/`parentAsinSbEligibilityStatus`/`parentAsinSdEligibilityStatus`, alongside the `parentAsinInventoryStatus` d1 already returned — as the primary signal for the parent's diagnostic card. **There is no `parentAsinIsDelete` field, and the child-level one is not readable either** — `asinIsDelete` is a filter, not an output field (see d3). So deletion status at the parent level is answered the same way as at the child level: run d3's probe over the parent's children and treat the parent as deleted only when **every** child comes back. Don't invent a parent-level flag, and don't read the probe's empty result for a *subset* of children as "the parent is alive". If the parent-level status looks healthy but the parent's aggregated performance is still flagged as Declining/underperforming, additionally check the individual children's `asinInventoryStatus`/eligibility (from 2d's child-level pull) to find which specific child is actually driving the problem, and list it as supporting detail under the parent's card.
 - **Operation log (2e)**: expand the parent to its full child-ASIN list first (`get_entity_metadata`, `entity: asin`, `filters: {"parentAsin": "{parent}"}`), then resolve **each** child's `campaignId`/`adGroupId` via the `productAd` entity (same as the child-level procedure), and query `get_operation_log` across all of them. This is still campaign/adGroup-level, not parent/ASIN-exclusive — label it as such in the diagnostic card the same way the child-level version does, and additionally note it covers operations across all the parent's children, not just one.
+
+**f. Twelve-week weekly series for the lifecycle stage** (feeds Step 3's Axis B):
+
+```json
+{
+  "profileIds": [4404871489220462],
+  "factEntity": "asin",
+  "dateStart": "{the Monday 12 complete weeks back}",
+  "dateEnd": "{the Sunday of the last complete week}",
+  "select": ["asin.asin_", "toMonday(parseDateTime32BestEffort(date)) as week"],
+  "metrics": ["TotalSalesAmount", "OrderCount", "Sessions", "Spend"],
+  "pageSize": 500,
+  "userContext": "Product diagnosis - 12-week lifecycle trend"
+}
+```
+
+- **This window is independent of the Step 1 analysis window** — not the trailing 30 days, not
+  the comparison window. Don't substitute either: a 30-day window cannot carry a 12-week trend,
+  and the lifecycle stage would then change every time the user asked for a different reporting
+  period, which is exactly the behaviour this axis exists to remove.
+- **Align both ends to week boundaries** — start on a Monday, end on a Sunday — or the first
+  and last buckets are partial weeks, and that trailing partial week reads as a decline that
+  isn't there. Under the T+2 rule the last complete week is usually the week before last.
+- **12 weeks, not 13**: 84 days fits one call; 13 weeks is 91 days and exceeds `get_ads_perf`'s
+  90-day span cap, turning every lifecycle run into a two-call merge for one extra week of signal.
+- **Year-over-year companion call** (for Step 3's seasonality check): same shape with both dates
+  shifted back **364** days — 52 whole weeks, so Monday stays Monday; don't shift by 365. Run
+  it when the shifted `dateStart` is still inside the 15-month lookback **and** the ASIN's
+  `asinOpenDate` precedes it; otherwise skip it and say the check couldn't be run.
+- Scope it to the same analysis set as 2a (the `asin.asin_` `in` filter under `specifiedAsins`,
+  the `asin.parent_asin_` filter under `variant`) and fully paginate. **Under
+  `granularity=parentAsin`, sum the children into the parent week by week *before* smoothing** —
+  smoothing each child separately and averaging their slopes is the ratio-of-averages mistake the
+  parent-aggregation rules elsewhere in this skill already warn about.
 
 **Batching Large ASIN Lists** — the filter field differs by tool, don't carry one convention into the other:
 - **`get_ads_perf`** (Step 2a/2b's `specifiedAsins` scope): filter field is `asin.asin_` (that tool's `entity.field_` convention).
@@ -218,33 +290,176 @@ Either way, when the list is long: split into chunks for the `in` filter rather 
 
 **Ranking table**: sort by the requested/default metric (`Spend` unless the user asked for `Sales`/`ACOS` ranking specifically), showing `Spend`/`TotalSalesAmount`/`ACOS`/`TACOS` per ASIN. **Zero-denominator handling — `ACOS` and `TACOS` have different denominators, don't conflate them**: an ASIN with `Sales = 0` (ad-attributed sales) has undefined `ACOS`; an ASIN with `TotalSalesAmount = 0` (total business sales) has undefined `TACOS` — these can differ (e.g. an ASIN can have `Sales = 0` this period while still showing organic `TotalSalesAmount`, or vice versa). Check each independently and report "no ad sales this period" / "no total sales this period" as appropriate, never a fabricated ratio for either. If `TotalSalesAmount` is zero across every row, report that no total sales were returned for the window; do not infer a Seller/Vendor field mismatch or switch metric families solely from that result.
 
-**Lifecycle segmentation** — default cutoffs below; state them in the output, and use the user's own if given. Rank entities by this period's `Spend` (descending). "Top X% of spend" means the **smallest prefix of that ranking whose cumulative share reaches X%, including the row that crosses X%** - so if the first product alone is 60% of spend, it is the whole top 50%. Apply the tiers in this order, first match wins: New → Declining → Star → Core → Long-tail.
+**Two independent classifications — don't collapse them into one label.** Every product gets a
+**portfolio tier** (how much it matters to *this account's* spend right now) **and** a **lifecycle
+stage** (where the product itself is in its life). The axes are orthogonal, and the pair carries
+information neither one does alone: a star product can be declining, and surfacing that is the
+most valuable thing this step does.
+
+> **Why this is two axes and not one.** An earlier version of this skill merged both into a single
+> five-way "lifecycle tier", which produced statements no operator would accept — that a product's
+> *lifecycle* depends on its spend rank inside one account, that the same ASIN has a different
+> lifecycle in a large account than in a small one, that a product cannot be both a top earner and
+> in decline, and that "mature" doesn't exist at all. Report both axes, always.
+
+> **These are default rules, not a certified classification.** State the cutoffs you actually used
+> in the output, and use the customer's own definitions whenever they give them — every threshold
+> below is a parameter, not a fact about Amazon.
+
+#### Axis A — Portfolio tier
+
+Account-relative and window-relative **by design**: the same ASIN is a star in a small account and
+long-tail in a large one, and the tier moves when the analysis window moves. That is correct for
+this axis — it answers "where is my money going", not "how old is this product".
+
+Rank entities by this period's `Spend` (descending). "Top X% of spend" means the **smallest prefix
+of that ranking whose cumulative share reaches X%, including the row that crosses X%** — so if the
+first product alone is 60% of spend, it is the whole top 50%. First match wins.
 
 | Tier | Default rule |
 |---|---|
-| New | opened within the analysis window (Step 2c) |
-| Declining | prior-period orders >= 3 **and** this period's orders <= 70% of the prior period's (raw counts; not a New product) |
-| Star | in the top 50% of spend (see above) **and** ACOS <= target ACOS |
-| Core | in the top 80% of spend |
-| Long-tail | the rest |
+| 无广告投放 No ad spend | this row's `Spend` is `0` or `null` |
+| 明星 Star | in the top 50% of spend (see above) **and** ACOS <= target ACOS |
+| 腰部 Core | in the top 80% of spend |
+| 长尾 Long-tail | the rest |
 
-Classify each analysis entity (a child ASIN under `granularity=asin`/`variant`, or a parent ASIN under `granularity=parentAsin` — don't revert to child-level classification just because the underlying rows started as child-ASIN data) into exactly one tier:
-- **新品 (New)**: identified in Step 2c (opened within the analysis window). Takes priority over other tiers — a new product's low volume is expected, not "long-tail" or "declining."
-- **濒死 (Declining)**: ad orders (`Conversions`) fell to 70% or less of the prior period's, from at least 3 (Step 2b). Use the same join-by-ID, zero-denominator-aware period-comparison discipline as [sparkx-query-ads-performance's Period-over-Period and Top Movers example](../sparkx-query-ads-performance/references/example-period-comparison-top-movers.md) — an ASIN with 0 orders in both periods is "flat/no activity," not "declining." Check the comparison window for a promotion first (see "Shared Rules").
-- **明星 (Star)**: in the top 50% of spend (the prefix rule above), **and** ACOS at or below the target ACOS — meaningfully contributing **and** performing well.
-- **腰部 (Core)**: the rest of the top 80% of spend (same prefix rule) — the bulk of a healthy catalog, not itself a finding.
-- **长尾 (Long-tail)**: everything below that — low-volume but not necessarily unhealthy.
+**An ASIN with no ad spend is not long-tail advertising, it is unadvertised.** The `asin` entity
+returns organic rows too, and they come back with `Spend: null` — in one real run 8 of 20 rows
+were like this. Dropping them into the bottom tier reads as "we spend a little here and it isn't
+working", which is the opposite of what the row says. Give them **无广告投放 No ad spend** and keep them in the
+table: an unadvertised ASIN with real `TotalSalesAmount` is a candidate to *start* advertising, which
+is a finding the other tiers cannot express.
 
-**No fixed money cutoffs**: the tiers use spend shares, order counts and the target ACOS; zero-order checks use `T` (see "Shared Rules"), so the rules hold in any currency.
+**When the analysis set's total `Spend` is `0`** (or every row is `0`/`null`), the cumulative-share
+prefix is undefined — `0/0`. Do not fall back to an arbitrary split. Give **every** row
+**无广告投放 No ad spend**, say no ad spend was recorded for the window, and rank the table by `TotalSalesAmount`
+instead so the output is still useful. Axis B is unaffected and should still be reported: it does
+not depend on spend.
+
+**Star needs a target ACOS the customer actually gave you.** "Shared Rules" falls back to the
+store's own ACOS for the period when none is supplied, and that is circular here: roughly half the
+catalog sits below its own average by construction, so Star stops meaning "performing well". A
+real run awarded Star to an ASIN at **59.9% ACOS** purely because the store averaged 63.2%. **With no
+customer target, award no Star** — classify the top 80% as 腰部 Core, and say in the output that Star was
+not assigned because no target ACOS was given, and what to supply to get it.
+
+#### Axis B — Lifecycle stage
+
+Product-intrinsic: driven by **total business performance** (`TotalSalesAmount`, `Sessions`)
+over the 12-week series from Step 2f, plus SP advertising age and current stock cover —
+**not** by ad-attributed orders, and **not** by spend rank. Using ad orders here would be a
+category error: ad orders move when *you* change bids and budgets, so a trend built on them
+measures your campaign management, not the product's life.
+
+Unlike Axis A, this axis does **not** move when the reporting period moves.
+
+Apply in this order, first match wins.
+
+| Stage | Default rule |
+|---|---|
+| 新品 New | earliest `asinOpenDate` within the last **90 days** (Step 2c) **and** no sales in the weeks before it |
+| 数据不足 Insufficient data | fewer than **6** of the 12 weeks show any activity (`TotalSalesAmount > 0` or `Sessions > 0`) |
+| 衰退 Declining | **either** gate pair below hits: the **drift** pair (slope <= **-0.10** **and** drawdown >= **0.25**) **or** the **cliff** test (drawdown >= **0.50**) |
+| 成长 Growth | normalized slope >= **+0.10** |
+| 成熟 Mature | everything else — enough history, neither clearly rising nor clearly falling |
+
+**Before any of the above, check stock cover.** Step 2d's **d1** pull supplies it for the **whole analysis set**, not only for flagged rows, and **at the grain being classified** — `asinDayAvailability30` under `granularity=asin`/`variant`, `parentAsinDayAvailability30` under `granularity=parentAsin`. When stock cover is **<= 7 days** (or `0`) and the series fell in its last weeks, the collapse is a **stockout, not a lifecycle event**: keep the stage the pre-collapse weeks support, and attach an independent **`stockout`** flag with the days figure. Do not relabel the product Declining for running out of stock - restocking reverses it, and a target-ACOS cut would be the wrong response. A missing availability field means *unknown*, not zero (Vendor profiles and profiles without SP-API authorization omit the whole group) - say the check could not be run.
+
+**Computing the two gates**, on the weekly `TotalSalesAmount` series from Step 2f:
+
+1. **MA3 smoothing** — trailing 3-week mean, keeping only complete windows, so a 12-week series
+   yields 10 smoothed points. A week that returns no row is a **zero-activity week, not a missing
+   one** — carry it as `0` rather than closing the gap, which would silently compress the
+   timeline. The one exception is weeks before the ASIN's `asinOpenDate`: drop those entirely.
+2. **Normalized slope** = ordinary-least-squares slope of the smoothed series against week index,
+   divided by `max(|mean of the smoothed series|, a small epsilon)`. The normalization is what
+   makes one -0.10 cutoff meaningful for a 200/week ASIN and a 200,000/week one alike; an
+   un-normalized slope would classify almost entirely by product size.
+3. **Peak drawdown** = `max(0, (peak - latest) / peak)`, where `peak` is the highest smoothed point
+   and `latest` the final one. Report `0` when `peak <= 0`; never divide by a zero peak.
+4. **Two ways in, and they catch different shapes.**
+   - **Drift** (slope <= `decliningSlopeMax` **and** drawdown >= `decliningDrawdownMin`): a
+     steady slide. Requiring both is deliberate — a product oscillating around a flat mean can
+     produce a mildly negative slope without ever having fallen away from its own healthy
+     level, and flagging that as decline is how a rule like this loses an operator's trust.
+   - **Cliff** (drawdown >= `cliffDrawdownMin`, default **0.50**, on its own): a collapse in the last
+     weeks. **The drift pair cannot see this.** A least-squares slope measures the whole line's
+     tilt, so an end-of-series collapse is diluted by the flat weeks before it: a real case came
+     back with a drawdown of **0.70** and a slope of only **-0.079**, and another with a drawdown
+     of **1.00** (latest week at zero) and a *positive* slope. Both would read Mature on the drift
+     pair alone, and a sudden collapse is the one an operator most needs to see.
+   Say which path fired — "drift" and "cliff" are different problems with different fixes, and a
+   cliff is far more often a stockout, a suppressed listing or a Buy Box loss than a life stage.
+
+**⚠️ Twelve weeks is one quarter, so a seasonal product reads as declining right after its peak.**
+This is the biggest failure mode of this axis and you must handle it, not report through it. Run
+the **year-over-year check** from Step 2f: pull the same 12 calendar weeks one year earlier and
+**run the identical stage computation on that window, with the same thresholds**. "Seasonal" means
+that window also comes out **衰退 Declining** — by the same path, drift or cliff. Anything looser is not
+reproducible: two agents given "a comparable fall" will disagree, and the lifecycle label would
+stop being a property of the product. When it does come out Declining a year ago too, report the
+stage as **成熟 Mature (seasonal downswing)** and show both windows' slope and drawdown as the evidence. When the history isn't there
+(the ASIN is younger than ~15 months, or the lookback doesn't reach), say so and mark the stage
+**unconfirmed against seasonality** — don't present it as settled.
+
+**⚠️ A promotion week inflates the peak, and therefore the drawdown.** Prime Day, a large coupon
+or a Deal week can become the series `peak`, after which every ordinary week looks like a 30-40%
+drawdown and the second gate opens for free. `get_ads_perf` has no "this was a promotion" flag, so
+check the window for a promotion per "Shared Rules" before reporting any 衰退 Declining stage whose
+drawdown rests on one exceptional week — and name that week in the evidence.
+
+**What this axis deliberately does not do.** A fuller lifecycle model would also exclude
+out-of-stock weeks from both the trend and the peak, separate growth from mature by a weekly sales
+target rather than by slope, and weight in review rating and return rate. None of those are
+available here: `get_entity_metadata` returns only the **current** inventory status with no
+history, and this product has no weekly-sales-target or review-rating field at all. So this axis is
+the subset the available data actually supports, and saying which parts are missing is part of the
+output. If the customer keeps weekly sales targets of their own, tell them that supplying those
+converts the growth/mature split from a slope test into a target-attainment test — and use theirs
+when they give them.
+
+
+#### The flagged set — one definition, used everywhere
+
+`scope=underperformingOnly`, Step 2d's follow-up pull, Step 5's diagnostic cards and Step 6's
+**Optimize** verdict all operate on the **same** set. Define it once, here, and cite it from each:
+
+> An entity is **flagged** when any of these holds:
+> 1. its lifecycle stage is **衰退 Declining** (by either path), or it carries the **`stockout`** flag; **or**
+> 2. it has **zero orders** this period with `Spend >= T` (`T` per "Shared Rules"); **or**
+> 3. `Spend >= T` **and** `ACOS` > the target ACOS, where the target is one the **customer supplied**
+>    (with no customer target this clause does not apply - see Axis A - and the flagged set is
+>    clauses 1 and 2 only).
+
+Everything else is not flagged. **无广告投放 No ad spend** rows can only be flagged by clause 1: with no spend
+there is nothing to waste, so clauses 2 and 3 cannot fire. Say which clause fired for each entity -
+"declining", "spent without converting" and "converting too expensively" lead to different actions.
+
+#### Reporting both axes together
+
+Present the pair, never a single label. The combinations that are findings in their own right:
+
+| Combination | Why it matters |
+|---|---|
+| 明星 Star x 衰退 Declining | a main earner is falling — the highest-priority finding here, and exactly the case a single-label scheme hides |
+| 明星 Star / 腰部 Core x 成长 Growth | working; a candidate for more budget (take the reallocation angle to `sparkx-ads-structure-analysis`) |
+| 长尾 Long-tail x 成长 Growth | small but rising — a winner before it is obvious |
+| 长尾 Long-tail x 衰退 Declining | the ordinary cut candidate |
+| any x 新品 New | low volume is expected — don't read it as weakness, and don't cut on this period's numbers alone |
+| any x 数据不足 Insufficient data | report the ranking, then say the stage could not be determined, and why |
+
+**No fixed money cutoffs**: Axis A uses spend shares and the target ACOS, Axis B uses a normalized
+slope and a ratio; zero-order checks use `T` (see "Shared Rules"). The rules hold in any currency.
 
 ### Step 4 · Variant Comparison (if `granularity=variant`)
 
-For the anchored parent's child ASINs (from Step 2a/b, filtered to that `parent_asin_`): compare each sibling's spend share within the parent, ACOS, and `BuyBoxPercentage`/`UnavailabilityRate` — variants of the same product often compete for the same demand, so a spend/efficiency imbalance here is a genuine "which variant should get the budget" finding, distinct from the catalog-wide lifecycle tiers in Step 3.
+For the anchored parent's child ASINs (from Step 2a/b, filtered to that `parent_asin_`): compare each sibling's spend share within the parent, ACOS, and `BuyBoxPercentage`/`UnavailabilityRate` — variants of the same product often compete for the same demand, so a spend/efficiency imbalance here is a genuine "which variant should get the budget" finding, distinct from the catalog-wide portfolio tiers and lifecycle stages in Step 3.
 
-### Step 5 · Diagnostic Card (for flagged underperformers — Declining tier, or explicitly `scope=underperformingOnly`)
+### Step 5 · Diagnostic Card (for every entity in Step 3's flagged set)
 
 For each flagged entity (ASIN or parent ASIN — see the parent-mode adjustments to 2c/2d/2e above; don't drop back to child-only fields under `granularity=parentAsin`), assemble:
-- **Inventory/eligibility status** (Step 2d): out-of-stock (`asinInventoryStatus`/`parentAsinInventoryStatus`), lost ad-type eligibility, or — child level only, no parent equivalent exists — deleted (`asinIsDelete`) — these can fully explain a sales collapse on their own and should be surfaced before anything else.
+- **Is it even still being advertised?** (from 2e's `productAd` resolution and the `campaign` lookup it needs) — **check this first.** `campaignState` and `productAdState` of the entities carrying this ASIN: if every campaign holding it is `paused`/`archived`, or its product ads are, the spend and sales going to zero is not a life stage, a stockout or a Buy Box problem — **the ads were turned off**, and everything below is beside the point. In a real run this was the whole explanation for the only genuinely Declining ASIN: its single campaign was paused. Report the campaign names and states, and say whether *all* or only *some* of the carrying entities are off — partial pausing is a reallocation, full pausing is a decision someone already made.
+- **Inventory/eligibility status** (Step 2d): out-of-stock (`asinInventoryStatus`/`parentAsinInventoryStatus`), lost ad-type eligibility, or deleted (the d3 probe above, **not** a `select`) — these can fully explain a sales collapse on their own and should be surfaced before the advertising-side explanations.
 - **Buy Box / returns signal** (Step 2a): a `BuyBoxPercentage` drop or elevated `CustomerReturns` alongside declining sales is a strong non-advertising explanation — flag it as such rather than assuming the cause is bid/budget-related.
 - **Correlated operation-log changes** (Step 2e): bid/budget/status changes on the campaigns/adGroups containing this ASIN's product ads in the same window — **not** changes on the ASIN itself (per Step 2e, `get_operation_log` can't be scoped to a single `productAd`/ASIN, only to `campaign`/`adGroup`). Label this explicitly in the diagnostic card (e.g. "非 ASIN 专属——该 campaign/adGroup 下的操作记录") so it isn't read as ASIN-specific evidence. **Correlation, not causation** — same discipline as the report skills: state what changed and when, don't claim it caused the decline unless the timing and magnitude clearly line up, and weigh that correlation more cautiously here given the change wasn't even necessarily on this specific product ad.
 
@@ -252,10 +467,10 @@ If none of the above turns up anything, say so plainly ("no inventory/eligibilit
 
 ### Step 6 · Recommendations (Keep / Optimize / Cut)
 
-Derive one verdict per flagged ASIN (and optionally per healthy-tier ASIN if the user wants a full-catalog verdict, not just the problems):
-- **保 (Keep)**: Star or healthy Core tier — no action needed, or note it as a candidate for the *other* skill (`sparkx-ads-structure-analysis`) if there's a structural budget-reallocation angle.
-- **优 (Optimize)**: Declining or underperforming Core/Long-tail with a fixable driver identified in Step 5 (e.g. restock, buy-box recovery, a managed-group setting) — action + evidence. Bid / budget advice follows "Shared Rules" (group levers for managed campaigns, no numbers). For traffic-side problems, suggest running `sparkx-search-term-diagnosis` (if installed) scoped to this product.
-- **撤 (Cut)**: zero orders with spend >= `T` in **both** this and the prior period, and no fixable driver found; or long-tail with negligible volume and no growth signal — action + evidence.
+Derive one verdict per flagged ASIN (and optionally per healthy ASIN if the user wants a full-catalog verdict, not just the problems). **The verdict reads both axes, not one** — the portfolio tier says how much is at stake, the lifecycle stage says which way the product is going, and the same stage deserves a different answer at each tier:
+- **保 (Keep)**: Star or Core at the Growth or Mature stage — no action needed, or note it as a candidate for the *other* skill (`sparkx-ads-structure-analysis`) if there's a structural budget-reallocation angle. A **New** product at any tier also defaults to Keep: its volume is supposed to be low, and this skill's window is too short to judge it.
+- **优 (Optimize)**: every entity in **Step 3's flagged set** where Step 5 found a fixable driver — no other reading of "underperforming" applies here. A **`stockout`** flag means the fixable driver is restocking, and the ad-side answer is to hold, not to cut. **Star x Declining goes first in the list** — it is the largest amount of money moving the wrong way, and it is the case the old single-label scheme could not express at all (e.g. restock, buy-box recovery, a managed-group setting) — action + evidence. Bid / budget advice follows "Shared Rules" (group levers for managed campaigns, no numbers). For traffic-side problems, suggest running `sparkx-search-term-diagnosis` (if installed) scoped to this product.
+- **撤 (Cut)**: zero orders with spend >= `T` in **both** this and the prior period, and no fixable driver found; or **Long-tail x Declining** with negligible volume. **Never cut on a Declining stage that the year-over-year check could not confirm against seasonality**, and never cut a **New** product on this window alone — say what is missing instead. Action + evidence.
 
 **Every recommendation must have**: action + target ASIN + evidence (data), same requirement as the other skills in this family.
 
@@ -301,17 +516,31 @@ answer".
 {列名用 "ASIN" 还是 "Parent ASIN" 取决于 granularity：asin/variant 用 "ASIN"，parentAsin 用 "Parent ASIN"——不要不管 granularity 都固定写 "ASIN"}
 {仅当 profileIds 涉及多个店铺时才加"店铺"列——单店铺场景不要加这一列造成冗余}
 
-| ASIN / Parent ASIN | 店铺（仅多店铺时） | 花费 | 广告销售额 | ACOS | 总销售额 | TACOS | 订单数 / 转化数 | 分层 |
-|---|---|---|---|---|---|---|---|---|
-| ... | ... | ... | ... | ... | ... | ... | ... | 明星/腰部/长尾/新品/濒死 |
+| ASIN / Parent ASIN | 店铺（仅多店铺时） | 花费 | 广告销售额 | ACOS | 总销售额 | TACOS | 订单数 / 转化数 | 投放分层 | 生命阶段 |
+|---|---|---|---|---|---|---|---|---|---|
+| ... | ... | ... | ... | ... | ... | ... | ... | 明星/腰部/长尾/无广告投放 | 新品/成长/成熟/衰退/数据不足{+断货标记} |
 
-## 二、生命周期分层概览
+## 二、投放分层与生命阶段
 
+{在这里写明两个轴各自实际使用的阈值，并说明这是默认规则、客户可以自定义}
+{生命阶段窗口：完整 12 周 {lifecycle_start} ~ {lifecycle_end}，与上方报告周期相互独立}
+
+**投放分层**（本报告周期内占本账户花费的比重）
 - 明星：{N} 个，贡献 {pct} 花费 / {pct} 销售额
 - 腰部：{N} 个
 - 长尾：{N} 个
-- 新品：{N} 个（本周期内上架）
-- 濒死：{N} 个 — 需要关注
+
+**生命阶段**（SP 投放时长 + 12 周总销售额趋势；注：`asinOpenDate` 是 SP 开投日期，不是商品上架日期）
+- 新品：{N} 个（近 90 天内开始投 SP）
+  {另有 {N} 个属于「新开投的老品」——SP 开投日期之前已有销售，按趋势判定而非判为新品}
+- 成长：{N} 个
+- 成熟：{N} 个{，其中 N 个已确认为季节性回落}
+- 衰退：{N} 个 — 需要关注{；其中 N 个未能通过同比确认季节性}
+- 数据不足：{N} 个
+
+**交叉**（只写构成结论的组合）
+- 明星 × 衰退：{N} 个 — {逐个列出；这是优先处理清单}
+- 长尾 × 成长：{N} 个
 
 ## 三、变体对比（若 granularity=variant）
 
@@ -343,8 +572,11 @@ _生成时间：{timestamp} · 数据源：SparkX AI MCP · Skill: sparkx-produc
   "dimension": "asin",
   "period": {"start": "...", "end": "..."},
   "dataFreshnessWarning": null,
-  "ranking": [{"entityId": "...", "entityType": "asin|parentAsin", "profileId": null, "profileName": null, "spend": ..., "sales": ..., "acos": null, "totalSalesAmount": ..., "tacos": null, "orderCount": ..., "conversions": ..., "tier": "star|core|longTail|new|declining"}],
-  "tierSummary": {"star": {"count": ..., "spendShare": ...}, "core": {...}, "longTail": {...}, "new": {...}, "declining": {...}},
+  "ranking": [{"entityId": "...", "entityType": "asin|parentAsin", "profileId": null, "profileName": null, "spend": ..., "sales": ..., "acos": null, "totalSalesAmount": ..., "tacos": null, "orderCount": ..., "conversions": ..., "portfolioTier": "star|core|longTail|noAdSpend", "lifecycleStage": "new|growth|mature|declining|insufficientData", "lifecycleEvidence": {"normalizedSlope": null, "peakDrawdown": null, "decliningPath": "drift|cliff|null", "validWeeks": null, "spOpenDateEarliest": null, "spOpenDateIsReproducible": true, "newlyAdvertisedNotNew": false, "stockout": false, "dayAvailability30": null, "yoyChecked": false, "seasonalDownswing": false}, "flagged": false, "flaggedBy": []}],
+  "portfolioTierSummary": {"star": {"count": ..., "spendShare": ...}, "core": {...}, "longTail": {...}, "noAdSpend": {"count": ..., "spendShare": 0, "totalSalesAmount": ...}},
+  "lifecycleStageSummary": {"new": {"count": ...}, "growth": {...}, "mature": {...}, "declining": {...}, "insufficientData": {...}},
+  "lifecycleWindow": {"start": "...", "end": "...", "weeks": 12},
+  "classificationRules": {"portfolioTier": {"starSpendPrefix": 0.5, "coreSpendPrefix": 0.8, "starAcosRule": "<= target ACOS", "targetAcosSource": "customer|none"}, "lifecycleStage": {"newSpAgeDays": 90, "minValidWeeks": 6, "decliningSlopeMax": -0.10, "decliningDrawdownMin": 0.25, "cliffDrawdownMin": 0.50, "growthSlopeMin": 0.10, "stockoutDaysMax": 7}},
   "variantComparison": null,
   "diagnosticCards": [{"entityId": "...", "entityType": "asin|parentAsin", "inventoryStatus": "...", "eligibilityIssue": null, "buyBoxSignal": null, "correlatedChanges": [...]}],
   "recommendations": [{"verdict": "keep|optimize|cut", "entityId": "...", "entityType": "asin|parentAsin", "action": "...", "evidence": "..."}]
@@ -355,7 +587,11 @@ _生成时间：{timestamp} · 数据源：SparkX AI MCP · Skill: sparkx-produc
 ## Data Boundaries
 
 - **No SKU-level margin/profitability** — this needs the customer's own cost data, out of scope for this skill (a candidate for the "combine with your own business data" pattern used elsewhere in this product, not something this skill computes on its own).
-- **Lifecycle tier cutoffs are heuristic**, not a certified business classification — always show the underlying numbers (spend share, ACOS, trend) alongside the tier label so the customer can judge, don't present the tier as an automated verdict beyond dispute.
+- **Both classifications are default rules, not certified business definitions** — always show the underlying numbers (spend share and ACOS for the portfolio tier; normalized slope, peak drawdown, which Declining path fired, and SP advertising age for the lifecycle stage) next to the labels, state the cutoffs you used, and say plainly that the customer can define their own. Neither label is a verdict beyond dispute.
+- **The lifecycle stage has no seasonal or promotional adjustment beyond the year-over-year check** — no series decomposition and no event calendar. A Declining stage the YoY check could not confirm is a flag to investigate, not a conclusion.
+- **Out-of-stock weeks are not excluded from the trend or the peak** — there is no inventory *history* to exclude on, only the current `asinDayAvailability30` / `asinInventoryStatus`. That is enough to tell a stockout apart from a life stage *today* (Axis B's stockout check), but not enough to rebuild what the series would have looked like in stock. A `stockout`-flagged series understates the product.
+- **`asinOpenDate` is the SP go-live date (`sp_open_date`), not the listing date** — the New stage therefore means *newly advertised on SP*, and the parent-level column is non-deterministic. See Step 2c.
+- **No weekly sales target and no review rating exist in this product's data**, so the growth/mature split rests on the trend slope alone. If a customer works to weekly sales targets, their own numbers beat this split and should replace it.
 - **`get_entity_metadata` has no historical-snapshot capability** — inventory/eligibility status in Step 5's diagnostic card reflects the *current* state, not necessarily the state at the time of the decline. Say so if the timing matters and can't be confirmed.
 - **`variant` granularity requires an anchor** (a named parent or child ASIN) — there is no "compare all variants across the whole catalog at once" mode; see "Granularity" above.
 - **`TotalSalesAmount`/`TACOS` are unified Seller/Vendor metrics** — Vendor rows use the shipped basis, so these fields can be used directly across mixed Seller and Vendor profiles. Use `OrderedRevenue`/`OrderedTACOS` or `ShippedRevenue`/`ShippedTACOS` only when the user explicitly needs that Vendor-specific breakdown.

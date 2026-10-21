@@ -10,7 +10,7 @@ description: >-
   sparkx-weekly-ads-report / sparkx-monthly-ads-report / a lighter ad-hoc analysis skill), product-level diagnosis
   (use sparkx-product-diagnosis), or search-term diagnosis (use sparkx-search-term-diagnosis).
 metadata:
-  version: 1.1.2
+  version: 1.1.3
 ---
 
 # Ads Structure Analysis
@@ -85,8 +85,9 @@ Constraints you must respect and disclose:
 - **Campaign level only.** There is no hourly adGroup / target / placement / ASIN data — `timeGranularity: hourly` on any other entity is a hard error. So an hourly breakdown cannot be crossed with `portfolio` or `marketplace` beyond what campaign-level `select` fields give you.
 - **7-day window per call, not 30 or 90.** This breaks the skill's default trailing-30-day window: either narrow to ≤7 days, or split the requested window into contiguous ≤7-day calls and aggregate hour-of-day across all chunks. Call it a **sample** only when you deliberately cover a subset (for example, the latest 14 of 30 days), and disclose that subset. If every day is covered by non-overlapping chunks, describe it as a split full-window query, not sampling.
 - **Averaging**: divide each hour's totals by the number of *days* covered, not the number of rows.
-- **T+2 delay** hits hardest here: the most recent hours are incomplete, so drop or label the trailing partial day rather than reporting a fake evening collapse.
-- **Timezone is not stated** for hourly buckets, so avoid strong claims like "spend peaks at 8pm local"; describe the shape ("a clear evening peak") and note the hour labels' zone is unconfirmed.
+- **No AI columns.** Hourly campaign data returns AI metrics as placeholders (`AISpend`/`AISales` = 0, `AIACOS`/`AIROAS` = null), so an hour-of-day table cannot split AI-managed vs manual spend; leave AI columns out and say so if the user asks.
+- **Recent hours are provisional, not missing.** Hourly rows appear ~2 hours after the hour ends, but conversions are backfilled onto them afterwards, and **when an hour stops changing is undocumented** — T+2 is the daily pipeline's figure and should not be quoted as the hourly settling time. Label the trailing hours provisional, say the final window can't be confirmed, and re-pull before treating them as final, rather than reporting a fake evening collapse.
+- **Hour labels are store-local** (the profile's IANA `timezone` from `get_user_authorized_context`, not UTC - see `sparkx-query-ads-performance`'s hourly/AMS example). Say so when you name an hour, and treat a daylight-saving changeover day as ambiguous.
 
 **What you can actually change after reading an hourly pattern.** Finding a dead window is
 only useful if something can act on it, and MCP's reach here is narrower than the platform's:

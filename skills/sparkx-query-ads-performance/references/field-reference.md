@@ -207,7 +207,7 @@ placements — always pair the label with its campaign type. Full label table in
 | `asin.sku_` | SKU |
 | `asin.asinTitle_` | Product title |
 | `asin.asinBrand_` | Brand |
-| `asin.asinOpenDate_` | First-live date |
+| `asin.asinOpenDate_` | SP go-live date (`sp_open_date`) — when the ASIN first ran Sponsored Products, **not** when the product was first listed |
 | `asin.asinCategoryInfo_` | Category info |
 | `asin.asinBsr_` | Best Seller Rank |
 | `asin.asinPrice_` | Price — **always local currency, even in a multi-profile USD-normalized query** |

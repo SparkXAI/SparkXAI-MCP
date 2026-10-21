@@ -9,7 +9,7 @@ description: >-
   hourly data, by hour, intraday, AMS, Amazon Marketing Stream, keyword placement,
   vendor, seller, distributorView, sellingProgram, shipped revenue, ordered revenue, TACOS
 metadata:
-  version: 1.4.5
+  version: 1.4.6
 ---
 
 # Query Ads Performance Skill
@@ -302,7 +302,9 @@ Hour-level data comes from Amazon Marketing Stream (AMS) and is reachable two wa
 
 - **Select `hour` explicitly.** `timeGranularity: "hourly"` changes the source table but does not inject an hour grouping into the response. For an intraday curve, include both `date` and `hour` in `select`; omitting `hour` aggregates the hourly source back to the remaining selected dimensions.
 - With `hour` selected, rows carry `hour` (0-23) alongside `date`; group by it to build an intraday curve, and remember each row is one hour of one day — averaging hours across days requires you to divide by the number of days, not the number of rows.
-- The T+2 delay still applies. The most recent hours of "today" and often all of yesterday are incomplete. Don't present a partial final day as a real dip.
+- **Hourly rows arrive fast, but they are not final.** First data for an hour shows up roughly **~2 hours** after that hour ends (confirmed 2026-08) — far sooner than the daily pipeline's T+2. Conversions keep being backfilled onto earlier hours after the row exists, so treat recent hours as **provisional rather than incomplete**: readable immediately, possibly revised upward later, and a trailing dip may be backfill-in-progress rather than a real decline. Re-pull before treating them as final.
+  **What is *not* established: when an hour stops changing.** That window is undocumented, and **T+2 is the daily pipeline's figure — there is no evidence it is also the point at which hourly attribution completes.** Don't quote T+2 as the hourly settling time in either direction: the honest statement is "first data in about two hours, backfilled afterwards, final window unknown." If a decision depends on the numbers being final, say the window can't be confirmed.
+- **AI metrics don't exist at hourly granularity on either path.** On `factEntity: campaign` + `timeGranularity: hourly`, `AISpend`/`AISales` come back `0` and `AIACOS`/`AIROAS` come back `null` - placeholders, the same as on `keywordPlacement` below. Real AI values are daily-only: for an AI-vs-manual split, query daily. The hourly campaign metric set is also a subset of the daily one (no DPV, video or impression share) - see `references/field-reference.md`.
 - `keywordPlacement` uses an asymmetric field naming convention (bare names in the request, `_`-suffixed keys in the response) — see Field Naming Rules.
 
 **`keywordPlacement` supports a restricted metric set.** The underlying stream table only carries base SP hourly data, so:
@@ -432,7 +434,7 @@ On error, the response instead follows the shared error envelope described in Pl
 - Each page returns up to `pageSize` rows (max 500); use `page` for pagination and check `hasNextPage`. An out-of-range `pageSize`/`page` is an **error**, not clamped — floor computed values at 1
 - `profileIds` is **required**. Always call `get_user_authorized_context` first. If the user doesn't name a store, pass all authorized `profileIds`
 - **Every requested `profileId` must be authorized** — one bad value fails the whole call (`Requested profileIds contain unauthorized values`); nothing is silently dropped
-- Hourly/AMS data (`timeGranularity: hourly` on campaign, or `factEntity: keywordPlacement`) is capped at a **7-day** span, and `keywordPlacement` returns `AISpend`/`AISales` as `0` and `AIACOS`/`AIROAS` as `null` — never read AI performance from it
+- Hourly/AMS data (`timeGranularity: hourly` on campaign, or `factEntity: keywordPlacement`) is capped at a **7-day** span, and both paths return `AISpend`/`AISales` as `0` and `AIACOS`/`AIROAS` as `null` — never read AI performance from hourly data
 - User says "Orders" -> convert to "Conversions"
 - User says "ASIN" -> default to child ASIN, use `asin.asin_`
 - Max date span 90 days on the `dateStart`/`dateEnd` request itself, max lookback 15 months — split longer windows into multiple ≤90-day calls first; week/month aggregation only reduces row count within each call, it does not raise the 90-day cap
