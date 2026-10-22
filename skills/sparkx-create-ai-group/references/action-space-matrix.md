@@ -43,12 +43,11 @@ On **edit**, omitted switches keep their current values - the defaults above app
   `bidAdPlaceStatus`, `bidAdPlaceRangeStatus`, `tosMin`, `tosMax`, `pdpMin`, `pdpMax`,
   `rosMin`, `rosMax`, `structPauseProductStatus`, `structPauseCampaignStatus`. Sending `0` /
   `null` is fine; only an enabled value trips it.
-- **Templates are checked the same way on create.** Creating an SB group from a template that
-  has any of these SP-only fields on is rejected - the create path does not zero them. Only the
-  **edit** path sanitizes a cross-type template (see `sparkx-edit-ai-group`), so a new SB group
-  is a create with `aiStatus=0` and no template, then the template as an edit, then AI on only
-  after the read-back and the user's go-ahead - see `template-guide.md` -> "A new SB group from a
-  template".
+- **Templates are not rejected on create.** Creating an SB group from a template that has
+  any SP-only switch on succeeds: the server turns those switches off, and the response
+  summary lists the switches that were turned off - tell the user which parts won't take
+  effect. Only SP-only switches **you** turn on in `aiActionSettings` go through the check
+  above (the edit path sanitizes a cross-type template the same way, see `sparkx-edit-ai-group`).
 - **Everything else unsupported may still be silently ignored** - looks like success, changes
   nothing.
 

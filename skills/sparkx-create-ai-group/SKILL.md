@@ -11,7 +11,7 @@ description: >-
   creates the group itself - it is NOT for enabling or editing an existing group (use
   sparkx-edit-ai-group) or deleting one (use sparkx-delete-ai-group).
 metadata:
-  version: 1.2.2
+  version: 1.2.3
 ---
 
 # Create AI Managed Group
@@ -175,8 +175,8 @@ confirm the meaning first, then use the ad-type reference to pick the field.
      "create but don't start", "先不要启动" - send `0`, and confirm that back to them.
      The preview is where they get to decline, so the sentence has to be there.
      **One exception you initiate yourself - staged flows (SP/SB only):** when the final
-     configuration needs a create followed by an edit (a new SB group from an SP-oriented
-     template, or an SP/SB template with a switch changed), create with `aiStatus=0` and turn
+     configuration needs a create followed by an edit (an SP/SB template with a switch
+     changed), create with `aiStatus=0` and turn
      it on only after the edit is done, read back, and the user confirms - say so in the
      preview. The default-on rule applies only to a create that one call fully configures. SD
      never needs a staged flow: pass the changed switch together with `templateId` in one
@@ -297,15 +297,15 @@ the matching template. Full rules: [`references/template-guide.md`](references/t
 - **Always offer three choices**: use this template / pick another / set it up myself.
 - **Applying**: look the id up by exact name, read the detail (`isSystemTemplate=1` for a
   system preset), pass the agreed `acos` explicitly, don't send `aiActionSettings`, and read
-  the group back afterwards. A new **SB** group can't be created from a template with SP-only
-  switches on - see below.
+  the group back afterwards. On a new **SB** group the template's SP-only switches are turned
+  off - see below.
 
 ## Creating from a template
 
 A managed group **can** now be created from a platform template via `templateId`.
 
 - **Read templates with `get_ai_group_template`** - no args returns the list (`searchName`
-  for a fuzzy name match, `createdBy`, `page`, `pageLimit` default 50, `applyFlag=1` to
+  for a fuzzy name match, `createdBy`, `page`, `pageLimit` default 50 / **max 200**, `applyFlag=1` to
   include system presets); pass `templateId` to get one template's full detail. Note this
   read sits behind the **write** scope.
 - **System presets need `isSystemTemplate=1`.** Each list item carries `isSystemTemplate`
@@ -346,18 +346,15 @@ A managed group **can** now be created from a platform template via `templateId`
   rules; a template's `aiAutomation` is ignored on SD. Applying such a template to an
   **existing** group later is rejected (see `sparkx-edit-ai-group`), so Rule-mode templates
   are a create-only route through MCP.
-- **Templates are not tied to an ad type, but creating an SB group from one is checked
-  strictly.** If the template has any SP-only switch on (`bidAmazonBusinessStatus`,
-  `btbRangeStatus`/`btbMin`/`btbMax`, `bidDaypartStatus`, `bidPerformanceStrictAcosStatus`,
-  `bidAdPlaceStatus`/`bidAdPlaceRangeStatus`, `tos`/`pdp`/`ros` bounds,
-  `structPauseProductStatus`/`structPauseCampaignStatus`), the SB create is **rejected** and the
-  error lists the fields - nothing is created. Most system templates are built around SP, so
-  expect this. The way through is a create followed by an edit, **with AI off until the end**:
-  create without the template and with `aiStatus=0`, apply the template with
-  `sparkx-edit-ai-group` (the edit path zeroes the SP-only fields instead of rejecting), read
-  the group back, and turn AI on only if the user confirms. If the template step fails, leave
-  the group off and stop. Full steps: [`references/template-guide.md`](references/template-guide.md)
-  -> "A new SB group from a template".
+- **Templates are not tied to an ad type; on an SB group the SP-only switches are turned off.**
+  If the template has any SP-only switch on (`bidAmazonBusinessStatus`, `btbRangeStatus`,
+  `bidPerformanceStrictAcosStatus`, `bidAdPlaceStatus`/`bidAdPlaceRangeStatus`,
+  `structPauseProductStatus`/`structPauseCampaignStatus`), the SB create still succeeds: the
+  server turns those switches off and the response summary lists them (`... template switches
+  not supported for sponsoredBrands were turned off: <fields>`). Most system templates are
+  built around SP, so expect this - tell the user which parts of the template won't take
+  effect. Switching an SP-only switch on yourself in `aiActionSettings` for an SB group is
+  still rejected.
 - **On create, `aiActionSettings` replaces the template's action space.** If you send it with
   `templateId`, the template's action-space config is skipped entirely (yours wins, it is not
   merged). To change one switch from a template: create from the template **with AI off**,

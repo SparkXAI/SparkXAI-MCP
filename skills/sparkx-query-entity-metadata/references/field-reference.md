@@ -479,6 +479,21 @@ Sourced from a separate backend (`td-api getSaAiGroupList`), aggregated from the
 **Return fields** (partial — full list is long):
 `aiGroupId`, `aiGroupName`, `aiStatus` (`0`=AI never turned on, `1`=AI currently running, `2`=AI turned off), `campaignType`, `targetType` (`1`=Drive growth/推动增长, `2`=Optimize ROAS/保持订单稳定, `3`=Promotion sales boost/活动冲量), `targetAcos`, `aiPersonality` (1-5), `aiPersonalityUpdatedAt`, `profileId`, `profileName`, `countryCode`, `numCampaign`, `numProduct`, `campaignNameSign`, `createTime`, `createBy`, `createUid`, `hasEditAuth`, `isAutoPacing`, `statusOnDate`, `lastStatusOnDate`, `lastStatusOffDate`, `lastOnDays`, `lastOnDaysBegin`, `lastOnDaysEnd`, `totalBudget`, `totalDailyBudget`, `sbStyleNum`, `aiActionSettings`, `aiAutomation`
 
+**`hasAdvice`** (intensity-enabled accounts only) says whether an AI personality recommendation is
+waiting for this group — it is the cheap way to find the groups worth calling
+`get_sp_sb_ai_personality_recommendation` on, instead of asking group by group.
+
+| Value | Meaning |
+|---|---|
+| `true` | a recommendation exists **and can be applied directly**: it was computed against the group's current campaigns / ASINs / targetType |
+| `false` | none available |
+| `null` | the recommendation service was temporarily unavailable — **unknown, not "no"**; say so rather than reporting "no recommendation" |
+
+- **Always `false` for `sponsoredDisplay` groups and for any group whose AI is not running** (`aiStatus != 1`). A `false` on those tells you nothing about whether advice could exist — it is structural.
+- **Not a filter.** There is no `hasAdvice` filter; pull the rows and group them client-side.
+- **An absent field is "unknown", not `false`, and not proof of a legacy account.** The field is omitted on legacy (non-intensity) accounts **and** whenever the capability check itself fails (`CapabilityDecision.QUERY_FAILED` falls back to the legacy output path). Those two look identical in the response, so read absence as "not enabled, or could not be determined" — never as "this account has no per-action-space intensities".
+- `true` is not an authorisation to write. It only says advice exists; applying it is still the separate user-approved step described in the create / edit skills.
+
 Display `aiPersonality` as its numeric value `1`-`5` in customer-facing group and schedule
 configuration output. Do not replace it with `aiPersonalityText` or append a personality label.
 

@@ -53,18 +53,18 @@ as a fixed rule, not AI. Applying them to an **existing** group is rejected (see
 step 8); for that, point the user to the platform.
 
 **These templates are built around SP** (keywords, placements, ASIN targeting). On an SB
-group the outcome depends on the path: **creating** an SB group from a template that has any
-SP-only switch on is **rejected** (the error lists the fields); **editing** an existing SB group
-with it succeeds and the server drops the SP-only parts - tell the user which parts won't take
-effect. A new SB group therefore needs the four-step flow below. On an SD group most purposes above don't apply, and SD create rejects any template with
+group - **creating** a new one from the template or **editing** an existing one with it - the
+server turns the template's SP-only switches off and the request succeeds; the response
+summary lists the switches that were turned off - tell the user which parts won't take
+effect. (Switching an SP-only switch on yourself in `aiActionSettings` for an SB group is still
+rejected.) On an SD group most purposes above don't apply, and SD create rejects any template with
 按表现调预算 on; don't recommend a template for SD unless the user asks for one.
 
 ### Staged create -> edit flows (SP/SB) - AI off until the final configuration is in place
 
 **Any SP/SB flow that needs a create followed by an edit to reach its final configuration
 creates the group with `aiStatus=0`.** AI must not start spending on a configuration that isn't
-finished. This covers a new SB group from an SP-oriented template (next section) and creating
-an SP/SB group from a template but with a switch changed. SD doesn't need it: an SD create
+finished. This covers creating an SP/SB group from a template but with a switch changed. SD doesn't need it: an SD create
 takes `templateId` and the changed switch together in one call. In every case:
 
 1. Create with AI off.
@@ -75,23 +75,6 @@ takes `templateId` and the changed switch together in one call. In every case:
 Show the whole sequence in the preview before the first call. If an edit or the read-back
 fails, stop: leave the group off, don't retry blindly, and tell the user what exists and what's
 missing.
-
-### A new SB group from a template - four steps, AI off until the end
-
-Creating an SB group straight from an SP-oriented template is rejected, so it takes a create
-followed by an edit. A plain create starts AI immediately (`aiStatus` defaults to `1`), which
-would let AI run on default settings between the two calls - and leave a running, wrongly
-configured group if the second call fails. So:
-
-1. **Create the group without the template, with `aiStatus=0`.**
-2. **Apply the template as an edit, AI still off** (`sparkx-edit-ai-group`; leaving `aiStatus`
-   out keeps it at `0`). The edit path drops the template's SP-only switches - tell the user which.
-3. **Read the group back** and check the settings took.
-4. **Turn AI on (`aiStatus=1`) only if the user confirms**, after seeing the read-back.
-
-Show all four steps in the preview before the first call. **If step 2 or 3 fails, stop**: leave
-the group off, don't retry blindly, and tell the user the group exists with AI off and without
-the template's settings.
 
 **The "why" column describes how each template is designed.** The template detail (read with
 `isSystemTemplate=1`, see "Applying") shows the actual switches. If the detail or the read-back

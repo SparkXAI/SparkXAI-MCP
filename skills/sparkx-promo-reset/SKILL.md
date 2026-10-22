@@ -13,7 +13,7 @@ description: >-
   general budget or bid edits with no promo behind them (use sparkx-edit-ads /
   sparkx-edit-ai-group).
 metadata:
-  version: 1.0.2
+  version: 1.0.3
 ---
 
 # Promo Reset (大促调整复位)
@@ -33,7 +33,7 @@ existing skills:
 
 > **Dependency - install all five skills above alongside this one.** Skills install as
 > sibling directories under your agent's skills root (`.claude/skills/<name>/` for Claude
-> Code; see the [supported-agents table](../README.md)); the `../sparkx-.../` links in
+> Code; see the installation notes in [README](../README.md)); the `../sparkx-.../` links in
 > this file resolve against it. Every write in this skill goes through the owning write
 > skill's rules - its confirmation protocol, its discriminator fields, its read-back. This
 > file does not repeat them and does not relax them.
@@ -112,11 +112,12 @@ Full procedure, queries and edge cases: [`references/restore-list.md`](reference
 The rules that decide the result:
 
 a. **Pull the log without a `changeBy` filter and classify `changedBy` yourself.** A row is a
-   human change when `changedBy` is an email address, `Manual`, or `Amazon Console`. Do
-   **not** filter with `changeBy: manual` - it matches only rows whose `changedBy` is
-   literally `Manual`, and misses every change attributed to a user's email (seen in
-   production 2026-10: a whole promo's budget changes, all email-attributed, returned
-   nothing under `manual`).
+   human change when `changedBy` is an email address, `Manual`, or `Amazon Console`. You
+   **cannot** filter with `changeBy: manual` — the server **rejects** it (case-insensitive,
+   in `IN`, `NOT_IN` or mixed). It only ever matched rows whose `changedBy` was literally
+   `Manual` and missed every change attributed to a user's email (seen in production
+   2026-10: a whole promo's budget changes, all email-attributed, returned nothing under
+   `manual`), which is why it is no longer accepted.
    The user may widen the sources ("API 改的也算") - then say in the list header which sources
    are included.
 

@@ -167,7 +167,7 @@ larger than the unfiltered one**, which is never possible.
 | `business_error` | Backend / query-execution error (most common) | Read the semantic `message` and branch (unknown field, filter value type mismatch, result set too large, execution timeout, server busy); downstream service errors carry a `service` field (e.g. `Amazon_SA_Service`) |
 | `timeout` | Query timeout | Narrow the range and retry |
 | `service_unavailable` | Backend data source unavailable | ClickHouse connection pool exhausted — transient, retry shortly |
-| `auth_service_unavailable` | Auth service unavailable | Auth check failed closed (503) — transient, retry shortly |
+| `auth_service_unavailable` | Auth service unavailable | Auth check failed closed (503) — transient, retry shortly. **An invalid or expired token is not this**: the auth service answers 4xx and the gateway now returns **401 / 403**, which is permanent — re-authenticate instead of retrying |
 | `capability_unavailable` | Capability check unavailable | A dependent capability lookup failed; the request was **not executed** — retry the same call unchanged later (`service: Auth_Service`, message `能力查询暂不可用，请稍后重试`) |
 | `query_shape_unsupported` | The entity combination cannot be joined | **Not retryable — change the query, not the timing.** The requested `factEntity` and dimensions cannot be connected: either a granularity rule blocked the path or the entities are unrelated. Messages read `Cannot connect CTEs: [...]` or `Cannot connect all terminal nodes, remaining: [...]`. Drop the dimension that doesn't belong to the fact entity's own hierarchy, or query it separately and join the results yourself. Previously this came back as `business_error`, so older advice to "retry" does not apply |
 
@@ -188,7 +188,7 @@ The `dimension` field on a `rate_limited` error tells you which bucket you hit: 
 - `rate_limit_service_unavailable` → not your query's fault and not retryable immediately; the platform is failing closed. Tell the user the service is temporarily rejecting requests.
 - `token_invalid` / `permission_denied` / `scope_missing` / `profile_out_of_range` → an auth/permission problem, not a query bug. Name the scope the tool needs (see Permission Scopes) and tell the user to have their token/role updated. Retrying the same call won't help.
 - `business_error` → **read the `message` and branch — it is semantically translated, do NOT blindly retry**: `unknown field 'X'` → fix the field name against field_reference and retry; `filter value type mismatch` → fix the filter value's type and retry; `result set too large` → narrow the date range / add filters; `execution timeout` → narrow and retry; `server is busy` → wait a few seconds and retry; any other internal error → report as a transient failure and quote `requestId`.
-- `timeout` / `service_unavailable` / `auth_service_unavailable` → backend/dependency temporarily unavailable, not a param problem. Retry once; if it persists, tell the user the data source is temporarily unavailable (quote `requestId`).
+- `timeout` / `service_unavailable` / `auth_service_unavailable` → backend/dependency temporarily unavailable, not a param problem. (**A bad or expired token is not in this group** — it comes back as **401 / 403** and retrying never fixes it.) Retry once; if it persists, tell the user the data source is temporarily unavailable (quote `requestId`).
 - `serialization_error` → rare edge case; report as a transient tool error, retry once.
 
 Messages are sanitized server-side: SQL, tokens, signed URLs, internal hostnames, stack traces, and raw table names are redacted (you may see `[SQL_REDACTED]`, `[redacted_token]`, `[internal]`, `[table]`). Don't treat a redaction marker as corruption, and don't try to reconstruct what was removed.
@@ -272,7 +272,8 @@ date values and compare those, rather than comparing the strings.
 
 | Entity in `entities` | profileIds count | `createdDate` timezone | Example |
 |---|---|---|---|
-| `aiGroup` | one or many | **UTC** | `2026-08-24 05:58:50` |
+| `aiGroup` (SP/SB) | one or many | **UTC** | `2026-08-24 05:58:50` |
+| `aiGroup` (SD) | one or many | **downstream DB timezone — undocumented** | `2026-08-24 05:58:50` |
 | `campaign` / `adGroup` / `target` / `placement` | **one** | **Store-local time** | `2026-08-24 00:01:06` (LA time) |
 | `campaign` / `adGroup` / `target` / `placement` | **many** | **UTC** | `2026-08-24 07:01:06` (UTC) |
 
@@ -283,10 +284,11 @@ Verified against a single pause record on a US (`America/Los_Angeles`, UTC-7) pr
 - **The same log entry can carry two different timestamps** depending on how many stores you queried. Adding a second store to a query silently shifts every ad-entity timestamp in the result by that store's UTC offset.
 - **Never compare or merge timestamps across a single-profile result and a multi-profile result.** They're in different clocks. If you already pulled single-store data and then widen to all stores, re-pull rather than stitching.
 - **Never present `createdDate` as "the store's time" without knowing which branch you're in.** In a multi-profile call, a `2026-08-24 07:01:06` on a US store is 00:01 local — reporting it as "7am" is wrong by a business day's worth of interpretation near midnight.
-- **Mixed `entities` mean mixed clocks in one response.** A query with `entities: ["campaign", "aiGroup"]` returns UTC for the aiGroup rows and (if single-profile) store-local for the campaign rows, in one time-sorted list. The sort itself is done on the raw string, so a mixed-clock result is not reliably chronological.
+- **Mixed `entities` mean mixed clocks in one response.** A query with `entities: ["campaign", "aiGroup"]` returns UTC for **SP/SB** aiGroup rows (and the downstream DB's timezone for **SD** aiGroup rows) alongside (if single-profile) store-local campaign rows, in one time-sorted list. The sort itself is done on the raw string, so a mixed-clock result is not reliably chronological.
+- **There are three clocks, not two.** Ad-entity rows are store-local for a single profile and **UTC for multiple profiles**; **SP/SB** managed-group rows are UTC; **SD** managed-group rows follow the **downstream database's** timezone, which is not stated anywhere. So an SP/SB-only managed-group query is safe to call UTC, while a query that can return SD managed-group rows cannot be given a single zone label at all — say which rows you could not place.
 - **Choose deliberately:**
   - Want store-local times the user can match against their own console? Query **one profile at a time** and restrict `entities` to ad entities.
-  - Want a comparable cross-store timeline? Query **multiple profiles** (everything comes back UTC) or convert client-side using each row's `countryCode`, and label the output as UTC.
+  - Want a comparable cross-store timeline? Query **multiple profiles**, which puts **ad-entity rows** in UTC, or convert client-side using each row's `countryCode`, and label the output as UTC. **This does not normalise managed-group rows** — SP/SB aiGroup is UTC either way, and SD aiGroup stays on the downstream DB's clock no matter how many profiles you query.
 - **When you show a timestamp, label the zone** ("2026-08-24 07:01 UTC" / "2026-08-24 00:01 store time"). An unlabeled timestamp from this tool is ambiguous by construction.
 
 Note this is a property of the log data itself; the MCP layer passes `createdDate` through unchanged and does no conversion.
@@ -506,7 +508,7 @@ See the dedicated Period-over-Period and Top Movers example for the full procedu
 - **One unauthorized `profileId` fails the whole call** — no silent dropping any more. Always take IDs verbatim from `get_user_authorized_context`.
 - **`pageSize` out of range is an error on `get_ads_perf`/`get_entity_metadata`** (clamped only on `get_operation_log`) — floor any computed `pageSize` at 1 and cap it at the tool's max yourself.
 - **Hourly/AMS queries cap at 7 days, not 90** — applies to `timeGranularity: hourly` (campaign only) and `factEntity: keywordPlacement` (SP only). `hourly` on any other entity errors rather than falling back to daily, and `keywordPlacement` requests use bare field names while its responses come back `_`-suffixed.
-- **`get_operation_log`'s `createdDate` timezone shifts with the request** (`aiGroup` = UTC; ad entities = store-local for one profile, UTC for many) — always label the zone, never merge single- and multi-profile results. See the timezone section above.
+- **`get_operation_log`'s `createdDate` timezone shifts with the request** (SP/SB `aiGroup` = UTC, SD `aiGroup` = downstream DB timezone / unknown; ad entities = store-local for one profile, UTC for many) — always label the zone, never merge single- and multi-profile results. See the timezone section above.
 - **`currency: "mixed"` on `get_operation_log` is not a currency** — read each row's `currencyCode` instead of formatting or summing.
 - **`get_entity_metadata`'s `aiGroup` response is a projection of what's *currently effective*** — fields belonging to a disabled switch, and rules running in AI mode, are omitted rather than returned with stale values. A missing field means "not in effect", not "not configured" and not "write failed". See that skill for the full rules.
 

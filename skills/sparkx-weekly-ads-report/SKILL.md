@@ -7,7 +7,7 @@ description: >-
   Not for monthly/quarterly reports (use sparkx-monthly-ads-report / quarterly-ads-report, not yet built),
   nor for deep-dive analysis on a specific question (use the relevant analysis skill instead).
 metadata:
-  version: 1.1.2
+  version: 1.1.3
 ---
 
 # Weekly Ads Report
@@ -20,7 +20,7 @@ This skill does **not** map to a single MCP tool of its own — it orchestrates 
 - `get_operation_log` → [sparkx-query-operation-log](../sparkx-query-operation-log/SKILL.md)
 - `get_entity_metadata` → [sparkx-query-entity-metadata](../sparkx-query-entity-metadata/SKILL.md)
 
-> **Dependency — install these three base skills alongside this one:** `sparkx-query-ads-performance`, `sparkx-query-entity-metadata`, `sparkx-query-operation-log`. Skills install as sibling directories under your current agent's skills root (`.claude/skills/<name>/` for Claude Code; the equivalent root for other agents — see the [supported-agents table](../../README.md)), which is exactly what the `../query-.../…` links above (and elsewhere in this doc) resolve against — if a base skill isn't installed there, those links won't resolve and this skill can't run. Install all three first.
+> **Dependency — install these three base skills alongside this one:** `sparkx-query-ads-performance`, `sparkx-query-entity-metadata`, `sparkx-query-operation-log`. Skills install as sibling directories under your current agent's skills root (`.claude/skills/<name>/` for Claude Code; the equivalent root for other agents — see the installation notes in [README](../README.md)), which is exactly what the `../query-.../…` links above (and elsewhere in this doc) resolve against — if a base skill isn't installed there, those links won't resolve and this skill can't run. Install all three first.
 
 **Read those three SKILL.md files first** (parameter formats, field-naming rules, the Ratio Metric Display Rule) plus [`references/platform-notes.md`](references/platform-notes.md) (auth flow, error handling, pagination, date-range limits, currency rules — shared by all three underlying tools). This document only covers logic specific to the weekly-report use case; it doesn't repeat what the three base skills already document.
 
@@ -98,7 +98,7 @@ never promise to run a skill that may not be there.
 - **People vs machines in the operation log.** Query without `changeBy` and classify
   `changedBy` client-side: an email, `Manual` or `Amazon Console` is a person; everything else
   (`AI`, `Automation`, `AI-Custom Rule`, `Budget Management`, `Lock Ranking`, `API`, `Labels`,
-  `System`) is a machine. `changeBy=manual` misses changes recorded under a user's email. Inside
+  `System`) is a machine. **`changeBy=manual` is rejected by the server** (case-insensitive, in `IN`, `NOT_IN` or mixed) — it was a UI category, not an operator, and never covered changes recorded under a user's email. Inside
   managed groups the AI moves `currentBudget` every hour and those rows are also
   `Budget Increased` - leave them out of counts and "what changed" lists (a person's budget
   change is on `dailyBudget`). Group setting changes (target ACOS, personality, switches) are

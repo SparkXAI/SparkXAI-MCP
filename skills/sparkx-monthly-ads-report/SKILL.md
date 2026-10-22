@@ -3,13 +3,13 @@ name: sparkx-monthly-ads-report
 description: >-
   Generate a monthly ad performance recap for ads managers / account managers at month-end.
   Includes full-month KPIs (MoM + YoY), goal attainment, structural breakdown (campaign type /
-  site / portfolio share), product analysis (Top ASIN changes, new products, long-tail), keyword
+  site / portfolio share), product analysis (Top ASIN changes, newly advertised products, long-tail), keyword
   performance (Top keywords; search-term negatives / harvesting go to sparkx-search-term-diagnosis),
   an issues list with attribution, and next-month structural recommendations. Use when the user says "出个月报",
   "月度复盘", "这个月表现如何", "monthly report". Not for weekly recaps (use sparkx-weekly-ads-report) or
   quarterly/QBR-level strategic review (use quarterly-ads-report, not yet built).
 metadata:
-  version: 1.1.2
+  version: 1.2.0
 ---
 
 # Monthly Ads Report
@@ -22,7 +22,7 @@ This skill does **not** map to a single MCP tool of its own — it orchestrates 
 - `get_operation_log` → [sparkx-query-operation-log](../sparkx-query-operation-log/SKILL.md)
 - `get_entity_metadata` → [sparkx-query-entity-metadata](../sparkx-query-entity-metadata/SKILL.md)
 
-> **Dependency — install these three base skills alongside this one:** `sparkx-query-ads-performance`, `sparkx-query-entity-metadata`, `sparkx-query-operation-log`. Skills install as sibling directories under your current agent's skills root (`.claude/skills/<name>/` for Claude Code; the equivalent root for other agents — see the [supported-agents table](../../README.md)), which is exactly what the `../query-.../…` links above (and elsewhere in this doc) resolve against — if a base skill isn't installed there, those links won't resolve and this skill can't run. Install all three first.
+> **Dependency — install these three base skills alongside this one:** `sparkx-query-ads-performance`, `sparkx-query-entity-metadata`, `sparkx-query-operation-log`. Skills install as sibling directories under your current agent's skills root (`.claude/skills/<name>/` for Claude Code; the equivalent root for other agents — see the installation notes in [README](../README.md)), which is exactly what the `../query-.../…` links above (and elsewhere in this doc) resolve against — if a base skill isn't installed there, those links won't resolve and this skill can't run. Install all three first.
 
 **Read those three SKILL.md files first** (parameter formats, field-naming rules, the Ratio Metric Display Rule) plus [`references/platform-notes.md`](references/platform-notes.md) (auth flow, error handling, pagination, date-range limits, currency rules — shared by all three underlying tools). This document only covers logic specific to the monthly-report use case; it doesn't repeat what the three base skills already document.
 
@@ -102,7 +102,7 @@ never promise to run a skill that may not be there.
 - **People vs machines in the operation log.** Query without `changeBy` and classify
   `changedBy` client-side: an email, `Manual` or `Amazon Console` is a person; everything else
   (`AI`, `Automation`, `AI-Custom Rule`, `Budget Management`, `Lock Ranking`, `API`, `Labels`,
-  `System`) is a machine. `changeBy=manual` misses changes recorded under a user's email. Inside
+  `System`) is a machine. **`changeBy=manual` is rejected by the server** (case-insensitive, in `IN`, `NOT_IN` or mixed) — it was a UI category, not an operator, and never covered changes recorded under a user's email. Inside
   managed groups the AI moves `currentBudget` every hour and those rows are also
   `Budget Increased` - leave them out of counts and "what changed" lists (a person's budget
   change is on `dailyBudget`). Group setting changes (target ACOS, personality, switches) are
@@ -188,7 +188,21 @@ No dimension in `select` — global aggregate across all campaigns. **If the AI-
 ```
 **g. Last month, Top ASINs** — same shape as (f), shifted back one month, for MoM product comparison (Step 6).
 
-**h. New-product identification**: `get_entity_metadata` (`entity: asin`). **`asinOpenDate` is NOT a filterable field** — asin's filterable fields are `asin`/`parentAsin`/`sku`/`asinBrand`/`asinTitle`/`asinBsr`/`asinPrice`/`asinInventoryStatus`/the eligibility flags/`asinIsDelete`/`productLine*` — so you can't filter the call by open date. Instead, pull the asin metadata (**fully paginate — loop `page` while `hasNextPage` is `true`; default page size is 100, so a catalog past one page silently truncates otherwise**), then read the returned `asinOpenDate` field and filter to this month's window **client-side**. `asinOpenDate` is a datetime-with-timezone string, e.g. `"2026-06-01 00:00:00 PST"` — not `YYYYMMDD`, and not the `YYYY-MM-DD` used by `dateStart`/`dateEnd` — so parse it and mind the **PST timezone** when judging whether an ASIN opened inside the month, to avoid month-boundary misclassification. (`campaignStartDate`/`EndDate` are strings of no guaranteed shape — a different problem again, not this field's format.)
+**h. Newly-advertised-product identification** (first SP go-live this month — see the caveat at the end of this step, this is **not** the same as newly listed): `get_entity_metadata` (`entity: asin`). **`asinOpenDate` is NOT a filterable field** — asin's filterable fields are `asin`/`parentAsin`/`sku`/`asinBrand`/`asinTitle`/`asinBsr`/`asinPrice`/`asinInventoryStatus`/the eligibility flags/`asinIsDelete`/`productLine*` — so you can't filter the call by open date. Instead, pull the asin metadata (**fully paginate — loop `page` while `hasNextPage` is `true`; default page size is 100, so a catalog past one page silently truncates otherwise**), then read the returned `asinOpenDate` field and filter to this month's window **client-side**. `asinOpenDate` is a datetime-with-timezone string, e.g. `"2026-06-01 00:00:00 PST"` — not `YYYYMMDD`, and not the `YYYY-MM-DD` used by `dateStart`/`dateEnd` — so parse it and mind the **PST timezone** when judging whether an ASIN opened inside the month, to avoid month-boundary misclassification. (`campaignStartDate`/`EndDate` are strings of no guaranteed shape — a different problem again, not this field's format.)
+
+⚠️ **`asinOpenDate` is the SP go-live date, not the date the product was first listed.** The underlying column is `sp_open_date`. An ASIN that has sold for years and only started running Sponsored Products this month carries a this-month `asinOpenDate`, so a naive read reports it as a new product. Two things follow:
+- Call it **newly advertised** rather than **newly listed** in the report, or say "first ran SP this month".
+- **Falsify it against sales that predate the SP go-live date.** **Step 2f cannot do this** — it covers this month only and returns a single aggregate per ASIN, so it can neither reach earlier months nor show whether this month's sales fell before or after `asinOpenDate`. Use instead:
+  - **at minimum, Step 2g** (last month, same shape): any `TotalSalesAmount` there is sales that predate a this-month `asinOpenDate`;
+  - **when it matters, one extra `get_ads_perf`** — the only check that works when an ASIN went live mid-month, or when there is no MoM baseline. **Candidates have different `asinOpenDate`s, so there is no single `dateEnd` that serves them all.** Pick one of these two shapes, don't improvise a third:
+    - **Daily grain, one call** (preferred): `factEntity: asin`, `filters` on `asin.asin_` for every candidate, `dateStart` = the earliest candidate's `asinOpenDate` minus the lookback you choose, `dateEnd` = the **latest** candidate's `asinOpenDate - 1 day`, and **`date` in `select`** so rows stay per-day. Then, client-side, keep only each ASIN's rows strictly before **its own** `asinOpenDate`. Without `date` in `select` the response is one aggregate per ASIN and the per-ASIN cutoff cannot be applied — that is the mistake this shape exists to prevent.
+    - **Group by `asinOpenDate`, one call per group**: simpler to reason about and the right choice when the dates cluster, but it costs one call per distinct date.
+    Respect the 90-day span and 15-month lookback caps either way, splitting the window if needed.
+  - **State the span you actually checked.** "No earlier sales" only ever means "none in the window queried". Write the window into the report ("no sales in the 6 months before its SP go-live date"), so nobody reads a 30-day check as proof the product is new.
+  An ASIN with sales before its `asinOpenDate` is an **existing product newly put on SP**. Report it on its own line rather than mixing it into the new-product section, where it would distort every "how are new launches doing" comparison.
+- **The check only works in one direction.** Finding earlier sales *disproves* "new product". Finding none **does not prove** the product is newly listed — it may have been listed for a year and simply never sold, or sold outside the window you queried. So call the remaining group what the data actually supports: **first ran SP this month, no earlier sales observed**. Don't promote it to "new product", and if a customer needs true listing age, say this field cannot provide it.
+
+⚠️ **One ASIN returns several rows, one per SKU, each with its own `asinOpenDate`** (some on `Inactive` SKUs). Take the **earliest** date across an ASIN's rows — that is when the ASIN first went live on SP; the later ones are re-listings of individual SKUs, and picking whichever row arrives first gives a different answer run to run. The parent-level `parentAsinOpenDate` is `any(sp_open_date)` and is not reproducible at all — derive a parent's SP age from the minimum of its children instead.
 
 **i. Keyword-level performance**: `get_ads_perf` with `factEntity: target`, `queryType: keyword`, this month's window, `select` including `target.targetId_`/`target.targetText_`/`target.targetMatchType_`, metrics `Impressions/Clicks/Spend/Sales/Conversions/ACOS`.
 
@@ -233,7 +247,7 @@ Report both months' share percentages and the point-change (e.g. "SP share: 62% 
 
 **Top ASIN MoM changes**: follow the same rigorous join procedure as [sparkx-query-ads-performance's Period-over-Period and Top Movers example](../sparkx-query-ads-performance/references/example-period-comparison-top-movers.md) — join Step 2's (f)/(g) by `asin.asin_` (not by title), bucket into new/disappeared/present-in-both, floor the "% change" ranking on the **prior month's** (denominator) value, and show both months' raw values plus the absolute delta alongside any percentage.
 
-**New-product performance**: for ASINs identified in Step 2h (opened this month), report their this-month `TotalSalesAmount`/`OrderCount`/`TACOS` from Step 2f (the actual metrics that call requests — not `Sales`/`Conversions`, which aren't part of it) — there is no "last month" baseline for these by definition, so don't compute a MoM % for them; present as "new this month" with their standalone numbers. **Don't assume every new ASIN is present in Step 2f**: if 2f was reduced to a disclosed spend/sales-ranked sample (per Step 2's pagination fallback), newly-opened products — which usually have low sales — likely fall outside the top sample. In that case, issue a separate `get_ads_perf` (`factEntity: asin`) call scoped to the Step 2h ASIN list (`filters` on `asin.asin_`) to fetch their performance, rather than reporting them as "no data" just because they weren't in the Top-ASIN sample. **If Step 2h's new-ASIN list is large, batch this supplemental call** — split the ASIN list into chunks of a reasonable size for the `in` filter rather than one unbounded `asin.asin_: {"in": [...hundreds...]}` call, fully paginate each batch (`hasNextPage`), and merge/dedupe the batches' results by `asin.asin_` before reporting — don't silently drop ASINs because a single oversized call or an unpaginated batch left some out.
+**Newly-advertised-product performance**: for ASINs identified in Step 2h (first ran SP this month, no earlier sales observed — excluding the ones Step 2h flagged as existing products newly put on SP), report their this-month `TotalSalesAmount`/`OrderCount`/`TACOS` from Step 2f (the actual metrics that call requests — not `Sales`/`Conversions`, which aren't part of it) — there is no "last month" **advertising** baseline for these, so don't compute a MoM % for them; present as "first advertised this month" with their standalone numbers, and never as "newly launched" unless the customer confirmed the listing date from their own records. **Don't assume every newly advertised ASIN is present in Step 2f**: if 2f was reduced to a disclosed spend/sales-ranked sample (per Step 2's pagination fallback), first-SP-go-live candidates — which usually have low sales — likely fall outside the top sample. In that case, issue a separate `get_ads_perf` (`factEntity: asin`) call scoped to the Step 2h ASIN list (`filters` on `asin.asin_`) to fetch their performance, rather than reporting them as "no data" just because they weren't in the Top-ASIN sample. **If Step 2h's candidate list is large, batch this supplemental call** — split the ASIN list into chunks of a reasonable size for the `in` filter rather than one unbounded `asin.asin_: {"in": [...hundreds...]}` call, fully paginate each batch (`hasNextPage`), and merge/dedupe the batches' results by `asin.asin_` before reporting — don't silently drop ASINs because a single oversized call or an unpaginated batch left some out.
 
 **Long-tail situation**: from Step 2f's full (paginated) ASIN list, compute what share of total Sales comes from the top N ASINs vs the rest (a simple Pareto-style cut, e.g. "top 20% of ASINs account for X% of Sales") — this characterizes concentration, not a specific product recommendation.
 
@@ -346,8 +360,9 @@ Remember: **the section headers and labels below are structural placeholders (sh
 |---|---|---|---|
 | ... | ... | ... | ... |
 
-### New Products This Month
+### First Advertised This Month
 {table — standalone figures, no MoM %}
+{Say in one line that this is first SP go-live, not listing date, and name separately any ASIN that already had sales before it.}
 
 ### Long-Tail Concentration
 {one or two sentences + a simple share breakdown}
@@ -389,7 +404,8 @@ Output JSON schema:
   },
   "productAnalysis": {
     "topAsinChanges": [...],
-    "newProducts": [...],
+    "newlyAdvertisedProducts": [...],
+    "existingProductsNewlyAdvertised": [...],
     "longTail": {"topSharePct": ..., "topNCount": ...}
   },
   "keywordAnalysis": {

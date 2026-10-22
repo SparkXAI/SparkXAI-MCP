@@ -10,7 +10,7 @@ description: >-
   sparkx-weekly-ads-report / sparkx-monthly-ads-report / a lighter ad-hoc analysis skill), product-level diagnosis
   (use sparkx-product-diagnosis), or search-term diagnosis (use sparkx-search-term-diagnosis).
 metadata:
-  version: 1.1.3
+  version: 1.1.4
 ---
 
 # Ads Structure Analysis
@@ -22,7 +22,7 @@ This skill does **not** map to a single MCP tool of its own — it orchestrates 
 - `get_ads_perf` → [sparkx-query-ads-performance](../sparkx-query-ads-performance/SKILL.md)
 - `get_entity_metadata` → [sparkx-query-entity-metadata](../sparkx-query-entity-metadata/SKILL.md)
 
-> **Dependency — install these two base skills alongside this one:** `sparkx-query-ads-performance`, `sparkx-query-entity-metadata`. Skills install as sibling directories under your current agent's skills root (`.claude/skills/<name>/` for Claude Code; the equivalent root for other agents — see the [supported-agents table](../../README.md)), which is exactly what the `../query-.../…` links above (and elsewhere in this doc) resolve against — if a base skill isn't installed there, those links won't resolve and this skill can't run. Install both first.
+> **Dependency — install these two base skills alongside this one:** `sparkx-query-ads-performance`, `sparkx-query-entity-metadata`. Skills install as sibling directories under your current agent's skills root (`.claude/skills/<name>/` for Claude Code; the equivalent root for other agents — see the installation notes in [README](../README.md)), which is exactly what the `../query-.../…` links above (and elsewhere in this doc) resolve against — if a base skill isn't installed there, those links won't resolve and this skill can't run. Install both first.
 
 **Read those two SKILL.md files first** (parameter formats, field-naming rules, the Ratio Metric Display Rule) plus [`references/platform-notes.md`](references/platform-notes.md) (auth flow, error handling, pagination, date-range limits, currency rules). This document only covers logic specific to structural analysis; it doesn't repeat what the base skills already document.
 

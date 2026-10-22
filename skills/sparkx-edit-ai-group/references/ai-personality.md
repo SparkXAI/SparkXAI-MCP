@@ -249,9 +249,36 @@ be copied across unchanged; each is `1`-`5` or `null` (no recommendation for tha
 SB group `bidAdPlaceAiPersonality` is simply absent. `summary` is the explanation to show the
 user and is `null` for `INVALID` and `NO_ADVICE`. `evidence` says where each number came from:
 `I1` this group's own manual operations, `I2` manual operations on campaigns sharing its ASINs,
-`I3` / `I4` / `ACCOUNT` peer benchmarks, `P3` the default `3`.
+`I3` / `I4` / `ACCOUNT` peer benchmarks, `P3` the default `3`. It has one item per action space,
+keyed by `service`: `bid` -> `bidPerformanceAiPersonality`, `placement` ->
+`bidAdPlaceAiPersonality`, `harvest` -> `targetHarvestAiPersonality`, `negation` ->
+`negativeTargetAiPersonality`. Keep the items as they are: they are passed back unchanged when
+applying.
 
 **Applying it is a separate, user-approved step.** Show the recommendation, get an explicit yes,
 then copy the **non-null** values into `aiActionSettings` on `save_sp_sb_ai_managed_group` - the
 same `aiGroupId` on edit, the same campaigns and `targetType` on create. Fields you do not
 include keep their current values. A recommendation is not an authorisation to write.
+
+In that same save call, put the matching `evidence` items unchanged into `evidence` and set
+`isApplyP=true`. If the user applies only some action spaces, pass only the items for those
+spaces (each item's `personality` must equal the value you write). Do not set `isApplyP` unless
+the user confirmed. `evidence` / `isApplyP` only work on a normal create or edit: not with
+`templateId` and not with a batch `operation`, and not on a legacy account. Do not pass
+`isPreview`; it is rejected by the schema.
+
+The gateway validates `evidence` before anything is written, so these are hard rules, not advice:
+
+- **At most 4 items, and each `service` at most once** — one per action space (`bid`, `placement`,
+  `harvest`, `negation`).
+- **`personality` must be an integer `1`-`5`** in every item.
+- **An SB group cannot pass `service=placement`** — that action space does not exist for SB, which is
+  also why `bidAdPlaceAiPersonality` is absent from an SB recommendation.
+- **On edit, an item's `aiGroupId` must be `0` or equal the group's `aiGroupId`.** The recommendation
+  always returns `0`, and `0` is treated as "not supplied" — so **leave it alone**. "Correcting" it to
+  something else is the one way to get the unchanged evidence rejected.
+- **The gateway rebuilds each item from a field whitelist, so three keys never survive as you sent
+  them.** `tenantId` and `profileId` are **replaced** with the caller's own — a deliberate guard against
+  writing evidence rows under another tenant. `status` is **dropped entirely**: it is not on the whitelist,
+  so it is not forwarded at all, and the downstream sets it. Don't try to set any of the three, and
+  don't report them back as if they took effect.

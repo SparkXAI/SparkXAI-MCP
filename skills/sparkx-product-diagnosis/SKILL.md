@@ -10,7 +10,7 @@ description: >-
   "ASIN health check". Not for account-wide structural share analysis (use sparkx-ads-structure-analysis)
   or periodic WoW/MoM recaps (use sparkx-weekly-ads-report / sparkx-monthly-ads-report).
 metadata:
-  version: 1.2.0
+  version: 1.2.1
 ---
 
 # Product Diagnosis
@@ -23,7 +23,7 @@ This skill does **not** map to a single MCP tool of its own — it orchestrates 
 - `get_entity_metadata` → [sparkx-query-entity-metadata](../sparkx-query-entity-metadata/SKILL.md)
 - `get_operation_log` → [sparkx-query-operation-log](../sparkx-query-operation-log/SKILL.md) (used in Step 2e for the diagnostic card's correlated-changes check)
 
-> **Dependency — install these three base skills alongside this one:** `sparkx-query-ads-performance`, `sparkx-query-entity-metadata`, `sparkx-query-operation-log`. Skills install as sibling directories under your current agent's skills root (`.claude/skills/<name>/` for Claude Code; the equivalent root for other agents — see the [supported-agents table](../../README.md)), which is exactly what the `../query-.../…` links above (and elsewhere in this doc) resolve against — if a base skill isn't installed there, those links won't resolve and this skill can't run. Install all three first.
+> **Dependency — install these three base skills alongside this one:** `sparkx-query-ads-performance`, `sparkx-query-entity-metadata`, `sparkx-query-operation-log`. Skills install as sibling directories under your current agent's skills root (`.claude/skills/<name>/` for Claude Code; the equivalent root for other agents — see the installation notes in [README](../README.md)), which is exactly what the `../query-.../…` links above (and elsewhere in this doc) resolve against — if a base skill isn't installed there, those links won't resolve and this skill can't run. Install all three first.
 
 **Read all three SKILL.md files first** (parameter formats, field-naming rules, the Ratio Metric Display Rule, and — specific to this skill — [`references/ad-type-dependent-metrics.md`](references/ad-type-dependent-metrics.md)'s rule that ASIN business metrics must never be joined or filtered against campaign/adGroup/aiGroup-level fields) plus [`references/platform-notes.md`](references/platform-notes.md) (auth flow, error handling, pagination, date-range limits, currency rules). This document only covers logic specific to product diagnosis; it doesn't repeat what the base skills already document.
 
@@ -135,7 +135,7 @@ never promise to run a skill that may not be there.
 - **People vs machines in the operation log.** Query without `changeBy` and classify
   `changedBy` client-side: an email, `Manual` or `Amazon Console` is a person; everything else
   (`AI`, `Automation`, `AI-Custom Rule`, `Budget Management`, `Lock Ranking`, `API`, `Labels`,
-  `System`) is a machine. `changeBy=manual` misses changes recorded under a user's email. Inside
+  `System`) is a machine. **`changeBy=manual` is rejected by the server** (case-insensitive, in `IN`, `NOT_IN` or mixed) — it was a UI category, not an operator, and never covered changes recorded under a user's email. Inside
   managed groups the AI moves `currentBudget` every hour and those rows are also
   `Budget Increased` - leave them out of counts and "what changed" lists (a person's budget
   change is on `dailyBudget`). Group setting changes (target ACOS, personality, switches) are
@@ -228,14 +228,35 @@ Scope this call per `scope`:
   ```
   Every ASIN that comes back is deleted; an empty result means none of them are. Rows are per SKU, so dedupe by `asin`. (The selectable `asinIsDelete` lives on the **`get_ads_perf`** side as the dimension `asin.asinIsDelete_` — a different tool with a different field set, which is why the name looks available but isn't here.)
 
-**e. Operation log for flagged ASINs** (feeds Step 5 and the promotion signal): `get_operation_log`, from 7 days before the comparison window through the end of the analysis window (split if that exceeds 90 days), `resourceIds` scoped to `campaignId`/`adGroupId` (resolve each flagged ASIN → its `campaignId`/`adGroupId` via `get_entity_metadata`'s `productAd` entity first, since `get_operation_log` takes IDs, not ASINs directly). **`resourceIds.idEntity` has no `productAd` value** (see `sparkx-query-operation-log`'s field reference) — don't resolve to `amazonAdId` and try to pass it in; use `idEntity: "campaign"`/`"adGroup"` with the resolved `campaignId`/`adGroupId` instead.
+**e. Operation log for flagged ASINs** (feeds Step 5 and the promotion signal): `get_operation_log`, from 7 days before the comparison window through the end of the analysis window (split if that exceeds 90 days), `resourceIds` scoped to `campaignId`/`adGroupId` (resolve each flagged ASIN → its `campaignId`/`adGroupId` via `get_entity_metadata`'s `productAd` entity first, since `get_operation_log` takes IDs, not ASINs directly). **`resourceIds.idEntity` has no `productAd` value** (see `sparkx-query-operation-log`'s field reference) — don't resolve to `amazonAdId` and try to pass it in; use `idEntity: "campaign"`/`"adGroup"` instead.
+
+⚠️ **Those ids must be `amazonCampaignId` / `amazonAdGroupId`, not the internal `campaignId` / `adGroupId` the `productAd` entity returns.** Getting this wrong does not raise an error: with `entities` set as below, the filter simply matches nothing and you get an **empty result** that looks exactly like "nobody touched these campaigns". Sanity-check the magnitude before sending — internal ids are small sequential numbers, Amazon ids are 15-19 digits — and treat an empty log for a busy campaign as a suspected id-type mistake before reporting it as a finding.
+
+So the resolution is **three hops, not one**, and **both** levels need their own hop:
+
+1. flagged ASIN → `get_entity_metadata` (`entity: productAd`) → internal `campaignId` **and** `adGroupId`
+2. internal `campaignId` → `get_entity_metadata` (`entity: campaign`) → **`amazonCampaignId`** (this is the same call that supplies `campaignName`, `campaignState`, `aiGroupId` and `dailyBudget`, so it is not an extra round trip)
+3. internal `adGroupId` → `get_entity_metadata` (`entity: adGroup`) → **`amazonAdGroupId`**. **Don't skip this one.** Step 2e asks for ad-group history too, and there is no ad-group equivalent hiding in the campaign rows — without this hop the `adGroup` scope is silently unfiltered.
+
+⚠️ **Always pass `entities` explicitly.** Omitting it queries **every entity type except `audience`** — portfolio, profile, aiGroup, target, placement and the rest — which is how an ASIN-scoped question comes back carrying portfolio-level rows that have nothing to do with the product. Run **three separate calls**, not one:
+- `entities: ["campaign"]` with the Amazon campaign ids
+- `entities: ["adGroup"]` with the Amazon ad-group ids
+- `entities: ["aiGroup"]` with the internal managed-group ids (below)
+
+Separate calls also restore real pagination: `page` only works when a single non-`aiGroup` entity is specified, so a combined query is limit-only. It does not fail silently — it comes back with `meta.truncated: true` and no way to page — so **check `truncated` on every response** and, when it is set, split the query (by entity, then by sub-window) rather than reporting a partial log as the whole history.
 
 ⚠️ **The `productAd` resolution is far bigger than it looks, and it decides whether this step is worth running at all.** A real six-ASIN flagged set resolved to **1,556 product-ad rows across 144 campaigns**, and **one** ASIN alone sat in **120 campaigns and 177 ad groups**. So:
 - **Paginate the resolution** (`total` and `hasNextPage` are both returned) and count the distinct campaigns **per ASIN** before querying any log.
 - **Above ~20 campaigns for one ASIN, don't run the campaign-scoped log for it.** The result would be dominated by operations on campaigns that have nothing to do with this product, and presenting that as "correlated changes" is worse than presenting nothing. Say the ASIN is spread across N campaigns so campaign-level history isn't attributable to it, and fall back to what *is* ASIN-specific: the `productAdState` spread from this same resolution (how many of its product ads are enabled/paused/archived) and the carrying campaigns' current `campaignState`.
 - **`campaignName` is NOT selectable on `productAd`** — the available fields are `adGroupId`, `amazonAdId`, `asin`, `campaignId`, `campaignType`, `productAdId`, `productAdState`, `profileId`, `sku`, and anything else in `select` is silently dropped with a `meta.hint`. Since the output must name entities rather than show bare IDs, follow the resolution with one `get_entity_metadata` (`entity: campaign`) call over the distinct `campaignId`s for `campaignName`, `campaignState`, `aiGroupId` and `dailyBudget` — that one call also supplies Step 5's "is it even still being advertised" check and the managed-group lookup below, so it is not an extra round trip.
 
-⚠️ **A campaign-scoped query does not only return campaign rows.** Scoping `resourceIds` to `idEntity: "campaign"` returned **`PORTFOLIO`-entity rows** (a `Portfolio Out of Budget` event on the portfolio those campaigns belong to) and no campaign rows at all. Read `entity` on every row and label it — a portfolio-level budget event is a genuine finding but it is **not** evidence about this ASIN, or even about these campaigns specifically. And an empty campaign-row result does not mean nothing happened: for managed campaigns the changes are on the group (see below). Beyond that, the campaign/adGroup result is not narrowed to the one product ad — say so whenever the customer might read it as ASIN-exclusive. **Also pull the managed-group rows**: for campaigns in a managed group (`aiGroupId` on the `campaign` entity), query `resourceIds: [{"idEntity": "aiGroup", "idType": "increment", "ids": [...]}]` - a target-ACOS or switch change on the group is invisible in the campaign rows. Classify people vs machines per "Shared Rules". **Check `truncated`** and follow the standard split-and-recurse procedure if so.
+⚠️ **The two mistakes above fail differently — don't confuse the symptoms.**
+- **Wrong id type** (internal instead of Amazon), `entities` set correctly: the filter matches nothing, so you get an **empty result** of the right entity type.
+- **`entities` omitted**: the query fans out across every entity type except `audience`, so you get **rows of other entities** — e.g. a `PORTFOLIO` row for a `Portfolio Out of Budget` event — regardless of which ids you passed.
+
+Either way, fix the call rather than interpreting the result. A portfolio-level budget event may well be a real finding, but it is **not** evidence about this ASIN or even about these campaigns specifically, so it belongs in a separate, clearly labelled note. Read `entity` on every row either way.
+
+⚠️ **An empty campaign-row result does not mean nothing happened.** For campaigns inside a managed group the changes are recorded on the group, not the campaign (see below). Beyond that, the campaign/adGroup result is never narrowed to the one product ad — say so whenever the customer might read it as ASIN-exclusive. **Also pull the managed-group rows**: for campaigns in a managed group (`aiGroupId` on the `campaign` entity), query `resourceIds: [{"idEntity": "aiGroup", "idType": "increment", "ids": [...]}]` - a target-ACOS or switch change on the group is invisible in the campaign rows. Classify people vs machines per "Shared Rules". **Check `truncated`** and follow the standard split-and-recurse procedure if so.
 
 **⚠️ Steps 2c/2d/2e above are written for `granularity=asin`/`variant` (child-ASIN identity). Under `granularity=parentAsin`, each needs a parent-level adjustment — don't run them unchanged and silently produce child-level diagnostics under a parent-level report:**
 

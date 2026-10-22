@@ -16,8 +16,9 @@
 client-side: keep `changedBy` = an email, `Manual` or `Amazon Console`, and `changeField` =
 `dailyBudget` (in AI managed groups, AI's hourly `currentBudget` rows carry the same
 `operationType`). Do **not** add `"changeBy": {"operator": "IN", "values": ["manual"]}` for
-this: `manual` matches only rows recorded as `Manual` and drops every change recorded under a
-user's email (see [`field-reference.md`](field-reference.md) -> changeBy).
+this — the server **rejects** `manual` outright (see [`field-reference.md`](field-reference.md) ->
+changeBy); it is a UI category, not an operator, and it never covered the changes recorded
+under a user's email.
 
 Note: `operationType` (fine-grained) is more precise than `actionType` (coarse categories like `"Budget Increased"`) — use `operationType` when you need to isolate a specific sub-case.
 

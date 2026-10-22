@@ -10,7 +10,7 @@ description: >-
   save_sp_sb_ai_managed_group (edit mode). Not for creating a group (use sparkx-create-ai-group)
   or deleting one (use sparkx-delete-ai-group).
 metadata:
-  version: 1.2.2
+  version: 1.2.3
 ---
 
 # Edit AI Managed Group
@@ -354,7 +354,7 @@ NOT "deleted". Passing it back would silently archive the schedule.
 ## Templates - readable, and applicable via `templateId`
 
 - **Read** with `get_ai_group_template`: no args = list (`searchName` fuzzy match,
-  `createdBy`, `page`, `pageLimit` default 50, `applyFlag=1` to include system presets);
+  `createdBy`, `page`, `pageLimit` default 50 / **max 200**, `applyFlag=1` to include system presets);
   `templateId` = full detail of one. This is a read behind the **write** scope.
 - **System presets need `isSystemTemplate=1`.** Each list item carries `isSystemTemplate`
   (1 = system preset, 0 = user template). Pass `isSystemTemplate=1` together with
@@ -404,8 +404,8 @@ NOT "deleted". Passing it back would silently archive the schedule.
   `structPause*`) rather than failing. This holds when you also send `aiActionSettings`:
   the template's values are merged in and sanitized, and only SP-only switches **you** turn
   on go through the SB compatibility check (an enabled one fails the whole call). Tell the
-  user which parts of the template won't carry over. (Creating an SB group from such a
-  template is rejected instead - that's a create-path rule.)
+  user which parts of the template won't carry over (the response summary lists the switches
+  turned off). Creating an SB group from such a template turns them off the same way.
 - **Campaign-bound harvest / negative rules (SP/SB)**: a template whose target-harvest
   (rule 4) or negative-target (rule 5) config is bound to specific campaigns/ad groups
   (`isSelf=2`, rule enabled) is rejected **only when you don't pass `aiAutomation`** (the

@@ -49,10 +49,11 @@ groups by `operationType`**; pull them unfiltered and select by `changeField`.
 | `Amazon Console` | yes - a person in Amazon's console |
 | `AI`, `Automation`, `AI-Custom Rule`, `Budget Management`, `Lock Ranking`, `API`, `Labels`, `System` | no - unless the user asks to include them; then name the added sources in the list header |
 
-Why not `changeBy: manual` on the query: the server turns `manual` into a match on the literal
-value `Manual` (plus a platform-source restriction). Changes attributed to a user's email are not
-`Manual`, so they disappear. In a production test (2026-10) every human promo change in one store
-was email-attributed and `manual` returned none of them.
+Why not `changeBy: manual` on the query: **the server rejects it** (case-insensitive, in `IN`,
+`NOT_IN` or mixed). It used to match only the literal value `Manual` (plus a platform-source
+restriction), so changes attributed to a user's email disappeared — in a production test
+(2026-10) every human promo change in one store was email-attributed and `manual` returned none
+of them. Omit `changeBy` and classify client-side.
 
 Classify on `changeField` as well as `changedBy`: `Amazon Console` also appears on status events
 such as `Campaign Out of Budget`, which are not settings anyone changed.

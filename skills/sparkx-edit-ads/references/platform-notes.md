@@ -119,7 +119,7 @@ retry blindly.**
 | `scope_missing` / `permission_denied` | Not authorized - stop and tell the user (above) |
 | `token_invalid` / `api_not_authorized` | Auth problem - the user must re-authenticate |
 | `profile_out_of_range` | A profileId is outside the authorized set |
-| `service_unavailable` / `auth_service_unavailable` / `rate_limit_service_unavailable` | Infrastructure - report and stop; do not hammer |
+| `service_unavailable` / `auth_service_unavailable` / `rate_limit_service_unavailable` | Infrastructure - report and stop; do not hammer. **A bad or expired token is not one of these** — it comes back as **401 / 403**, which is permanent: re-authenticate rather than retry |
 | `capability_unavailable` | A dependent capability lookup failed - the request was **not executed** (nothing written). Retry the same call unchanged later; no read-back needed |
 
 Messages from `business_error` are wrapped by the service layer

@@ -48,12 +48,15 @@ Array, each item has `idEntity` (resource type) and `ids` (list of IDs):
 [{"idEntity": "aiGroup", "idType": "increment", "ids": [501, 502]}]
 ```
 
-**Locating a resource by name first**: this tool takes IDs, not names. If the user describes an object by name (e.g. "campaign SP-T1 MAX-KW-Brands-solder", "keyword 'wireless earbuds' exact match"), first resolve it to an ID via `get_entity_metadata`:
-- campaign name -> `entity: "campaign", filters: {"campaignName": {"like": "%...%"}}` -> `campaignId`
-- keyword text + match type -> `entity: "target", filters: {"targetText": {"like": "%...%"}, "targetMatchType": "exact"}` -> `targetId`
-- ASIN -> `entity: "productAd", filters: {"asin": "..."}` -> `amazonAdId` / `campaignId`
+⚠️ **For `campaign` and `adGroup` the ids are Amazon's `amazonCampaignId` / `amazonAdGroupId`, never the internal `campaignId` / `adGroupId`.** Both exist side by side on `get_entity_metadata`'s `campaign` entity, and passing the internal one is **not** an error — the filter simply matches nothing, so the call succeeds and returns rows that were never scoped to your campaigns (or none at all). Resolve the Amazon id first and check it: internal ids are small sequential numbers, Amazon ids are 15-19 digits. `aiGroup` and `productLine` are the opposite — those take the internal auto-increment id.
 
-Then pass the resolved ID into `resourceIds`.
+**Locating a resource by name first**: this tool takes IDs, not names. If the user describes an object by name (e.g. "campaign SP-T1 MAX-KW-Brands-solder", "keyword 'wireless earbuds' exact match"), first resolve it to an ID via `get_entity_metadata`:
+- campaign name -> `entity: "campaign", filters: {"campaignName": {"like": "%...%"}}` -> take **`amazonCampaignId`**
+- ad group -> `entity: "adGroup"` -> take **`amazonAdGroupId`**
+- keyword text + match type -> `entity: "target", filters: {"targetText": {"like": "%...%"}, "targetMatchType": "exact"}` -> `targetId`
+- ASIN -> `entity: "productAd", filters: {"asin": "..."}` -> this returns **internal** `campaignId` / `adGroupId` and an `amazonAdId`. **None of the three is usable in `resourceIds`.** `amazonAdId` has no `idEntity`, and the other two are internal ids, so you need a second hop: feed the internal `campaignId` / `adGroupId` into `entity: "campaign"` / `entity: "adGroup"` and read `amazonCampaignId` / `amazonAdGroupId` off those rows.
+
+Then pass the **Amazon** ID into `resourceIds` — for `aiGroup` and `productLine`, the internal auto-increment id instead (see the warning above).
 
 ### campaignTypes
 
@@ -74,7 +77,7 @@ Valid values:
 | User says | Value |
 |-----------|-------|
 | AI | ai |
-| Manual / user | manual |
+| Manual / user | ⚠️ **not a filter value** — `manual` is **rejected** (see below). Pass the person's email, or omit `changeBy` and classify `changedBy` client-side |
 | Automation rule | automation |
 | AI custom rule | aiCustomRule |
 | Budget management | budgetManagement |
@@ -85,12 +88,24 @@ Valid values:
 | System | system |
 | Specific user | user email address (pass as one of the `values`) |
 
-**`manual` is narrower than "a person did it".** The server turns `manual` into a match on
-rows whose `changedBy` is literally `Manual`. Changes made by a named platform user are recorded
-with that user's **email** in `changedBy` and are **not** returned by `manual` (production,
-2026-10: every human budget change in one store was email-attributed, and `manual` returned
-none of them). To get all human changes, omit `changeBy` and classify `changedBy` client-side -
-an email, `Manual`, or `Amazon Console` - or pass the specific user's email.
+⚠️ **`manual` is rejected outright — it is not a value you can pass.** The server
+validates `changeBy.values` up front and throws on `manual` (case-insensitive), **including inside
+`IN`, inside `NOT_IN`, and mixed with other values**:
+
+```
+Parameter 'changeBy.values' does not support 'manual' (case-insensitive), including IN, NOT_IN,
+or mixed values. Specify a concrete operator email or name; to query all operators, omit the
+changeBy filter.
+```
+
+The reason it was removed: `manual` is a UI-level category, not a real operator. It only ever
+matched rows whose `changedBy` was literally `Manual`, while changes made by a named platform
+user are recorded under that user's **email** (production, 2026-10: every human budget change in
+one store was email-attributed, and `manual` returned none of them). Silently returning that
+wrong answer was worse than refusing, so now it refuses.
+
+**To get all human changes**: omit `changeBy` and classify `changedBy` client-side — an email,
+`Manual`, or `Amazon Console` is a person — or pass the specific user's email as a value.
 
 ### actionType
 
@@ -359,7 +374,7 @@ Placement type filter. Narrows placement operations to specific placement types.
 | newValue | string | Value after the change |
 | countryCode | string | Country code |
 | **currencyCode** | string | **Currency of this row's monetary change** (e.g. `"USD"`/`"JPY"`), mapped from `countryCode`. Always local currency — there is no cross-profile USD conversion for logs |
-| createdDate | string | Operation timestamp, `yyyy-MM-dd HH:mm:ss`. **⚠️ Timezone is not fixed** — `aiGroup` rows are UTC always; `campaign`/`adGroup`/`target`/`placement` rows are **store-local when you pass one `profileId`** and **UTC when you pass several**. Verified 2026-08 on a US (`America/Los_Angeles`) profile: the same pause record returned `2026-08-24 00:01:06` for one profileId and `2026-08-24 07:01:06` for two. Always label the zone, never merge single- and multi-profile results, and remember a mixed-entity response can contain both clocks in one time-sorted list (so it is not reliably chronological). See SKILL.md → "createdDate Timezone" |
+| createdDate | string | Operation timestamp, `yyyy-MM-dd HH:mm:ss`. **⚠️ Timezone is not fixed** — SP/SB `aiGroup` rows are UTC, SD `aiGroup` rows use the downstream DB's timezone (undocumented, so they cannot be labelled at all); `campaign`/`adGroup`/`target`/`placement` rows are **store-local when you pass one `profileId`** and **UTC when you pass several**. Verified 2026-08 on a US (`America/Los_Angeles`) profile: the same pause record returned `2026-08-24 00:01:06` for one profileId and `2026-08-24 07:01:06` for two. Always label the zone, never merge single- and multi-profile results, and remember a mixed-entity response can contain both clocks in one time-sorted list (so it is not reliably chronological). See SKILL.md → "createdDate Timezone" |
 | changedBy | string | Who made the change, as a **display value** - `AI`, `Manual`, `Automation`, `AI-Custom Rule`, `Budget Management`, `Lock Ranking`, `Amazon Console`, `API`, `Labels`, `System` - or a platform user's **email**. These are not the lowercase `changeBy` filter values; see the `changeBy` note above |
 | aiGroupScheduleId | long | Schedule ID (present on aiGroup-related logs) |
 | operationSource | string | Which surface the change was made from (`MCP`, `PAGE`, `FEISHU`, and older values such as `platform` / `automation`). **Read-only and not filterable**; `null` means not recorded, not "manual" - see the section below |
@@ -377,8 +392,13 @@ and group them client-side, and say that is what you did.
 
 **2. MCP's own writes are tagged, including managed groups.** Every write path this server
 offers stamps the source on the request, so a change you made through MCP comes back as `MCP` -
-advertising entities and AI managed groups alike, on create, edit and batch. Verified end to end
+advertising entities and AI managed groups alike, on create, edit, batch, **delete** (the campaign
+release / migration rows) and **schedule save** (add, update and delete). Verified end to end
 against the operation log.
+
+> The delete and schedule paths were the last two to be covered; rows written by those paths
+> before that carry the downstream default `PAGE`, not `MCP`. So a historical `PAGE` on a
+> managed-group delete or schedule row is not proof a person did it in the console.
 
 **But `null` still means "not recorded", not "done by a human".** Rows written before the field
 existed carry `null`, and so does anything whose upstream did not supply a source. Treat `null`

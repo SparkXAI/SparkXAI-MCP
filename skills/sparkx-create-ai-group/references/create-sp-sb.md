@@ -82,12 +82,10 @@ SP-only `aiActionSettings` fields (complete list as enforced):
 Sending `0` (or `null` for the numeric ones) is accepted - only an *enabled* value trips the
 check. Best practice is to omit them entirely on SB.
 
-**Templates get the same check on create**: creating an SB group from a template that has
-any of these SP-only fields on is **rejected**, listing the fields - the create path validates,
-it does not zero them for you. Create the SB group without the template **and with
-`aiStatus=0`**, apply the template through `sparkx-edit-ai-group` (the edit path zeroes the
-SP-only fields instead), read it back, and turn AI on only once the user confirms - see
-[`template-guide.md`](template-guide.md) -> "A new SB group from a template". (If
+**Templates are not rejected on create**: creating an SB group from a template that has
+any of these SP-only switches on succeeds - the server turns them off, and the response
+summary lists the switches that were turned off; tell the user which parts of the template
+won't take effect. (If
 you send `aiActionSettings` with `templateId` on create, the template's action-space config is
 skipped and your values go through the check above.)
 

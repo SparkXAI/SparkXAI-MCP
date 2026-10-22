@@ -18,10 +18,10 @@ it's not supported for that ad type and don't send it.
   `null` is fine; only an enabled value trips it.
 - **One exception: a template applied cross-type is sanitized, not rejected.** When you apply
   an SP template to an existing SB group, the server zeroes the template's SP-only fields and
-  the call succeeds. If you also send `aiActionSettings`, the template's values are still
+  the call succeeds; the response summary lists the switches that were turned off. If you also send `aiActionSettings`, the template's values are still
   merged in (current config <- template <- yours) and still sanitized; only SP-only switches
-  **you** turn on go through the check above. (Creating an SB group from such a template is
-  rejected instead - see `sparkx-create-ai-group`.)
+  **you** turn on go through the check above. (Creating an SB group from such a template
+  turns them off the same way and lists them in the summary - see `sparkx-create-ai-group`.)
 - **Everything else unsupported may still be silently ignored** - looks like success, changes
   nothing.
 
