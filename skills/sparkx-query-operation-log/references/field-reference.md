@@ -13,7 +13,7 @@ Entity types (use carefully):
 - `profile` - store
 - `aiGroup` - AI managed group
 - `productAd` - product ad
-- `audience` - audience targeting (excluded from the default "all entities" scan — must be requested explicitly)
+- `audience` - audience targeting. ⚠️ **Currently returns 0 rows for every query** (verified in production). Until that is fixed, do not read an empty `audience` result as "no audience changes" — it carries no information at all. Say the audience history could not be read. Also excluded from the default "all entities" scan — must be requested explicitly.
 
 **Important**: entities strictly filters only direct operations on that entity type.
 - User says "what operations on this campaign" -> **do NOT** set entities
@@ -48,7 +48,7 @@ Array, each item has `idEntity` (resource type) and `ids` (list of IDs):
 [{"idEntity": "aiGroup", "idType": "increment", "ids": [501, 502]}]
 ```
 
-⚠️ **For `campaign` and `adGroup` the ids are Amazon's `amazonCampaignId` / `amazonAdGroupId`, never the internal `campaignId` / `adGroupId`.** Both exist side by side on `get_entity_metadata`'s `campaign` entity, and passing the internal one is **not** an error — the filter simply matches nothing, so the call succeeds and returns rows that were never scoped to your campaigns (or none at all). Resolve the Amazon id first and check it: internal ids are small sequential numbers, Amazon ids are 15-19 digits. `aiGroup` and `productLine` are the opposite — those take the internal auto-increment id.
+⚠️ **For `campaign` and `adGroup` the ids are Amazon's `amazonCampaignId` / `amazonAdGroupId`, never the internal `campaignId` / `adGroupId`.** Both exist side by side on `get_entity_metadata`'s `campaign` entity, and passing the internal one is **not** an error — the filter simply matches nothing, so the call succeeds and returns rows that were never scoped to your campaigns (or none at all). Resolve the Amazon id first, and **decide which space a value belongs to by the field name it came out of, not by its length** — a single log row carries both at once (`entityId` internal, `amazonCampaignId` Amazon), and id lengths are not a contract. `aiGroup` and `productLine` are the opposite — those take the internal auto-increment id.
 
 **Locating a resource by name first**: this tool takes IDs, not names. If the user describes an object by name (e.g. "campaign SP-T1 MAX-KW-Brands-solder", "keyword 'wireless earbuds' exact match"), first resolve it to an ID via `get_entity_metadata`:
 - campaign name -> `entity: "campaign", filters: {"campaignName": {"like": "%...%"}}` -> take **`amazonCampaignId`**
@@ -104,8 +104,16 @@ user are recorded under that user's **email** (production, 2026-10: every human 
 one store was email-attributed, and `manual` returned none of them). Silently returning that
 wrong answer was worse than refusing, so now it refuses.
 
-**To get all human changes**: omit `changeBy` and classify `changedBy` client-side — an email,
-`Manual`, or `Amazon Console` is a person — or pass the specific user's email as a value.
+**To get all human changes**: omit `changeBy` and classify `changedBy` client-side — an email
+or `Manual` is a person — or pass the specific user's email as a value.
+
+⚠️ **`Amazon Console` says where, not who.** It means the change came from Amazon's side.
+Do not count it as a human change. Two consequences:
+
+- In attribution (weekly / monthly reports), keep it as its own bucket, not inside "a person did
+  this".
+- Before anything **reverts** such a change, say where it came from, so the user decides
+  whether it should be rolled back at all.
 
 ### actionType
 

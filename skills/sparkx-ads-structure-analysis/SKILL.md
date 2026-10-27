@@ -10,7 +10,7 @@ description: >-
   sparkx-weekly-ads-report / sparkx-monthly-ads-report / a lighter ad-hoc analysis skill), product-level diagnosis
   (use sparkx-product-diagnosis), or search-term diagnosis (use sparkx-search-term-diagnosis).
 metadata:
-  version: 1.1.4
+  version: 1.1.5
 ---
 
 # Ads Structure Analysis
@@ -215,6 +215,13 @@ incomparable.
 
 **c. Segment-level weekly trend** (only when `includeTrend=true`, the default): same shape as (a), but `select` adds a weekly time-aggregation expression alongside the breakdown dimension — e.g. `["campaign.campaignType_", "toMonday(parseDateTime32BestEffort(date)) as week"]` — so each segment gets one row per week across the window instead of one row for the whole period. **Use weekly, not daily, granularity for the trend view**: a 30-day default window is ~4-5 weekly points per segment, which reads cleanly in a text report; daily granularity (30 points × N segments) is what the product's own web dashboard can render as a line chart but is too dense for a markdown table. Recompute `ACOS`/`CPA` per segment per week from that week's own summed base metrics — never average pre-computed weekly ratios across weeks, and never derive a week's ratio from another week's base metrics.
 
+**d. Per-campaign sample distribution** (every run, not only `campaignTier`): pull one row per
+campaign for the whole window with `select: ["campaign.campaignId_",
+"campaign.campaignName_", "campaign.campaignType_"]` and base metrics including `Clicks` and
+`Spend`, fully paginated. Reuse Step 2a when `breakdownBy=campaignTier`; otherwise this is a
+separate campaign-level call. This distribution is required because an account-wide average
+cannot establish that every campaign has enough evidence.
+
 **Exception for `breakdownBy=hourOfDay`: do not issue this separate weekly-trend call.** The 24-point intraday curve derived from Step 2a's `date` + `hour` rows is already this mode's trend output, and its ≤7-day source window does not produce a meaningful 4-5-point weekly series. Treat `includeTrend` as satisfied by the intraday curve; only add a day-by-day comparison when the user explicitly asks, using the same rows client-side rather than a weekly aggregation expression.
 
 **⚠️ `breakdownBy=dayOfWeek` or `subScenario=weekdayWeekend` need a different shape here — the breakdown "dimension" isn't a native field to add alongside `week` the way `campaign.campaignType_`/`profile.countryCode_`/`portfolio.portfolioId_` are.** There's no server-side field for "which weekday" to combine with a week aggregation. Instead: `select: ["date"]` only (same as the base breakdown call), pull daily rows across the whole window, then **client-side** derive two labels per row — the weekday/weekend segment (per "Breakdown Dimensions" above) and the week bucket it falls in — and organize the trend as segment × week from those two derived labels together. Don't expect the server to return a "Monday" or "weekday" row directly at any granularity.
@@ -307,12 +314,25 @@ many accounts; state them in the output and use the user's own if given.
    clearly **lower** than the account's (about 2/3 of it or less), part of the gap is price - say
    so before recommending cuts. If its order value is the same or **higher** and its ACOS is still
    the worst, the CPC / CVR problem is larger than the ACOS gap shows.
-4. **Fragmentation.** `clicksPerCampaign30d = totalClicks / spendingCampaignCount × 30 /
-   windowDays`, where `spendingCampaignCount` counts campaigns with `Spend > 0` and `windowDays`
-   counts both the first and the last day (1-30 Jun = 30). Over 200 is enough
-   for the AI or a person to judge each campaign; 100-200 is thin; under 100 means decisions
-   should be made at group level (consolidate, or manage them in one managed group) rather than
-   per campaign. Judge on clicks, not on spend - spend per campaign misleads across price levels.
+4. **Fragmentation.** Keep the account-level average for context:
+   `clicksPerCampaign30d = totalClicks / spendingCampaignCount × 30 / windowDays`, where
+   `spendingCampaignCount` counts campaigns with `Spend > 0` and `windowDays` counts both the
+   first and last day (1-30 Jun = 30). But never use that average as proof that individual
+   campaigns are sufficiently observed.
+
+   From Step 2d, compute `campaignClicks30d = campaignClicks × 30 / windowDays` for every
+   spending campaign and report the **median**, **P25**, and these mutually exclusive buckets:
+
+   - **over 200**: sufficient for campaign-level judgement;
+   - **100-200 inclusive**: limited sample - recommendations must be cautious;
+   - **under 100**: continue observing; do not issue a campaign-specific pause, consolidation
+     or budget action from this structure analysis alone.
+
+   Report each bucket's campaign count, share of spending campaigns and spend share. List the
+   under-100 campaigns by customer-facing name with clicks and spend. Decisions about the thin
+   population may be made at group level, but do not describe every member as individually
+   mature merely because the account average exceeds 200. Judge sample on clicks, not spend -
+   spend per campaign misleads across price levels.
    Also report the enabled campaigns with no spend in the window (count and share of enabled) as
    **to check**, not as clutter to archive: a new campaign, a start date in the future, an
    out-of-stock or ineligible product, or a bid / budget too low to win can all produce zero
@@ -404,7 +424,17 @@ answer".
 {有花费但没出单的档位单独列一行：档位、花费、花费占比}
 {若最好和最差的有效档分别被不同用途主导（各占本档花费 ≥60%）：写“差距主要来自活动用途（如品牌词 vs 加投词），不是活动大小”，形态只作背景，并按用途重新切一次}
 {空档或零销售档在表中标“—”，不参与极差和最差档判断}
-**碎片化**：每个有花费的活动月均点击 {n} 次（{充足 / 偏少 / 过少}）；启用但零花费的活动 {m} 个（占启用活动 {pct}），待排查原因（新建、未到开始日期、缺货或不可投放、出价或预算过低），不直接建议归档
+**碎片化**：每个有花费的活动平均 {n} 次标准化 30 天点击；中位数 {n}，P25
+{n}。超过 200：{count} 个（{pct}，占花费 {spendShare}）；100-200：{count}
+个（{pct}，占花费 {spendShare}）；不足 100：{count} 个（{pct}，占花费
+{spendShare}）。
+
+| 需要继续观察的活动（标准化 30 天点击 <100） | 点击 | 花费 |
+|---|---:|---:|
+| ... | ... | ... |
+
+启用但零花费的活动 {m} 个（占启用活动 {pct}），待排查原因（新建、未到开始日期、
+缺货或不可投放、出价或预算过低），不直接建议归档。
 
 ## 三、{子场景标题，若有 subScenario}
 
@@ -431,14 +461,17 @@ _生成时间：{timestamp} · 数据源：SparkX AI MCP · Skill: sparkx-ads-st
   "trend": null,
   "imbalances": [{"segment": "...", "type": "overinvested|underinvested", "evidence": "..."}],
   "subScenario": null,
+  "campaignSample": {"clicksPerCampaign30d": 0, "medianClicks30d": 0, "p25Clicks30d": 0, "buckets": [{"level": "sufficient|limited|observe", "campaigns": 0, "campaignShare": 0, "spendShare": 0}], "observeCampaigns": [{"campaign": "...", "amazonCampaignId": null, "clicks30d": 0, "spend": 0}], "zeroSpendEnabled": 0, "zeroSpendShare": 0},
   "campaignTier": null,
   "recommendations": [{"priority": 1, "action": "...", "target": "...", "evidence": "..."}]
 }
 ```
 `"campaignTier"` is `null` unless `breakdownBy=campaignTier`; then it is
-`{"tiers": [{"band": "A", "campaigns": 12, "spend": 2140.5, "sales": 8808.6, "spendShare": 0.21, "acos": 24.3, "cpc": 1.12, "cvr": 9.4, "orderValue": 49.1, "valid": true, "invalidReason": null}], "shape": "flat|headWorst|tailWorst|middleWorst|notJudged", "notJudgedReason": null, "functionGap": null, "spreadPp": null, "tailGapPp": null, "fragmentation": {"clicksPerCampaign30d": 0, "level": "enough|thin|tooThin", "zeroSpendEnabled": 0, "zeroSpendShare": 0}}`
+`{"tiers": [{"band": "A", "campaigns": 12, "spend": 2140.5, "sales": 8808.6, "spendShare": 0.21, "acos": 24.3, "cpc": 1.12, "cvr": 9.4, "orderValue": 49.1, "valid": true, "invalidReason": null}], "shape": "flat|headWorst|tailWorst|middleWorst|notJudged", "notJudgedReason": null, "functionGap": null, "spreadPp": null, "tailGapPp": null, "fragmentation": {"clicksPerCampaign30d": 0, "medianClicks30d": 0, "p25Clicks30d": 0, "buckets": [{"level": "sufficient|limited|observe", "campaigns": 0, "campaignShare": 0, "spendShare": 0}], "observeCampaigns": [{"campaign": "...", "amazonCampaignId": null, "clicks30d": 0, "spend": 0}], "zeroSpendEnabled": 0, "zeroSpendShare": 0}}`
 - one entry per band A-E, empty bands included with `campaigns: 0` and `valid: false`; `invalidReason` is `empty` (no campaigns) or `zeroSales` (spend but no sales), `null` for a valid band; `functionGap` is `null` unless the best and worst valid bands are each dominated by a different function, then `{"bestBand": "A", "bestFunction": "...", "worstBand": "B", "worstFunction": "...", "source": "campaignType|targetingType|namingConvention"}` (`namingConvention` only after the user confirmed it); `notJudgedReason` is `null` unless `shape` is `notJudged`, then `tooFewCampaigns`, `insufficientValidBands` or `materialZeroSalesBand` (a zero-sales band with 2% or more of spend); undefined
-ratios are `null`, never 0. Units: `acos` and `cvr` in percent (×100, like the tool's own fields), `spendShare` and `zeroSpendShare` as fractions, `cpc` and `orderValue` in the report's currency. In this mode `segments` holds the same five bands.
+ratios are `null`, never 0. Units: `acos` and `cvr` in percent (×100, like the tool's own fields), `spendShare`, `campaignShare` and `zeroSpendShare` as fractions, `cpc`, `spend` and `orderValue` in the report's currency. In this mode `segments` holds the same five bands.
+`campaignSample` is populated on every run from Step 2d. When `campaignTier` is also present,
+its `fragmentation` value must be identical to `campaignSample`, not a separately recomputed result.
 `"trend"` is `null` when `includeTrend=false`; otherwise it's `[{"segment": "...", "weekly": [{"weekStart": "...", "acos": ..., "cpa": ...}]}]` — one entry per segment, each with its own array of weekly points.
 
 ## Data Boundaries

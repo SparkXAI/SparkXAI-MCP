@@ -7,7 +7,7 @@ description: >-
   budget adjustment, AI auto-adjustment, pause/enable records, operation audit,
   modification timeline, ad adjustment log
 metadata:
-  version: 1.3.6
+  version: 1.3.7
 ---
 
 # Query Operation Log Skill
@@ -36,6 +36,20 @@ Profile, tenant, and user scope are resolved from the authenticated bearer token
 
 **Mode B — limit-only** (when `entities` is empty/omitted, has **multiple** entities, or is **only `aiGroup`**):
 - `page` is ignored. A single call returns at most `pageSize` rows (default 100, max 1,000; **`aiGroup`-only max 10,000**), sorted on the raw timestamp string (newest-first only when every row shares one clock — see Shared Rules). Response includes `limit` and `truncated`.
+⚠️ **The cap is small relative to how fast the log grows.** In an account where AI is
+active, machine rows alone can run into the hundreds per hour (measured: ~530/h in one
+store), so **a full day of AI activity does not fit in one call and often not in a day's worth
+of sub-windows either**. Before promising a customer "every change in the last N days", check
+the volume first with a narrow probe window and say plainly what period can actually be
+enumerated. For an AI-activity question, prefer narrowing by `resourceIds` (`aiGroup` is the one
+filter that reliably narrows) over trying to page the whole account.
+
+⚠️ **Rows keep arriving for about two days after the fact.** The log backfills, so the same
+query for "yesterday" can return more rows tomorrow than it does today. A count is a count **as
+of when you ran it** — say so when the number is the answer ("47 changes as of 10:20 today"),
+and never present a recent-day count as settled. Re-running an older window is the way to
+confirm it has stopped moving.
+
 - `truncated=true` means more matched than could be returned. **You cannot page.** Handle it in this order:
   1. **Prefer steering the user to a single entity.** If they really only care about one kind of change ("just budget changes", "just campaign pause/enable"), guide them to narrow `entities` to a single non-`aiGroup` entity → this switches to Mode A, where you can page through the complete set. Only do this when it matches the user's actual intent; if they genuinely want the full cross-entity history, don't silently narrow — say the result is a partial view.
   2. **Split the date range** into non-overlapping sub-windows and recurse (see "Getting a Complete Count" below).
@@ -54,6 +68,33 @@ Use this tool when the user needs any of the following:
 - Count how many changes of a given type happened, grouped by operator or entity (do this by pulling rows and aggregating client-side — the tool itself has no server-side `groupBy`)
 
 See the Tool Selection Decision Tree above if the user's ask might belong to `get_ads_perf` or `get_entity_metadata` instead.
+
+## Explaining a Historical Automated Change
+
+For questions such as "why did AI change this bid?" or "which mechanism changed this budget?",
+separate historical evidence from current configuration:
+
+1. Resolve the named entity first with `get_entity_metadata` and preserve the correct internal
+   and Amazon ids. `resourceIds` for campaign/ad group use Amazon ids; `aiGroup` uses its internal id.
+2. Query the narrowest single entity and date window that contains the event. Fully paginate Mode A;
+   for Mode B, split non-overlapping windows until `truncated=false` or disclose the lower bound.
+3. Report the log facts exactly: timestamp with its real timezone, previous/new value,
+   `changedBy`, `operationSource`, `operationType`, and `aiGroupScheduleId` when present.
+4. If the row belongs to an AI-managed campaign, read the campaign's **current** controller inventory
+   using `sparkx-query-entity-metadata` (campaign, `aiGroup`, `aiGroup_schedule`, and campaign
+   `automationRule`). This answers what can still act now, not what was necessarily configured at
+   the historical timestamp.
+5. Use three evidence levels in the answer:
+   - **Confirmed historical fact**: fields present on the matching log row;
+   - **Current configuration context**: mechanisms and configured limits effective now;
+   - **Not available from MCP**: the model inputs/reasoning used for that historical AI decision,
+     a historical point-in-time config snapshot, an exact hidden trigger threshold, or a guaranteed
+     next execution time unless a returned rule/schedule explicitly supplies it.
+
+An `aiGroupScheduleId` links an operation to a schedule. A null value does not prove there was no
+scheduled influence unless the operation contract for that row guarantees the field. Likewise,
+`changedBy=AI` identifies the actor class, not the model's causal explanation. Never use today's
+bid range or rule configuration as proof of the ceiling or trigger that applied on the event date.
 
 ## DSL Parameter Format
 
@@ -134,7 +175,8 @@ See the Tool Selection Decision Tree above if the user's ask might belong to `ge
   "meta": {
     "limit": 100,
     "truncated": false,
-    "effectiveProfileIds": [4404871489220462]
+    "effectiveProfileIds": [4404871489220462],
+    "hint": "Limit conclusions to this query's scope. Missing fields are not zero, and empty results do not prove that no matching business data exists. Do not present partial or paginated results as complete. Distinguish returned facts from analytical inferences; state limitations or query further when evidence is insufficient."
   },
   "requestId": "a1b2c3d4e5f6"
 }
@@ -143,7 +185,8 @@ See the Tool Selection Decision Tree above if the user's ask might belong to `ge
 **Everything is nested.** `rows` and `rowCount` live under **`data`**; pagination, currency and
 hints live under **`meta`**. Only `isError`, `toolName` and `requestId` are top level. Reading
 `response.rows` returns nothing - it is `response.data.rows`. `meta` keys are **omitted when
-they do not apply** (not set to null), and `meta` itself is omitted when entirely empty.
+they do not apply** (not set to null). A successful read always has `meta.hint`: any
+query-specific warning comes first, followed by the shared interpretation boundary.
 
 The pagination fields differ by mode, and they all live under **`meta`**: **Mode A (real pagination)** gives `meta.page`, `meta.pageSize`, `meta.hasNextPage`; **Mode B (limit-only)** gives `meta.limit`, `meta.truncated` (as shown above). Rows are always `data.rows` and `data.rowCount`.
 
@@ -187,7 +230,7 @@ The MCP layer does no conversion; this is how the log data itself is returned.
 | `meta.hasNextPage` | boolean | **Mode A only.** `true` → fetch `page+1` to continue; loop until `false` for the complete set. (Semantically equivalent to Mode B's `truncated`) |
 | `meta.limit` | int | **Mode B only.** The `pageSize` cap actually applied |
 | `meta.truncated` | boolean | **Mode B only. `true` means more matched than `limit` could return.** You cannot page — steer the user to a single entity (→ Mode A), else split the date range into non-overlapping sub-windows, else add filters as a last resort (flagging the result as partial) |
-| `meta.hint` | string | Guidance message, present when `truncated=true` |
+| `meta.hint` | string | Always present on success. Truncation guidance, when applicable, precedes the shared interpretation boundary |
 | `meta.effectiveProfileIds` | array[long] | Profile IDs the query ran against — an echo of your request (unauthorized IDs fail the call outright) |
 | `requestId` | string | **Top level.** Trace ID — quote it when reporting a failure to the user. May be absent locally |
 | `meta.currency` | string | Optional roll-up of the rows' currencies: a single code if all rows agree, the literal **`"mixed"`** if they don't, absent if no row carries one. **`"mixed"` is not a currency** — fall back to each row's `currencyCode`, and never sum or format amounts across a mixed result |
@@ -248,7 +291,7 @@ There is no server-side `groupBy` for this tool — to answer "how many budget c
 No `changeBy` filter: `manual` is **rejected by the server**, and it never covered changes
 recorded under a user's email anyway (see [`field-reference.md`](references/field-reference.md) ->
 changeBy). Keep rows whose `changedBy`
-is an email, `Manual` or `Amazon Console`, and whose `changeField` is `dailyBudget` - in AI
+is an email or `Manual` (`Amazon Console` is a source, not a person), and whose `changeField` is `dailyBudget` - in AI
 managed groups, AI's hourly `currentBudget` rows also land under `Budget Increased`.
 
 ## Notes

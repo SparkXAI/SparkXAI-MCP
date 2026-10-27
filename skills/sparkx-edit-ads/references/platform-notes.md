@@ -142,6 +142,21 @@ After any write, re-read the entities with `get_entity_metadata` and confirm the
 the values you intended. This is mandatory for anything irreversible, anything bid- or
 budget-related, and anything that returned `ambiguous_write` or `timeout`.
 
+⚠️ **A read-back that disagrees is not automatically a failed write.** The metadata mirror can
+trail Amazon by **20 minutes or more**, so an immediate re-read may still show the old value for a
+write that landed. Never re-send on that basis. Retry the read a couple of times with a short
+wait; if it still disagrees, report the row as **`pending sync`**, and leave it for the user to
+re-check later. What `pending sync` means depends on what the write returned:
+
+- after a **success** envelope — written, not yet visible in the mirror;
+- after **`ambiguous_write`** or **`timeout`** — **outcome unknown.** The old value may mean the
+  write never landed, or that it landed and the mirror trails. Do not assert it was written;
+  say the result is unconfirmed and that the user should re-check before acting on it.
+
+**A third value means a different problem.** If the read-back shows a value that is neither the
+old one nor the one you wrote, this is not sync lag at all — someone or something else wrote
+in between. Report it as a conflicting write and stop; do not re-send.
+
 When reconciling a budget change, remember that the confirmation preview's `currentBudget`
 is the campaign's **`dailyBudget`** - see [`confirmation.md`](confirmation.md).
 

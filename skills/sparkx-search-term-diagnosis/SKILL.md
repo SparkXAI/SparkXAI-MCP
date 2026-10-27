@@ -12,22 +12,23 @@ description: >-
   marketplace structure (sparkx-ads-structure-analysis) or ASIN health
   (sparkx-product-diagnosis).
 metadata:
-  version: 1.0.3
+  version: 1.0.4
 ---
 
 # Search Term Diagnosis (搜索词流量结构诊断)
 
 ## Scope: a read-only orchestration skill
 
-No MCP tool of its own. It reads with two tools and hands execution to one skill:
+No MCP tool of its own. It reads with three tools and hands execution to one skill:
 
 | What | Tool | Owning skill - read it first |
 |---|---|---|
 | Search terms, keyword performance, totals | `get_ads_perf` | [sparkx-query-ads-performance](../sparkx-query-ads-performance/SKILL.md) |
-| Exact keywords in use, campaigns, managed groups, brand names | `get_entity_metadata` | [sparkx-query-entity-metadata](../sparkx-query-entity-metadata/SKILL.md) |
+| Exact keywords and existing negatives, campaigns, managed groups, brand names | `get_entity_metadata` | [sparkx-query-entity-metadata](../sparkx-query-entity-metadata/SKILL.md) |
+| Keyword creation/change history and recent campaign/ad-group changes | `get_operation_log` | [sparkx-query-operation-log](../sparkx-query-operation-log/SKILL.md) |
 | Adding negatives / exact keywords, pausing a keyword | `batch_update_ads` | [sparkx-edit-ads](../sparkx-edit-ads/SKILL.md) |
 
-> **Dependency - install the three skills above alongside this one.** Skills install as
+> **Dependency - install the four skills above alongside this one.** Skills install as
 > sibling directories under your agent's skills root (see the
 > the installation notes in [README](../README.md)); the `../sparkx-.../` links resolve against it.
 > Auth, errors, pagination, date limits and currency rules are in the query skills'
@@ -58,6 +59,13 @@ Examples are in Chinese because most customers are. Answer in the user's languag
    automatic negation or harvesting are still listed - labelled, not skipped.
 6. **Read-only.** Every change goes through `sparkx-edit-ads` with its own preview and
    confirmation.
+7. **Current state beats historical spend.** Before proposing a negative, check current
+   negative keyword/target coverage at every source campaign or ad group. Historical spend
+   does not prove a term is still leaking after a negative was added.
+8. **Protect proven terms and young experiments.** A currently weak exact keyword that
+   converted in the immediately preceding equal-length period is a diagnostic case, not a
+   direct pause. A young or low-click exact keyword is insufficient evidence, not a
+   consolidation candidate.
 
 ## Workflow
 
@@ -84,10 +92,12 @@ three inputs, the first two **pre-filled by you**:
    add more, including competitor brand terms if they want. Never treat an unconfirmed
    candidate as a brand term.
 2. **Target ACOS** - one number for the whole store: "你整店希望 ACOS 控制在多少？". If the
-   customer has none, use the store's ACOS for the period and say in the first line of the
+   customer has none, use the **unfiltered whole-store ACOS** for the period and say in the first line of the
    answer that the thresholds use it and can be recomputed. **Do not use managed-group
    target ACOS as the threshold** - stores have dozens of groups with targets that vary
    widely and are often set high on purpose; managed groups are only used to label switches.
+   A product/campaign-scoped run therefore needs a separate unfiltered store-total call for
+   this fallback; never derive the fallback from the scoped total.
 
 3. **Product stage** - mature, or new / in launch. It sets the harvest threshold (4 vs 2
    orders in 30 days). Ask; do not infer it from listing dates.
@@ -99,9 +109,10 @@ later runs in the same conversation.
 ### Step 2 - Pull the data
 
 Full call plan and gotchas: [`references/data-retrieval.md`](references/data-retrieval.md).
-In short: totals; search terms with orders; zero-order terms above the threshold; source match
-types; exact keywords in use and their performance; brand data; managed-group switches for
-the listed terms only. **Do not page through every search term** - the zero-order small
+In short: scoped totals plus an unfiltered store total for the fallback target; search terms
+with orders; zero-order terms above the threshold; source match types; exact keywords in use
+and their current/prior performance; current negative coverage; candidate keyword age/change
+history; brand data; managed-group switches for the listed terms only. **Do not page through every search term** - the zero-order small
 terms are derived from totals.
 
 ### Step 3 - Classify and save
@@ -130,10 +141,15 @@ Lead with the scope line, then five short parts:
    declined to give brand terms.
 3. **零单浪费 (V3)**, in three groups (`classification.md` -> V3):
    - **zero-order exact keywords** - your own exact keywords with no orders and spend above
-     the threshold: pause them (no bid advice);
+     the threshold. Pause only when the immediately preceding equal-length period also had
+     zero orders. If it previously converted, label it **historically proven, investigate**
+     and show the prior performance, relevant changes, and any other enabled exact keyword
+     carrying the same normalized text;
    - **negative candidates** - count, spend, top 10, each with its action (negative exact for
      keywords, negative product targeting for ASINs) and a label when the managed group
-     already has automatic negative targeting on;
+     already has automatic negative targeting on. Subtract current negative coverage first:
+     fully covered terms are **already handled**, partially covered terms list only the
+     uncovered source campaigns/ad groups, and only uncovered destinations remain actionable;
    - **zero-order terms you also target as exact keywords** - not proposed as negatives;
      say where the spend came from and leave it to the customer.
 
@@ -142,7 +158,9 @@ Lead with the scope line, then five short parts:
 4. **扶正候选 (V4)**: count, orders, top 10 with source match type. Mention managed groups whose
    harvesting is off.
 5. **投放碎片 (V5)**: enabled exact keywords with ≤3 orders in 30 days - count, zero-order
-   count, spend - and the suggestion to fold them back into auto / broad for mature products.
+   count and spend. Split them into **eligible for review** versus **insufficient sample**.
+   A fold-back suggestion for a mature product requires at least 14 complete observed days and
+   10 clicks; unknown age is insufficient evidence. Never use campaign age as keyword age.
 
 End with: "要完整清单文件吗？要执行哪些？"
 

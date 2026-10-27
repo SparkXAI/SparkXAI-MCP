@@ -11,7 +11,7 @@ description: >-
   creates the group itself - it is NOT for enabling or editing an existing group (use
   sparkx-edit-ai-group) or deleting one (use sparkx-delete-ai-group).
 metadata:
-  version: 1.2.3
+  version: 1.2.4
 ---
 
 # Create AI Managed Group

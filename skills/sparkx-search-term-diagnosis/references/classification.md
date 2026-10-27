@@ -11,7 +11,9 @@ end); never adjust a label by judgement. Same input, same output.
 - `SOURCES`: per search term, the set of match types it had orders under (call 5).
 - `EXACT`: enabled exact keywords (call 7); `EXACT_PERF`: their performance (call 8).
 - `BRAND`: confirmed brand terms; `WHITELIST`: confirmed never-negate roots; `OWN_ASINS`.
-- `TARGET_ACOS`: the confirmed store-wide target, else `TOTAL.spend / TOTAL.sales`.
+- `TARGET_ACOS`: the confirmed store-wide target, else `STORE_TOTAL.spend / STORE_TOTAL.sales`.
+  `STORE_TOTAL` is the same as `TOTAL` only for a whole-store run; a scoped run gets it from
+  the separate unfiltered call 1a.
 - `TOTAL` is **one** object: call 1 returns a row per ad type - sum them first.
 - `STAGE`: mature or new / launch - asked in Step 1, never inferred.
 - `DAYS`: period length.
@@ -64,10 +66,19 @@ never guess the list.
 
 ## V3 - zero-order waste, in three groups
 
-**V3a - zero-order exact keywords → pause.** From `EXACT_PERF`: enabled exact keywords with raw
-orders = 0 and their **own** spend >= `T`. Each row names the keyword, its campaign and its
-`keywordId` (from call 7, joined on `amazonKeywordId`). Action: pause this keyword. No bid
-advice.
+**V3a - zero-order exact keywords, with a history guard.** From `EXACT_PERF`: enabled exact
+keywords with raw orders = 0 and their **own** spend >= `T`. Join the same Amazon keyword id
+to the immediately preceding equal-length period (call 13):
+
+- prior raw orders = 0: **pause candidate** (no bid advice);
+- prior raw orders > 0: **historically proven, investigate** - do not propose a pause. Show
+  both periods, relevant operation history, and every other enabled exact keyword with the
+  same normalized text. Another keyword with the same text is evidence of overlap, not proof
+  that traffic was deliberately migrated.
+
+Each row names the keyword, campaign and internal `keywordId` (call 7 joined on
+`amazonKeywordId`). A missing prior row is unknown history, not zero; label it insufficient
+history and do not promote it to a direct pause.
 
 **V3b - negative candidates.** Zero-high search terms, sorted by spend, minus:
 
@@ -78,6 +89,11 @@ advice.
 Action: ASIN entry → negative product targeting; keyword entry → negative exact. Each row
 also carries the campaign type, campaign and ad group the spend came from (call 10), which
 decide how `sparkx-edit-ads` can add it (see SKILL.md Step 5).
+
+Before the row is actionable, subtract current coverage from calls 14-15 at each source
+destination. Fully covered rows become **already handled** and leave the action list. Partially
+covered rows retain only uncovered destinations and explicitly list both sets. Match the exact
+negative action being proposed: a different match type does not prove exact-negative coverage.
 
 **V3c - zero-order terms you also target as exact keywords.** The customer chose to target
 these, so they are not proposed as negatives. Show where the zero-order spend came from (the
@@ -118,13 +134,17 @@ orders, spend, and their share of all exact-keyword spend. Also say how many ena
 keywords had no data at all in the period: count **keyword entities** - `EXACT` rows whose
 `amazonKeywordId` has no `targetId` in `EXACT_PERF` - not distinct texts (the same text often
 exists in several ad groups).
-Suggestion for mature products: fold them back into auto / broad and manage them there.
+Split this population by evidence sufficiency. A keyword is eligible for a mature-product
+fold-back review only when it has **at least 14 complete observed days and at least 10 clicks**.
+Both gates must pass. Creation-event history is preferred; first observed daily performance is
+only a lower bound. Unknown age, fewer than 14 days, or fewer than 10 clicks means **insufficient
+sample - continue observing**, not fold back. Never substitute campaign age for keyword age.
 
 ## Reference script
 
 Inputs are the saved query results; output is the file the answer and export are built from.
-Managed-group labels and the campaign / ad group of V3b rows are added afterwards from calls
-10-12.
+Managed-group labels, campaign/ad-group destinations and negative coverage are added afterwards
+from calls 10-15. `exact_evidence` comes from call 16 and is keyed by Amazon keyword id.
 
 ```python
 import re
@@ -160,7 +180,8 @@ def has_term(q, terms):
     return False
 
 def diagnose(total, ordering, zero_high, sources, exact_texts, exact_ids, exact_perf,
-             brand, whitelist, own_asins, target_acos=None, days=30, mature=True):
+             brand, whitelist, own_asins, target_acos=None, store_total=None,
+             prior_exact_perf=None, exact_evidence=None, days=30, mature=True):
     """All row lists already passed through norm_rows; total from sum_total.
     exact_texts, own_asins: lower-cased sets; exact_ids: set of str(amazonKeywordId) (call 7).
     sources: {lower-cased term: set of match types}.
@@ -168,7 +189,11 @@ def diagnose(total, ordering, zero_high, sources, exact_texts, exact_ids, exact_
     if not total['Conversions'] or not total['Sales']:
         raise ValueError('no orders or no sales in the period - cannot derive thresholds')
     aov = total['Sales'] / total['Conversions']
-    tacos = as_fraction(target_acos) if target_acos is not None else total['Spend'] / total['Sales']
+    fallback = store_total or total
+    if target_acos is None and not fallback.get('Sales'):
+        raise ValueError('whole-store sales are zero - cannot derive fallback target ACOS')
+    tacos = (as_fraction(target_acos) if target_acos is not None
+             else fallback['Spend'] / fallback['Sales'])
     T, scale = aov * tacos, 30 / days
     is_asin = lambda q: re.fullmatch(r'b0[0-9a-z]{8}', q.lower()) is not None
 
@@ -203,8 +228,24 @@ def diagnose(total, ordering, zero_high, sources, exact_texts, exact_ids, exact_
                        and sources.get(q, set()) & open_types and not pasted(q))
 
     enabled = [k for k in exact_perf if k['targetState'] == 'enabled']
-    v3a = [k for k in enabled if k['Conversions'] == 0 and k['Spend'] >= T]
+    prior = {str(k['targetId']): k for k in (prior_exact_perf or [])}
+    v3a = []
+    for k in enabled:
+        if k['Conversions'] != 0 or k['Spend'] < T:
+            continue
+        old = prior.get(str(k['targetId']))
+        action = ('investigate' if old and old.get('Conversions', 0) > 0 else
+                  'pause' if old is not None else 'insufficient-history')
+        v3a.append({**k, 'prior': old, 'action': action})
+
+    evidence = exact_evidence or {}
     frag = [k for k in enabled if k['Conversions'] * scale <= 3]
+    for k in frag:
+        ev = evidence.get(str(k['targetId']), {})
+        observed_days = ev.get('observedDays')
+        enough = observed_days is not None and observed_days >= 14 and (k.get('Clicks') or 0) >= 10
+        k['sampleStatus'] = 'eligible-for-review' if enough else 'insufficient-sample'
+        k['observedDays'] = observed_days
     exact_spend = sum(k['Spend'] for k in enabled)
     with_data = {str(k['targetId']) for k in exact_perf}
     return dict(threshold=T, target_acos=tacos, rows=rows,
@@ -213,5 +254,7 @@ def diagnose(total, ordering, zero_high, sources, exact_texts, exact_ids, exact_
                 v5=dict(n=len(frag), zero=sum(k['Conversions'] == 0 for k in frag),
                         spend=sum(k['Spend'] for k in frag),
                         share=sum(k['Spend'] for k in frag) / exact_spend if exact_spend else 0,
+                         eligible=sum(k['sampleStatus'] == 'eligible-for-review' for k in frag),
+                         insufficient=sum(k['sampleStatus'] == 'insufficient-sample' for k in frag),
                         no_data=len(exact_ids - with_data)))
 ```

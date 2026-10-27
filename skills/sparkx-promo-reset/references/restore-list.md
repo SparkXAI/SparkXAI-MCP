@@ -46,7 +46,7 @@ groups by `operationType`**; pull them unfiltered and select by `changeField`.
 |---|---|
 | an email address | yes - a user acting in the platform |
 | `Manual` | yes - also a platform user |
-| `Amazon Console` | yes - a person in Amazon's console |
+| `Amazon Console` | **no by default - a source, not an operator.** Came from Amazon's side, author unknown. List separately as source-unknown with `suggestion: customerDecides`; restore only per-item on the user's say-so |
 | `AI`, `Automation`, `AI-Custom Rule`, `Budget Management`, `Lock Ranking`, `API`, `Labels`, `System` | no - unless the user asks to include them; then name the added sources in the list header |
 
 Why not `changeBy: manual` on the query: **the server rejects it** (case-insensitive, in `IN`,

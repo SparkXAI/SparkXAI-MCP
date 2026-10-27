@@ -47,8 +47,10 @@ Whole store by default. When the user names:
   groups that contain this product**, not traffic attributed to the ASIN - an ad group usually
   holds several products.
 
-Totals (call 1) use the same filter, so thresholds and shares are within the scope. Every
-call in the plan below takes the scope filter, not only the search-term ones.
+Scoped totals (call 1) use the same filter, so AOV and shares are within the scope. Every
+business-analysis call below takes the scope filter, not only the search-term ones. The sole
+exception is call 1a: an additional unfiltered whole-store total used only when the customer
+did not provide a target ACOS. Do not use call 1a for scoped shares or scoped AOV.
 
 ## Call plan
 
@@ -58,16 +60,18 @@ All `get_ads_perf` calls: `factEntity: "searchTerm"` unless noted, the same `dat
 | # | Purpose | `select` | `metrics` | `filters` |
 |---|---|---|---|---|
 | 1 | Totals (and the average order value) | `["campaign.campaignType_"]` - one row per ad type; **sum the rows** into one total | `Spend, Sales, Clicks, Conversions` | - |
+| 1a | Whole-store target-ACOS fallback, only when the customer supplied no target and call 1 is scoped | same as call 1 | same | **no product/campaign scope filter**; still the same profile and period |
 | 2 | Totals by source | `["matchType_"]` | same | - |
 | 3 | Search terms with orders | `["query_"]` | same | `{"Conversions": {">": 0}}` |
 | 4 | Zero-order terms above the threshold `T` | `["query_"]` | same | `{"Conversions": {"=": 0}, "Spend": {">=": T}}` |
 | 5 | Source match types of ordering terms (harvest source, small-term split) | `["query_", "matchType_"]` | same | `{"Conversions": {">": 0}}` |
 | 6 | Zero-order search-term x match-type rows at or above `T` (small-spend source split) | `["query_", "matchType_"]` | same | `{"Conversions": {"=": 0}, "Spend": {">=": T}}` |
 
-`T` = one order's target spend = (`Sales` / `Conversions` from call 1) x target ACOS (as a
-fraction - see classification.md -> Units). Calls
-1, 3 and 9 run in Step 1, because the pre-filled store ACOS and brand candidates come from
-them; calls 4, 6 and 8's V3a cut-off need `T`, so they run after the target ACOS is confirmed.
+`T` = one order's target spend = (`Sales` / `Conversions` from scoped call 1) x target ACOS
+(as a fraction - see classification.md -> Units). When the user supplied no target, the target
+ACOS is `Spend / Sales` from call 1a (or call 1 itself when the run is already whole-store).
+Calls 1, 1a when needed, 3 and 9 run in Step 1; calls 4, 6 and 8's V3a cut-off need `T`, so
+they run after the target ACOS is confirmed.
 
 Order calls 3 and 4 by `Spend` descending so a partial run still holds the important rows,
 but classify only on complete page sets.
@@ -87,6 +91,27 @@ Managed-group labels, only for the terms that end up in the V3 / V4 lists:
 | 10 | Where each listed term's spend came from | `get_ads_perf`, `select: ["query_", "campaign.campaignId_", "campaign.campaignName_", "campaign.campaignType_", "adGroupId_"]`, `metrics: ["Spend", "Clicks", "Conversions"]`, `filters: {"query_": {"in": [...]}}` in batches of about 100 terms. If the `in` filter on `query_` is refused, pull the same `select` for the whole period instead (one AI-managed test store: 10 pages) |
 | 11 | Campaign / ad group -> internal ids, names and managed group | `get_entity_metadata(entity='campaign')`, `select: ["campaignId", "amazonCampaignId", "campaignName", "campaignType", "profileId", "aiGroupId"]`; `get_entity_metadata(entity='adGroup')`, `select: ["adGroupId", "amazonAdGroupId", "adGroupName", "campaignId"]`. Search-term rows carry **Amazon** ids; join on the `amazon*Id` fields, comparing as strings (one side may be numeric). Whether an ad group can take a negative product target is checked by `sparkx-edit-ads` at write time - metadata has no targeting-type field to pre-check it |
 | 12 | Group switches | `get_entity_metadata(entity='aiGroup')`: `aiActionSettings.targetOptimization.negativeTargetStatus` (`1` = automatic negative targeting on) and `targetHarvestStatus` (`1` or `2` = harvesting on) |
+
+Candidate safeguards and current-state coverage, run only for the V3/V5 candidate set rather
+than for every term in the account:
+
+| # | Purpose | Call |
+|---|---|---|
+| 13 | Immediately preceding equal-length exact-keyword performance (V3a history guard) | Same shape and scope as call 8, with `dateStart`/`dateEnd` shifted to the immediately preceding non-overlapping period. Join by Amazon keyword id, not text. A prior `Conversions > 0` changes the action from pause to investigate |
+| 14 | Current keyword-negative coverage (V3b keyword entries) | `get_entity_metadata(entity='negativeKeyword')`, enabled rows only, selecting `keywordText`, `matchType`, `businessType`, `campaignId`, `adGroupId`, `campaignType`, `profileId`. Normalize text with Unicode case-folding, trim and collapse whitespace. Only an enabled `matchType=negativeExact` row proves the proposed exact-negative action is already covered; `negativePhrase` is different coverage. A campaign-level row covers every source ad group in that campaign; an ad-group row covers only that ad group |
+| 15 | Current ASIN-negative coverage (V3b ASIN entries) | `get_entity_metadata(entity='negativeTarget')`, enabled rows only, selecting `negativeTargetText`, `negativeTargetType`, `campaignId`, `adGroupId`, `campaignType`, `profileId`. Negative targets are ad-group scoped; match the normalized ASIN and source ad group. Do not infer coverage from managed-group switches or old operation logs |
+| 16 | Keyword age and relevant recent changes (V3a/V5) | First query `get_operation_log` for the candidate keyword/target additions and bid/status changes, using the correct Amazon ids and a single entity per call so real pagination is available. If no creation event is retained, pull daily exact-keyword performance over the available lookback and use its first observed row as a **lower bound**, not an exact creation date. Campaign start date is context only and must never be reported as keyword age. For historically proven V3a rows, also inspect campaign/ad-group/keyword changes spanning the prior and current windows |
+
+For each V3b candidate, build the set of source destinations from call 10 and evaluate coverage
+destination by destination. Report one of three states:
+
+- **already handled**: every source destination is covered now; remove it from the actionable list;
+- **partially covered**: show covered and uncovered destinations separately; only uncovered ones
+  are actionable;
+- **not covered**: no current matching negative covers its source destinations.
+
+Current coverage says what is protected now. It does not prove when the negative began taking
+effect, and historical spend must not be described as leakage after that date without dated evidence.
 
 A term is labelled "托管组已开自动否定" only when **every** campaign it spent in belongs to a
 group with that switch on; the same rule for harvesting.

@@ -13,7 +13,8 @@
 ```
 
 **Same intent, but only changes made by people** — run the query above and filter the rows
-client-side: keep `changedBy` = an email, `Manual` or `Amazon Console`, and `changeField` =
+client-side: keep `changedBy` = an email or `Manual` (add `Amazon Console` only if you also
+want changes made on Amazon's side), and `changeField` =
 `dailyBudget` (in AI managed groups, AI's hourly `currentBudget` rows carry the same
 `operationType`). Do **not** add `"changeBy": {"operator": "IN", "values": ["manual"]}` for
 this — the server **rejects** `manual` outright (see [`field-reference.md`](field-reference.md) ->

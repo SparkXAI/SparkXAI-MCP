@@ -9,7 +9,7 @@ description: >-
   "月度复盘", "这个月表现如何", "monthly report". Not for weekly recaps (use sparkx-weekly-ads-report) or
   quarterly/QBR-level strategic review (use quarterly-ads-report, not yet built).
 metadata:
-  version: 1.2.0
+  version: 1.2.1
 ---
 
 # Monthly Ads Report
@@ -100,7 +100,7 @@ never promise to run a skill that may not be there.
   bids on ..."). Keyword-level actions (pausing a zero-order exact keyword, negatives) need
   keyword and search-term data - point to `sparkx-search-term-diagnosis` (if installed).
 - **People vs machines in the operation log.** Query without `changeBy` and classify
-  `changedBy` client-side: an email, `Manual` or `Amazon Console` is a person; everything else
+  `changedBy` client-side: an email or `Manual` is a person. **`Amazon Console` says where a change came from, not who made it** - Amazon's side. Report it as an Amazon-side change, not as a person. Everything else
   (`AI`, `Automation`, `AI-Custom Rule`, `Budget Management`, `Lock Ranking`, `API`, `Labels`,
   `System`) is a machine. **`changeBy=manual` is rejected by the server** (case-insensitive, in `IN`, `NOT_IN` or mixed) — it was a UI category, not an operator, and never covered changes recorded under a user's email. Inside
   managed groups the AI moves `currentBudget` every hour and those rows are also

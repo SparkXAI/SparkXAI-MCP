@@ -6,7 +6,7 @@ fail / fall back to unintended defaults) unless you also send their companion fi
 When enabling one, include the whole set. These are front-end-enforced linkages; MCP
 won't enforce them, so you must. (Exact field names: `field-reference.md`.)
 
-- **Dynamic budget** (`budgetDynamicActionStatus=1`) -> also `budgetNumType`
+- **Dynamic budget** (`budgetDynamicStatus=1`) -> also `budgetNumType`
   (`1`=percentage / `2`=fixed) and `budgetNum` (the value). Value bounds (the batch path
   uses `budgetDynamicStatus`/`numType`/`num`): `num > 0`; `numType=1` (percentage)
   `num <= 1000`; `numType=2` (fixed) `num <= 100000`.
@@ -16,8 +16,17 @@ won't enforce them, so you must. (Exact field names: `field-reference.md`.)
   mixed-currency set, either convert per store and write per store, or switch them to a
   percentage and say why.
 - **Bid range** (`bidRangeStatus=1`) -> also `bidRangeType` and `bidRange` `[min,max]`
-  (array length exactly 2, **min <= max**). `bidRangeType=1` (percentage): `0.01 <= min`
-  and `max <= 100`. `bidRangeType=2` (fixed): `min >=` the site's minimum bid. Note:
+  (array length exactly 2, **min <= max**). `bidRangeType=2` (fixed): `min >=` the site's
+  minimum bid.
+
+  ⚠️ **`bidRangeType=1` - treat the meaning as unconfirmed.** This file used to call it
+  "percentage" and bound it to `0.01 <= min`, `max <= 100`. The platform UI appears to take a
+  **bid coefficient** instead (values like `0.5` - `1.13`), which the old bound would reject as
+  illegal while accepting a percentage-shaped number that means something else entirely. Until
+  the backend confirms the enum: **do not reject a `bidRangeType=1` value for falling outside
+  `0.01`-`100`**, do not convert between percent and coefficient, pass what the user gave,
+  and tell them the unit is unconfirmed so they can check the value in the UI after the write.
+  Note:
   **BidDaypart and BidAdjustment share this one `bidRange`** - if both are on it applies
   to both.
 - **B2B range** (`btbRangeStatus=1`) -> `btbMin`/`btbMax`: `btbMin >= 0`, `btbMax <= 900`,
@@ -30,11 +39,11 @@ won't enforce them, so you must. (Exact field names: `field-reference.md`.)
 
 **按表现调预算** (`DYNAMIC_BUDGET`) - the value is an **increase cap on top of the current
 budget, NOT a target**. Mode `1`=percentage (`+num%`), `2`=fixed (`+$num`). **Fields by
-path:** SP/SB action space `budgetDynamicActionStatus`+`budgetNumType`+`budgetNum`; SD
+path:** SP/SB action space `budgetDynamicStatus`+`budgetNumType`+`budgetNum`; SD
 `budgetDynamicStatus`+`numType`+`num`; batch = per the `DYNAMIC_BUDGET` schema.
 
 **预算重新分配** (`BUDGET_REDISTRIBUTE`) - a switch that **changes the scope of 按表现调预算**.
-**Fields by path:** SP/SB action space `budgetRedistributeActionStatus`; SD
+**Fields by path:** SP/SB action space `budgetRedistributeStatus`; SD
 `budgetRedistributeStatus`; batch = per the `BUDGET_REDISTRIBUTE` schema.
 
 **Scope - worked example.** A group with two enabled campaigns at **$100** and **$200**
@@ -61,9 +70,18 @@ path:** SP/SB action space `budgetDynamicActionStatus`+`budgetNumType`+`budgetNu
 ## Group total budget (托管组总预算) rescales campaigns proportionally
 
 托管组总预算 / group total budget = the **sum of the group's enabled campaigns' daily
-budgets** (`totalBudget` / `totalDailyBudget` on read reflect this). **Editing the group
-total proportionally rescales every enabled campaign's daily budget** to the new total -
-it is not an isolated field. State this effect in the change preview.
+budgets** (`totalBudget` / `totalDailyBudget` on read reflect this).
+
+> **It is a sum, not a separate cap.** `totalDailyBudget` reads like an extra group-level
+> ceiling sitting above the campaigns, and there is no such thing here: nothing enforces it
+> independently, and the group spends whatever its members spend.
+>
+> **But it is writable, and writing it is a real lever** — editing the group total
+> **proportionally rescales every enabled campaign's daily budget** to the new total. So
+> "lower the group budget to contain spend" does work; what it is not is a cap you can set
+> and forget. Before writing it, state the blast radius in the preview: **which campaigns
+> change and to what**, because every enabled member moves, not just the ones the customer
+> had in mind. It is not an isolated field.
 
 ## Strict ACOS / ACOS priority mode (`bidPerformanceStrictAcosStatus`)
 

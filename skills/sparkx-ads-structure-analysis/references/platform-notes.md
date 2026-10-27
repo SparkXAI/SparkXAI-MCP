@@ -62,6 +62,7 @@ Any of the 3 tools can legitimately return zero rows for reasons that have nothi
 2. **Check `effectiveProfileIds`.** An unauthorized profile can no longer cause a silent empty result — that fails as `invalid_params` with `Requested profileIds contain unauthorized values` (see profileIds Authorization above), so it shows up in step 1, not here. What this field is still good for: confirming you queried the store the user actually meant. If the user asked about "the JP store" and `effectiveProfileIds` holds the US profile, the empty result is a targeting mistake on your side — fix the profile and retry before concluding anything about the data.
 3. **Check the date range for T+2 delay effects (`get_ads_perf` only) — but note this is different from a range violation.** If `dateStart`/`dateEnd` genuinely exceed the 90-day span or 15-month lookback, that's a request-construction mistake that should surface as `isError:true` (`errorType: invalid_params`) per the error-handling rules above — it should not come back as a silent empty success. If you're instead seeing `isError:false` with empty/incomplete rows for a *valid* range that includes "today" or very recent days, that's the T+2 delay: recent data genuinely hasn't finished processing yet, which is a legitimate (if unhelpful) empty-but-correct result — not a bug and not "no data exists," just "not processed yet."
 4. **Confirm the requested fields/metrics are actually valid for the `factEntity`/`entity` in use** (see the Metrics × Entity Support Matrix). Requesting an unsupported combination is documented as a common source of `invalid_params` errors — so this should also come back as `isError:true`, not a silent empty result. If you're getting empty-but-non-error rows, an invalid metric/entity combination is an unlikely explanation; look at filters and data existence instead (steps 5-6).
+   ⚠️ **This does not apply to `select` on `get_entity_metadata`.** An unknown name there is **dropped, not rejected**: the call succeeds, the field is simply missing from every row, and the only trace is `meta.hint` (`Unknown select fields ignored: [...]`). So a field that reads as empty everywhere is a spelling mistake until you have checked `meta.hint`, and "the call returned 200" proves nothing about the names you asked for. The `invalid_params` behaviour above is about **filters and metrics**, not about `select`.
 5. **If you filtered by an id, check that the field and the value belong to the same id space.** Both spaces are filterable: `campaignId` / `adGroupId` / `targetId` / `keywordId` / `productAdId` take the internal id, `amazonCampaignId` / `amazonAdGroupId` / `amazonKeywordId` / `amazonTargetId` take the Amazon one. The mistake is the **mismatch** - e.g. passing an `amazonCampaignId` taken off a performance or log row as `campaignId`. That is a valid filter whose value matches nothing, so it returns zero rows **without an error**. **Judge by the field name the value came out of**, not by its length and not by which tool returned it: a `get_operation_log` row carries `entityId` (internal) and `amazonEntityId` / `amazonCampaignId` (Amazon) at the same time, and `portfolioId` is Amazon-side on `campaign` but internal on `portfolio`. The entity field tables are the source of truth.
 6. **Remove your business filters (`filters`) and retry.** If removing filters (state=enabled, spend thresholds, etc.) suddenly returns rows, the entity/data exists but didn't match your filter conditions — the honest answer to the user is "nothing matches your filter criteria," not "you have no data at all." These are different statements — don't conflate them.
 7. **If you still get zero rows after 1-6, confirm the entity itself exists** via `get_entity_metadata` (e.g. does this campaign ID actually exist for this profile?). A nonexistent entity and an existing-but-inactive-in-this-window entity warrant different answers to the user.
@@ -69,6 +70,36 @@ Any of the 3 tools can legitimately return zero rows for reasons that have nothi
 **Only after working through this sequence** can you responsibly tell the user "there's genuinely no data/activity in that range" — and even then, be specific about what you checked (e.g. "no spend recorded for campaign X between these dates, and the campaign does exist and is enabled") rather than a bare "no data found."
 
 ## Diagnosing inflated or non-reconciling numbers
+
+> **Before diagnosing anything: are the two numbers even from the same source?** "Cross-source"
+> does not only mean different MCP tools. It includes any of these:
+>
+> - the same period queried through different `get_ads_perf` fact entities or aggregation
+>   levels, such as a campaign row versus summed ad-group, target, search-term, product-ad or ASIN
+>   rows;
+> - performance facts from `get_ads_perf` compared with current configuration from
+>   `get_entity_metadata`, or with historical events from `get_operation_log`;
+> - the same logical report run at different times while late-attributed orders, report rows or
+>   operation-log backfill are still arriving.
+>
+> **Common cases.** Use campaign facts for a campaign total; do not force that total to equal the
+> sum of ASIN, product-ad, target or search-term detail. A campaign containing one requested ASIN
+> still reports the whole campaign's spend, including its other products. Use ASIN/product-ad
+> facts for product attribution instead. A metadata `dailyBudget`, a logged `currentBudget`
+> change and performance `Spend` are three different concepts, not three readings of one
+> number. Likewise, today's metadata describes what can act now; it does not prove what was
+> configured when an older log event occurred.
+>
+> Different sources can refresh on different schedules and continue accepting late data, so two
+> figures for the same dates can differ slightly. A few cents, a click or two, or a fraction of a
+> percent is normally timing, not a defect. Record the tool, fact entity, aggregation level and
+> run time before comparing results.
+>
+> **The rule: one judgement, one source.** Pick the source and entity level that answer the
+> question, and compute every number for that judgement from it. When two sources must be shown,
+> label both and explain whether the gap is expected semantics or refresh timing. Escalate only
+> when like-for-like results from the same source, scope, dates and snapshot still differ by an
+> amount material to the conclusion.
 
 The opposite failure of the one above: the call succeeds, the rows look reasonable, and the
 totals are several times the truth. It happens when a dimension from another entity doesn't

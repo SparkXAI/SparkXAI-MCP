@@ -10,7 +10,7 @@ description: >-
   save_sp_sb_ai_managed_group (edit mode). Not for creating a group (use sparkx-create-ai-group)
   or deleting one (use sparkx-delete-ai-group).
 metadata:
-  version: 1.2.3
+  version: 1.2.4
 ---
 
 # Edit AI Managed Group
@@ -172,8 +172,12 @@ new value.
      empty or over **20**, and `tosMin > tosMax` are all rejected. Also enforce these
      value bounds yourself (backend may not catch them yet, per the interface spec):
      `budget > 0`, `budgetRatio <= 10000`, dynamic-budget `num > 0` (`numType=1` <= 1000,
-     `numType=2` <= 100000), and action-space ranges (placement/B2B `0`-`900`, bid-range
-     percentage `0.01`-`100`). Don't lean on the backend for these.
+     `numType=2` <= 100000), and action-space ranges (placement/B2B `0`-`900`). Don't lean
+     on the backend for these. **`bidRangeType=1` is the one exception - do not bound it at
+     all.** Its unit is unconfirmed (the UI looks coefficient-like, `0.5`-`1.13`), so the old
+     `0.01`-`100` "percentage" check would reject legal values and wave through illegal ones;
+     pass what the user gave and say the unit is unconfirmed. See
+     [`references/coupling-rules.md`](references/coupling-rules.md).
    - **Word-list settings are not supported.** Do not send branded, non-branded,
      competitor, harvest-blacklist, or negative-target-blacklist fields, even if the
      routed schema exposes them. Tell the user to configure word lists in the platform.

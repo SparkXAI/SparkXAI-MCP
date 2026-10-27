@@ -10,7 +10,7 @@ description: >-
   "ASIN health check". Not for account-wide structural share analysis (use sparkx-ads-structure-analysis)
   or periodic WoW/MoM recaps (use sparkx-weekly-ads-report / sparkx-monthly-ads-report).
 metadata:
-  version: 1.2.1
+  version: 1.2.2
 ---
 
 # Product Diagnosis
@@ -56,7 +56,7 @@ Rewritten against the new tool's conventions from the start — carries forward 
 | `topN` | int | No | 20 | Only used when `scope=topN` |
 | `specifiedAsins` | array[string] | No | — | Only used when `scope=specifiedAsins` |
 | `dateStart` / `dateEnd` | string (`YYYY-MM-DD`) | No | Trailing 30 days ending yesterday | The analysis window — must satisfy the 90-day span / 15-month lookback caps like any other `get_ads_perf` call |
-| `classificationRules` | object | No | the defaults in Step 3 | Customer overrides for either axis — any of `starSpendPrefix`, `coreSpendPrefix`, `newSpAgeDays`, `minValidWeeks`, `decliningSlopeMax`, `decliningDrawdownMin`, `cliffDrawdownMin`, `growthSlopeMin`, `stockoutDaysMax`. Whatever the customer supplies wins; everything they leave out keeps the default. **Echo the values you actually used in the output either way**, so a reader never has to guess which set produced the labels |
+| `classificationRules` | object | No | the defaults in Step 3 | Customer overrides for either axis or the recent-deterioration signal — any of `starSpendPrefix`, `coreSpendPrefix`, `newSpAgeDays`, `minValidWeeks`, `decliningSlopeMax`, `decliningDrawdownMin`, `cliffDrawdownMin`, `growthSlopeMin`, `stockoutDaysMax`, `recentSalesDeclineMin`, `recentSalesBaselineOrders`, `recentSalesBaselineAmount`, `recentAdOrderDeclineMin`, `recentAdOrderBaselineMin`. Whatever the customer supplies wins; everything they leave out keeps the default. **Echo the values you actually used in the output either way**, so a reader never has to guess which set produced the labels |
 
 ### Resolving `profileIds`
 
@@ -133,7 +133,7 @@ never promise to run a skill that may not be there.
   bids on ..."). Keyword-level actions (pausing a zero-order exact keyword, negatives) need
   keyword and search-term data - point to `sparkx-search-term-diagnosis` (if installed).
 - **People vs machines in the operation log.** Query without `changeBy` and classify
-  `changedBy` client-side: an email, `Manual` or `Amazon Console` is a person; everything else
+  `changedBy` client-side: an email or `Manual` is a person. **`Amazon Console` says where a change came from, not who made it** - Amazon's side. Report it as an Amazon-side change, not as a person. Everything else
   (`AI`, `Automation`, `AI-Custom Rule`, `Budget Management`, `Lock Ranking`, `API`, `Labels`,
   `System`) is a machine. **`changeBy=manual` is rejected by the server** (case-insensitive, in `IN`, `NOT_IN` or mixed) — it was a UI category, not an operator, and never covered changes recorded under a user's email. Inside
   managed groups the AI moves `currentBudget` every hour and those rows are also
@@ -187,6 +187,8 @@ Default: trailing 30 days ending yesterday (T+2 delay — note if the window's e
 ```
 **⚠️ `Spend`/`ACOS` alongside `asin`-only business metrics in one call**: `get_ads_perf`'s ASIN business metrics (`TotalSalesAmount`, `Sessions`, `BuyBoxPercentage`, etc.) are confirmed valid only on `factEntity: asin`, and so are the regular ad metrics when queried at that same `factEntity` — this is fine as one call. What's **not** fine is joining or filtering these `asin`-only business metrics against campaign/adGroup/aiGroup-level fields (see [`ad-type-dependent-metrics.md`](references/ad-type-dependent-metrics.md)) — don't add `campaign.*`/`adGroup.*` dimension fields to this call's `select`.
 
+**⚠️ Campaign-level spend is never split by ASIN.** If you also show a campaign-level figure next to an ASIN-level one, say which is which. Filtering a campaign-level query by ASIN **selects rows, it does not divide the money**: it returns the campaigns that contain that ASIN, each with its **whole** spend, including the other products in them. So campaign-level spend >= that ASIN's own spend whenever a campaign carries more than one product, and the gap is simply the other products' share — not a reconciliation error, and not something to chase. Only a campaign with exactly one ad group and one promoted product should match an ASIN figure, and even then only within T+N backfill. Label the gap when you show it; a customer seeing two numbers and no explanation will read it as a bug.
+
 **⚠️ `Sales` and `TotalSalesAmount` are two different things, both requested deliberately**: `Sales` is ad-attributed sales (the numerator context for `ACOS`, whose formula is `Spend/Sales×100`); `TotalSalesAmount` is the ASIN's total business sales including organic (the denominator for `TACOS`, whose formula is ad `Spend/TotalSalesAmount`). Don't drop either thinking the other covers it — see Step 3's zero-denominator handling, which depends on both being present.
 
 **✅ `TotalSalesAmount`/`TACOS` work on Vendor profiles too.** They are unified metrics: on a Vendor row they are computed on the shipped basis, deliberately so that Seller and Vendor rows can be summed in one query. **Do not re-query with `OrderedRevenue`/`ShippedRevenue` on seeing a Vendor profile** - that was guidance from before the metrics were unified, and it costs a round trip for nothing. (What remains Vendor-specific is the *extra* breakdown: `OrderedRevenue`/`OrderedTACOS` only under `distributorView_=MANUFACTURING`, `ShippedRevenue`/`ShippedTACOS`/`ShippedCogs`/`NetPPM` on both views.) A genuinely null `TotalSalesAmount` means no sales in the window, not a wrong field.
@@ -230,7 +232,7 @@ Scope this call per `scope`:
 
 **e. Operation log for flagged ASINs** (feeds Step 5 and the promotion signal): `get_operation_log`, from 7 days before the comparison window through the end of the analysis window (split if that exceeds 90 days), `resourceIds` scoped to `campaignId`/`adGroupId` (resolve each flagged ASIN → its `campaignId`/`adGroupId` via `get_entity_metadata`'s `productAd` entity first, since `get_operation_log` takes IDs, not ASINs directly). **`resourceIds.idEntity` has no `productAd` value** (see `sparkx-query-operation-log`'s field reference) — don't resolve to `amazonAdId` and try to pass it in; use `idEntity: "campaign"`/`"adGroup"` instead.
 
-⚠️ **Those ids must be `amazonCampaignId` / `amazonAdGroupId`, not the internal `campaignId` / `adGroupId` the `productAd` entity returns.** Getting this wrong does not raise an error: with `entities` set as below, the filter simply matches nothing and you get an **empty result** that looks exactly like "nobody touched these campaigns". Sanity-check the magnitude before sending — internal ids are small sequential numbers, Amazon ids are 15-19 digits — and treat an empty log for a busy campaign as a suspected id-type mistake before reporting it as a finding.
+⚠️ **Those ids must be `amazonCampaignId` / `amazonAdGroupId`, not the internal `campaignId` / `adGroupId` the `productAd` entity returns.** Getting this wrong does not raise an error: with `entities` set as below, the filter simply matches nothing and you get an **empty result** that looks exactly like "nobody touched these campaigns". **Decide by the field name the value came out of, never by how long it looks** — a log row carries `entityId` (internal) and `amazonCampaignId` (Amazon) side by side, and lengths are not a contract. Magnitude is at best a smell test: if a number looks wrong for the field it is going into, re-check its source field. And treat an empty log for a busy campaign as a suspected id-type mistake before reporting it as a finding.
 
 So the resolution is **three hops, not one**, and **both** levels need their own hop:
 
@@ -450,11 +452,46 @@ when they give them.
 > 2. it has **zero orders** this period with `Spend >= T` (`T` per "Shared Rules"); **or**
 > 3. `Spend >= T` **and** `ACOS` > the target ACOS, where the target is one the **customer supplied**
 >    (with no customer target this clause does not apply - see Axis A - and the flagged set is
->    clauses 1 and 2 only).
+>    clauses 1 and 2 only); **or**
+> 4. it has a **recent deterioration signal** from the reporting-period comparison below.
 
-Everything else is not flagged. **无广告投放 No ad spend** rows can only be flagged by clause 1: with no spend
-there is nothing to waste, so clauses 2 and 3 cannot fire. Say which clause fired for each entity -
-"declining", "spent without converting" and "converting too expensively" lead to different actions.
+Everything else is not flagged. **无广告投放 No ad spend** rows can be flagged by clause 1 or
+clause 4: with no spend there is nothing to waste, so clauses 2 and 3 cannot fire. Say which
+clause fired for each entity - "declining", "recent business-sales deterioration", "recent
+ad-conversion deterioration", "spent without converting" and "converting too expensively"
+lead to different actions.
+
+#### Recent deterioration — independent of lifecycle stage
+
+Lifecycle is a 12-week product-stage label. It must not suppress a sharp change between the
+reporting period and its immediately preceding equal-length period. After joining Step 2a and
+2b by ASIN (or by parent after the required child aggregation), compute two independent flags:
+
+- **Recent business-sales deterioration**: prior `OrderCount >= recentSalesBaselineOrders`
+  (default `5`) **and** prior `TotalSalesAmount >= recentSalesBaselineAmount` (default: one
+  `T`, per "Shared Rules" — so it scales with the store's price level and currency), and
+  current `TotalSalesAmount <= prior × (1 - recentSalesDeclineMin)`, default
+  `recentSalesDeclineMin = 0.20`.
+  **Echo the resolved number, not the symbol.** `recentSalesBaselineAmount` defaults to a
+  value computed at run time, so report the store-currency amount you actually used (e.g.
+  `42.5`) together with `recentSalesBaselineAmountSource` = `derivedFromT` or `customer`.
+  Printing `T` or `null` leaves the reader unable to reproduce the classification.
+  **The two baselines are the point**: without them `$1.00 → $0.70` is a 30% decline and would
+  pull a trivial product into the diagnostic set. Below either baseline, report the row as
+  **too small to judge**, not as deterioration, and say which baseline it missed.
+- **Recent ad-conversion deterioration**: prior `Conversions >= recentAdOrderBaselineMin`
+  (default `3`) and current `Conversions <= prior × (1 - recentAdOrderDeclineMin)`, default
+  `recentAdOrderDeclineMin = 0.30`.
+
+Use raw period totals, not ACOS or smoothed lifecycle points. A zero/missing prior denominator is
+**not comparable**, not a 100% decline. Either flag adds clause 4 to `flaggedBy` and generates a
+diagnostic card even when the lifecycle stage remains **成熟 Mature**. Present both facts together,
+for example: "Lifecycle: Mature; recent status: business sales down 22% and ad conversions down
+35% versus the preceding equal-length period." Do not relabel the lifecycle stage.
+
+Apply the existing promotion discipline before interpreting the signal. If the prior/current
+comparison crosses a confirmed promotion, retain the measured flag but label it
+`possiblyPostPromotion` and do not present the decline as an organic trend.
 
 #### Reporting both axes together
 
@@ -489,7 +526,7 @@ If none of the above turns up anything, say so plainly ("no inventory/eligibilit
 ### Step 6 · Recommendations (Keep / Optimize / Cut)
 
 Derive one verdict per flagged ASIN (and optionally per healthy ASIN if the user wants a full-catalog verdict, not just the problems). **The verdict reads both axes, not one** — the portfolio tier says how much is at stake, the lifecycle stage says which way the product is going, and the same stage deserves a different answer at each tier:
-- **保 (Keep)**: Star or Core at the Growth or Mature stage — no action needed, or note it as a candidate for the *other* skill (`sparkx-ads-structure-analysis`) if there's a structural budget-reallocation angle. A **New** product at any tier also defaults to Keep: its volume is supposed to be low, and this skill's window is too short to judge it.
+- **保 (Keep)**: Star or Core at the Growth or Mature stage **with no recent-deterioration flag** — no action needed, or note it as a candidate for the *other* skill (`sparkx-ads-structure-analysis`) if there's a structural budget-reallocation angle. A **New** product at any tier also defaults to Keep unless a non-lifecycle diagnostic flag such as stockout or recent deterioration needs investigation; do not turn that flag into a Cut verdict on this window alone.
 - **优 (Optimize)**: every entity in **Step 3's flagged set** where Step 5 found a fixable driver — no other reading of "underperforming" applies here. A **`stockout`** flag means the fixable driver is restocking, and the ad-side answer is to hold, not to cut. **Star x Declining goes first in the list** — it is the largest amount of money moving the wrong way, and it is the case the old single-label scheme could not express at all (e.g. restock, buy-box recovery, a managed-group setting) — action + evidence. Bid / budget advice follows "Shared Rules" (group levers for managed campaigns, no numbers). For traffic-side problems, suggest running `sparkx-search-term-diagnosis` (if installed) scoped to this product.
 - **撤 (Cut)**: zero orders with spend >= `T` in **both** this and the prior period, and no fixable driver found; or **Long-tail x Declining** with negligible volume. **Never cut on a Declining stage that the year-over-year check could not confirm against seasonality**, and never cut a **New** product on this window alone — say what is missing instead. Action + evidence.
 
@@ -537,9 +574,9 @@ answer".
 {列名用 "ASIN" 还是 "Parent ASIN" 取决于 granularity：asin/variant 用 "ASIN"，parentAsin 用 "Parent ASIN"——不要不管 granularity 都固定写 "ASIN"}
 {仅当 profileIds 涉及多个店铺时才加"店铺"列——单店铺场景不要加这一列造成冗余}
 
-| ASIN / Parent ASIN | 店铺（仅多店铺时） | 花费 | 广告销售额 | ACOS | 总销售额 | TACOS | 订单数 / 转化数 | 投放分层 | 生命阶段 |
-|---|---|---|---|---|---|---|---|---|---|
-| ... | ... | ... | ... | ... | ... | ... | ... | 明星/腰部/长尾/无广告投放 | 新品/成长/成熟/衰退/数据不足{+断货标记} |
+| ASIN / Parent ASIN | 店铺（仅多店铺时） | 花费 | 广告销售额 | ACOS | 总销售额 | TACOS | 订单数 / 转化数 | 投放分层 | 生命阶段 | 近期状态 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ... | ... | ... | ... | ... | ... | ... | ... | 明星/腰部/长尾/无广告投放 | 新品/成长/成熟/衰退/数据不足{+断货标记} | 稳定/销售额下降N%/广告转化下降N% |
 
 ## 二、投放分层与生命阶段
 
@@ -569,9 +606,10 @@ answer".
 |---|---|---|---|
 | ... | ... | ... | ... |
 
-## 四、单品诊断卡（濒死 / 问题商品）
+## 四、单品诊断卡（衰退 / 近期恶化 / 问题商品）
 
 ### {ASIN}
+- 分类：{投放分层}；生命阶段 {stage}；近期状态 {稳定/销售额下降N%/广告转化下降N%}{；可能受大促后回落影响}
 - 库存/资格状态：{...}
 - Buy Box / 退货信号：{...}
 - 关联操作记录（非 ASIN 专属，campaign/adGroup 层面）：{...，标注为关联而非确定因果}
@@ -593,11 +631,11 @@ _生成时间：{timestamp} · 数据源：SparkX AI MCP · Skill: sparkx-produc
   "dimension": "asin",
   "period": {"start": "...", "end": "..."},
   "dataFreshnessWarning": null,
-  "ranking": [{"entityId": "...", "entityType": "asin|parentAsin", "profileId": null, "profileName": null, "spend": ..., "sales": ..., "acos": null, "totalSalesAmount": ..., "tacos": null, "orderCount": ..., "conversions": ..., "portfolioTier": "star|core|longTail|noAdSpend", "lifecycleStage": "new|growth|mature|declining|insufficientData", "lifecycleEvidence": {"normalizedSlope": null, "peakDrawdown": null, "decliningPath": "drift|cliff|null", "validWeeks": null, "spOpenDateEarliest": null, "spOpenDateIsReproducible": true, "newlyAdvertisedNotNew": false, "stockout": false, "dayAvailability30": null, "yoyChecked": false, "seasonalDownswing": false}, "flagged": false, "flaggedBy": []}],
+  "ranking": [{"entityId": "...", "entityType": "asin|parentAsin", "profileId": null, "profileName": null, "spend": ..., "sales": ..., "acos": null, "totalSalesAmount": ..., "tacos": null, "orderCount": ..., "conversions": ..., "portfolioTier": "star|core|longTail|noAdSpend", "lifecycleStage": "new|growth|mature|declining|insufficientData", "lifecycleEvidence": {"normalizedSlope": null, "peakDrawdown": null, "decliningPath": "drift|cliff|null", "validWeeks": null, "spOpenDateEarliest": null, "spOpenDateIsReproducible": true, "newlyAdvertisedNotNew": false, "stockout": false, "dayAvailability30": null, "yoyChecked": false, "seasonalDownswing": false}, "recentStatus": {"businessSalesDecline": false, "businessSalesChangeRate": null, "adConversionDecline": false, "adConversionChangeRate": null, "comparable": true, "possiblyPostPromotion": false}, "flagged": false, "flaggedBy": []}],
   "portfolioTierSummary": {"star": {"count": ..., "spendShare": ...}, "core": {...}, "longTail": {...}, "noAdSpend": {"count": ..., "spendShare": 0, "totalSalesAmount": ...}},
   "lifecycleStageSummary": {"new": {"count": ...}, "growth": {...}, "mature": {...}, "declining": {...}, "insufficientData": {...}},
   "lifecycleWindow": {"start": "...", "end": "...", "weeks": 12},
-  "classificationRules": {"portfolioTier": {"starSpendPrefix": 0.5, "coreSpendPrefix": 0.8, "starAcosRule": "<= target ACOS", "targetAcosSource": "customer|none"}, "lifecycleStage": {"newSpAgeDays": 90, "minValidWeeks": 6, "decliningSlopeMax": -0.10, "decliningDrawdownMin": 0.25, "cliffDrawdownMin": 0.50, "growthSlopeMin": 0.10, "stockoutDaysMax": 7}},
+  "classificationRules": {"portfolioTier": {"starSpendPrefix": 0.5, "coreSpendPrefix": 0.8, "starAcosRule": "<= target ACOS", "targetAcosSource": "customer|none"}, "lifecycleStage": {"newSpAgeDays": 90, "minValidWeeks": 6, "decliningSlopeMax": -0.10, "decliningDrawdownMin": 0.25, "cliffDrawdownMin": 0.50, "growthSlopeMin": 0.10, "stockoutDaysMax": 7}, "recentDeterioration": {"recentSalesDeclineMin": 0.20, "recentSalesBaselineOrders": 5, "recentSalesBaselineAmount": 42.5, "recentSalesBaselineAmountSource": "derivedFromT|customer", "recentAdOrderDeclineMin": 0.30, "recentAdOrderBaselineMin": 3}},
   "variantComparison": null,
   "diagnosticCards": [{"entityId": "...", "entityType": "asin|parentAsin", "inventoryStatus": "...", "eligibilityIssue": null, "buyBoxSignal": null, "correlatedChanges": [...]}],
   "recommendations": [{"verdict": "keep|optimize|cut", "entityId": "...", "entityType": "asin|parentAsin", "action": "...", "evidence": "..."}]

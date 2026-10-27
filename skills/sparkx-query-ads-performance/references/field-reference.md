@@ -83,7 +83,7 @@ placement, with the correct value and a `writeField` naming the field to write.
 | `target.targetBid_` | Set bid | — |
 
 **⚠️ No negative-targeting variant exists in `targetMatchType_`'s enum above.** There is no negative-target performance data in this tool. `get_operation_log` only tells you *when* a negative target was added/removed (`targetTypes`: `negativeKeyword`/`negativeAsin`/`negativeBrand`), not a queryable current snapshot. For a **current snapshot** of negatives, use `get_entity_metadata(entity='negativeKeyword')` and `get_entity_metadata(entity='negativeTarget')` - those entities exist and are filterable by `campaignId` / `adGroupId`. What does not exist is negative-target *performance*, and that is inherent: a negative blocks traffic, it never serves. So answer "what am I negating in this campaign?" from metadata, and never claim spend/clicks for a negative.
-| `target.targetCurrentBid_` | Live current bid (real-time value, may differ from `target.targetBid_` if adjusted by rules/AI) | — |
+| `target.targetCurrentBid_` | Current bid. **Only meaningful for keywords.** On keyword rows it is a separate stored value that can differ from `target.targetBid_`. On every other targeting type (product / category / audience) the two are **the same underlying column**, so they can never differ — do not read "equal" there as "AI has not adjusted it" | — |
 | `target.targetPreCurrentBid_` | Previous day's bid | — |
 | `target.targetingType_` | Targeting category | `keyword` / `target` / `auto` / `audience` |
 

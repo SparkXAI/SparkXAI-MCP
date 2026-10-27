@@ -9,7 +9,7 @@ description: >-
   hourly data, by hour, intraday, AMS, Amazon Marketing Stream, keyword placement,
   vendor, seller, distributorView, sellingProgram, shipped revenue, ordered revenue, TACOS
 metadata:
-  version: 1.4.7
+  version: 1.4.8
 ---
 
 # Query Ads Performance Skill
@@ -97,7 +97,7 @@ Auxiliary tables for joining and aggregating — referenced via `select`/`filter
 | dateEnd | string | **Yes** | — | End date `YYYY-MM-DD`. Default to yesterday if user gives no end date (T+2 data delay) |
 | metrics | array[string] | **Yes** | — | Metric fields (non-empty). Must be valid for the chosen `factEntity` — see Metrics × Entity Support Matrix below |
 | userContext | string | **Yes** | — | User's original query + reason, max 100 chars |
-| select | array[string] | No | [] | Dimension fields, format `entity.field_`; omit for global aggregate (no grouping). **`campaignAudience` reads this as an output field whitelist of bare names instead** — see that section |
+| select | array[string] | No | [] | Dimension fields, format `entity.field_`; omit for global aggregate (no grouping). **The response returns the plain name** (`asin.asin_` in, `asin` out) — request and response are not symmetric, see below. **`campaignAudience` reads this as an output field whitelist of bare names instead** — see that section |
 | groupBy | array[string] | No | same as select | GROUP BY fields. Only needed explicitly when `select` contains a custom aggregate expression — otherwise auto-filled from raw dimension fields in `select` |
 | filters | object | No | {} | Filter conditions — supports simple value / operator / AND-OR nesting |
 | orderBy | array[object] | No | [] | `[{"field": "Spend", "direction": "DESC"}]` (direction ASC or DESC, default DESC) |
@@ -305,6 +305,7 @@ Hour-level data comes from Amazon Marketing Stream (AMS) and is reachable two wa
 - **Hourly rows arrive fast, but they are not final.** First data for an hour shows up roughly **~2 hours** after that hour ends (confirmed 2026-08) — far sooner than the daily pipeline's T+2. Conversions keep being backfilled onto earlier hours after the row exists, so treat recent hours as **provisional rather than incomplete**: readable immediately, possibly revised upward later, and a trailing dip may be backfill-in-progress rather than a real decline. Re-pull before treating them as final.
   **What is *not* established: when an hour stops changing.** That window is undocumented, and **T+2 is the daily pipeline's figure — there is no evidence it is also the point at which hourly attribution completes.** Don't quote T+2 as the hourly settling time in either direction: the honest statement is "first data in about two hours, backfilled afterwards, final window unknown." If a decision depends on the numbers being final, say the window can't be confirmed.
 - **AI metrics don't exist at hourly granularity on either path.** On `factEntity: campaign` + `timeGranularity: hourly`, `AISpend`/`AISales` come back `0` and `AIACOS`/`AIROAS` come back `null` - placeholders, the same as on `keywordPlacement` below. Real AI values are daily-only: for an AI-vs-manual split, query daily. The hourly campaign metric set is also a subset of the daily one (no DPV, video or impression share) - see `references/field-reference.md`.
+- **Request and response names differ everywhere, not just on `keywordPlacement`.** `select` takes the qualified form `entity.field_` (`asin.asin_`, `campaign.campaignName_`); the rows come back keyed by the **plain** name (`asin`, `campaignName`). This is normal, not a sign the example is wrong — but it does mean you cannot echo a `select` entry straight back as a response key, and a reader comparing a documented example against a live result will see two different spellings of the same field.
 - `keywordPlacement` uses an asymmetric field naming convention (bare names in the request, `_`-suffixed keys in the response) — see Field Naming Rules.
 
 **`keywordPlacement` supports a restricted metric set.** The underlying stream table only carries base SP hourly data, so:
@@ -402,7 +403,8 @@ Dimension-field filters run in `WHERE`; metric-field filters run in `HAVING`.
     "pageSize": 100,
     "hasNextPage": false,
     "effectiveProfileIds": [4404871489220462],
-    "currency": "USD"
+    "currency": "USD",
+    "hint": "Limit conclusions to this query's scope. Missing fields are not zero, and empty results do not prove that no matching business data exists. Do not present partial or paginated results as complete. Distinguish returned facts from analytical inferences; state limitations or query further when evidence is insufficient."
   },
   "requestId": "a1b2c3d4e5f6"
 }
@@ -411,7 +413,8 @@ Dimension-field filters run in `WHERE`; metric-field filters run in `HAVING`.
 **Everything is nested.** `rows` and `rowCount` live under **`data`**; pagination, currency and
 hints live under **`meta`**. Only `isError`, `toolName` and `requestId` are top level. Reading
 `response.rows` returns nothing - it is `response.data.rows`. `meta` keys are **omitted when
-they do not apply** (not set to null), and `meta` itself is omitted when entirely empty.
+they do not apply** (not set to null). A successful read always has `meta.hint`: any
+query-specific warning comes first, followed by the shared interpretation boundary.
 
 | Field | Type | Description |
 |---|---|---|
@@ -425,7 +428,7 @@ they do not apply** (not set to null), and `meta` itself is omitted when entirel
 | `meta.hasNextPage` | boolean | Whether more pages exist — loop `page` while true |
 | `meta.effectiveProfileIds` | array[long] | Profile IDs the query actually ran against — an echo of your request (unauthorized IDs fail the call outright rather than being dropped here). Verify it's the store the user meant |
 | `meta.currency` | string | Currency of monetary metrics: the profile's local code for a single profile, `USD` for multiple |
-| `meta.hint` | string | Present when something was adjusted silently — read it |
+| `meta.hint` | string | Always present on success. Read all sentences: query-specific warnings, if any, precede the shared interpretation boundary |
 
 On error, the response instead follows the shared error envelope described in Platform-Wide Rules above — all errors use a single top-level `errorType` (tool and pipeline alike, e.g. `rate_limited` / auth failures).
 
