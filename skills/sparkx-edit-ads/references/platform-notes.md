@@ -110,8 +110,8 @@ retry blindly.**
 
 | `errorType` | Meaning / what to do |
 |---|---|
-| `invalid_params` | Field, enum, or batch-composition problem - **also** an archived-guard rejection (archived / unknown state / unresolvable id). Read the message before assuming it is malformed JSON. A guard *lookup failure* is `business_error`, not this |
-| `business_error` | Downstream or query-execution failure, **and all confirmation-token errors**. Read the message and branch: unknown field -> fix it; result set too large -> narrow; execution timeout -> narrow and retry; server is busy -> retry later; internal error -> likely transient |
+| `invalid_params` | Field, enum, or batch-composition problem - **also** an archived-guard rejection (archived / unknown state / unresolvable id), and a downstream parameter rejection on the page update routes. Read the message before assuming it is malformed JSON. A guard *lookup failure* is `business_error`, not this |
+| `business_error` | Downstream or query-execution failure, **and all confirmation-token errors** (expired, wrong user, parameters changed, service down). Read the message and branch: unknown field -> fix it; result set too large -> narrow; execution timeout -> narrow and retry; server is busy -> retry later; internal error -> likely transient |
 | `ambiguous_write` | State unknown - verify, do not retry (above) |
 | `write_operation_failed` | The downstream write was rejected |
 | `timeout` | Narrow the batch and retry, **after** reading the entities back |
@@ -125,6 +125,29 @@ retry blindly.**
 Messages from `business_error` are wrapped by the service layer
 (`Service [Amazon_SA_Service] returned an error: ...`); `invalid_params` messages are not.
 **Branch on `errorType`; if you must inspect text, substring-match, never exact-match.**
+
+### Field errors and token errors are different `errorType`s
+
+A field problem is `invalid_params`; every confirmation-token problem is `business_error`
+(see the table above). The split is already made for you - you do not have to parse messages
+to tell the two apart, only to pick the right response within each:
+
+| `errorType` | Message begins with | What to do |
+|---|---|---|
+| `invalid_params` | `Parameter 'request....` | Fix the field. Re-sending the same payload repeats the same failure |
+| `business_error` | `Confirmation token expired or not found` | The 5-minute TTL ran out - re-read current state, run a fresh Phase 1, confirm promptly |
+| `business_error` | `Request parameters changed since preview` | Run a fresh Phase 1 for the new scope - the old token is burnt |
+| `business_error` | `Confirmation token was issued to a different user` | Run your own Phase 1 |
+
+The `Parameter 'request....` path names the list it came from: `data[N]` (keyword, target),
+`updates[N]` (negativeKeyword `updateStatus`, productAd), `target[N]` (negativeKeyword
+`copy`).
+
+Field errors should no longer reach a confirm call at all: `keyword` + `updateBid` /
+`updateStatus`, `target` + `updateBid` / `updateStatus`, and `negativeKeyword` +
+`updateStatus` validate the **whole batch before a token is issued**, so a missing or
+invalid field surfaces on the Phase 1 call and no `confirmToken` comes back. Seeing one on
+Phase 2 means the payload changed between the two calls.
 
 ## Rate limits
 

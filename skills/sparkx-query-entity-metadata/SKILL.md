@@ -8,7 +8,7 @@ description: >-
   which ads, enabled/paused status, budget settings, bidding strategy, automation rules,
   managed group schedule, flight, seasonal plan, rule mode config, RBA rule conditions
 metadata:
-  version: 1.4.8
+  version: 1.4.9
 ---
 
 # Query Entity Metadata Skill
@@ -72,7 +72,7 @@ Unlike `get_ads_perf` (which infers tables from `select`), `get_entity_metadata`
 | entity | string | **Yes** | — | Entity type to query. Enum: `profile` / `campaign` / `adGroup` / `target` / `keyword` / `negativeKeyword` / `negativeTarget` / `productAd` / `portfolio` / `placement` / `aiGroup` / `aiGroup_schedule` / `asin` / `automationRule` / `amcAudience` / `keywordGroup` / `suggestedKeyword` / `suggestedTarget` / `suggestedBid` / `sdCategory` / `categoryBrand`. The last seven have specialized contracts below. Note: productLine info is nested inside `asin` entity results, not a separate `entity` value |
 | userContext | string | **Yes** | — | User's original query + reason, max 100 chars |
 | filters | object | No | {} | Filter conditions. Field names are **camelCase**, no `entity.` prefix, no `_` suffix (e.g. `campaignState`, not `campaign.campaignState_`) |
-| orderBy | array[object] | No | [] | `[{"field": "fieldName", "direction": "DESC"}]` |
+| orderBy | array[object] | No | [] | `[{"field": "fieldName", "direction": "DESC"}]`. Non-empty sorting is rejected for `aiGroup_schedule`, `automationRule`, `keywordGroup`, `suggestedKeyword`, `suggestedTarget`, `suggestedBid`, and `amcAudience`. `asin` accepts one rule with a supported field and `ASC`/`DESC`; see [field reference](references/field-reference.md) for inventory eligibility limits. Never infer global Top N from a single sorted page. |
 | select | array[string] | No | all fields | Return **only** these top-level fields (no nested paths), in the given order — **plus `currency`, which is always kept when the row has one**. Unknown fields are ignored (reported via `meta.hint`). Does not affect pagination. See "Trimming fields with `select`" below |
 | page | int | No | 1 | Page number (1-based). **`page` ≤ 0 is an error**, not a fallback to 1. Ignored for `automationRule`, `aiGroup_schedule`, the five suggestion entities, `sdCategory`, and `categoryBrand` |
 | pageSize | int | No | 100 | Rows per page, max 500. **Out of range (≤0 or >500) is an error**, not clamped — floor any computed value at 1 |
@@ -738,6 +738,8 @@ treated as a field name, so an `AND` or `OR` key is sent downstream as a field a
 | `>`, `<` | **Rejected** | — | Strict comparison is not supported; use `>=` / `<=` and drop boundary rows yourself. See "Filter, sort and paging rules" |
 
 **Note on `like`**: any `%` you include is stripped and replaced with an automatic leading+trailing `%` — the match is always "contains" regardless of where you place `%`.
+
+**`ilike` is not supported by this tool.** The filter operators accepted here are `in`, `notin`, `like`, `!=` / `ne`, `>=` and `<=`; anything else is rejected as `Unsupported filter operator for field '<field>': [...]`, which echoes what you sent and does **not** list the allowed set. Do not carry `ilike` over from `get_ads_perf` - the two tools handle text matching differently; here `like` already matches case-insensitively (see the table above), so there is nothing for `ilike` to add.
 
 ## Enum "Text" Companion Fields
 

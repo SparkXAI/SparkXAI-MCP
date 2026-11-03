@@ -612,7 +612,7 @@ Schedules ("flights") of **one** managed group. Special calling contract — see
 | `filters` contains **nothing else** | `aiGroup_schedule query only supports filters.aiGroupId` |
 | `aiGroupId` is a single positive integer (`29123`, `[29123]`, or `{"in": [29123]}`) | invalid-filter error |
 
-Pagination and `orderBy` are ignored; all schedules for the group come back in one response, and the top-level `page`/`pageSize`/`hasNextPage` fields are omitted.
+Non-empty `orderBy` is rejected. Pagination is ignored; all schedules for the group come back in one response, and the top-level `page`/`pageSize`/`hasNextPage` fields are omitted.
 
 **Return fields** (per schedule row):
 
@@ -668,6 +668,8 @@ target. Multiple brands require multiple targets. A td-api credential error is
 `service_unavailable` with `service: td-api`; do not retry or invent ids.
 
 ### asin (ASIN product info)
+
+**BSR category**: `asinBsrCategoryId` / `asinBsrCategoryName` identify the category corresponding to `asinBsr`; `parentAsinBsrCategoryId` / `parentAsinBsrCategoryName` describe the parent's BSR. These are returned fields only (no filtering or sorting). The ID may be present while the name is unavailable. Names come from the latest ASIN-INFO event for the same profile and ASIN, using the product-analysis category rules (bsr_info first, legacy single-category fallback), and must match the BSR category ID. BSR ranks, IDs, filtering and sorting retain the broad-table semantics; no other category name is substituted. These fields do not represent a complete browse-category tree. `asinCategoryInfo` / `parentAsinCategoryInfo` remain raw JSON **array strings**, potentially empty or containing empty entries; do not treat them as objects with a `.category_id` property or infer that an empty value means the ASIN has no category.
 
 Single query returns **child ASIN + parent ASIN + product line info nested together**. By default only returns non-deleted ASINs (`asinIsDelete=0`).
 
@@ -836,7 +838,7 @@ Shorthand also accepted:
 {"amazonCampaignId": [123456789, 987654321]}
 ```
 
-**Note**: `automationRule` does **not** support sort or pagination — results are returned in the **same order as the `amazonCampaignId` list you passed in `filters`** (not sorted by ID value, and unrelated to `orderBy`/`page`, which have no effect here). It also has no outer `currency` field (rule configuration is not a monetary value).
+**Note**: `automationRule` does **not** support sort or pagination — results are returned in the **same order as the `amazonCampaignId` list you passed in `filters`** (not sorted by ID value; non-empty `orderBy` is rejected and `page` has no effect). It also has no outer `currency` field (rule configuration is not a monetary value).
 
 **Full example**:
 ```json
@@ -867,3 +869,8 @@ Response:
 ---
 
 **Enum i18n**: When presenting enum values to the user or translating between API values and display labels, consult [`enum-i18n.md`](enum-i18n.md) for the complete ZH/EN/JA mapping of all enum fields documented above.
+
+
+### Explicit sorting validation
+
+`aiGroup_schedule`, `automationRule`, `keywordGroup`, `suggestedKeyword`, `suggestedTarget`, `suggestedBid`, and `amcAudience` reject non-empty `orderBy`. Omit it or use `[]`. Do not infer Top N from response order. For `asin`, supply at most one rule, use only the supported fields above, and use `ASC` or `DESC` (case insensitive; omitted direction defaults to `DESC`). Unknown fields, malformed rules, and multiple rules are rejected before the downstream call. Inventory authorization constraints described above still apply.

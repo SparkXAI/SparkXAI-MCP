@@ -4,6 +4,114 @@
 
 ## [Unreleased]
 
+## [1.3.6] - 2026-11-03
+
+### Added
+
+- `sparkx-query-ads-performance` documents the `ilike` operator and a Text matching section: `ilike` for case-insensitive matching, `like` only when case-sensitivity is explicitly requested, with an intent-to-pattern table and the `campaignAudience` exception (use its `search` parameter instead).
+- `sparkx-query-entity-metadata` adds the ASIN BSR category fields (`asinBsrCategoryId` / `asinBsrCategoryName` and their parent equivalents, returned only — no filtering or sorting), the `orderBy` restrictions per entity, and an explicit note that `ilike` is **not** accepted by this tool.
+- `sparkx-edit-ads` documents the four confirmation failure messages verbatim, separates the confirmation-service outage by phase (Phase 1 issues no token; Phase 2 cannot verify one that was issued), and adds a table mapping `errorType` plus message prefix to the right response.
+
+### Changed
+
+- `sparkx-edit-ads` keyword routes: `campaignType` and `matchType` are now documented as **required** with their enum values, instead of "send it". Both are validated before the preview is issued, so a bad value is rejected with the exact parameter path and no `confirmToken` comes back.
+- Preview field lists are complete rather than indicative: `keyword` and `target` `updateBid` carry nine fields each (`target` uses `targetText` and has no `matchType`), `productAd` `archive` carries five, and the `updateStatus` previews are spelled out per entity.
+- The token-survival rules are split by where the failure happens. The routes that validate the whole batch up front reject before the token is touched, so a field or nested-`profileId` rejection no longer consumes it there.
+- Text-matching guidance in the shared platform notes is now tool-specific: each tool's Skill defines its own operators, case sensitivity and wildcard handling, and the rules must not be carried across tools.
+
+### Fixed
+
+- `matchType` was documented as **not** enum-validated, with the explicit claim that any string passes through. The opposite is true, and the stale text also told you not to pre-filter. A request missing `matchType` previously failed only at execution time with a generic error that named no field. The matching `ilike` guidance was also missing from this brand's mirror entirely and has been brought in line.
+- SB negative keywords were documented as unrestricted at campaign level, with an instruction not to filter those items out. `sponsoredBrands` with `businessType=campaign` is rejected on both `updateStatus` and `copy`, before anything is written.
+- The bid preview was described as reading the current bid, and `projectedBid: null` as a lookup failure. The preview never queries the live bid: `previousBid` is echoed back from the request and `projectedBid` is computed from it, so a preview that looks right is not evidence the baseline is current.
+- The `get_ads_perf` operator list omitted `!=`, `isNull` and `isNotNull`, all of which are supported and already used elsewhere in the docs. `notin` is **not** supported on that path — only `campaignAudience` accepts it — although the server's own error text lists it.
+- `keywordCurrentBid` cannot be used to verify a bid write: on the stores where it reads `0` it stays `0` after a successful write. Read `keywordBid` back instead, and report an unmoved value as accepted-but-unconfirmed rather than re-sending or falling back to pausing the keyword.
+- The `like` wildcard note claimed that `%` is stripped and replaced with an automatic leading and trailing `%`. That holds for `get_entity_metadata`, not for `get_ads_perf`, where the pattern reaches SQL unchanged.
+
+### Versions
+
+- `sparkx-query-ads-performance` and `sparkx-query-entity-metadata` `1.4.8` -> `1.4.9`, `sparkx-query-operation-log` `1.3.7` -> `1.3.8`, `sparkx-edit-ads` `1.1.6` -> `1.1.7`, `sparkx-weekly-ads-report` `1.1.4` -> `1.1.5`, `sparkx-monthly-ads-report` `1.2.1` -> `1.2.2`, `sparkx-ads-structure-analysis` `1.1.5` -> `1.1.6`, `sparkx-product-diagnosis` `1.2.2` -> `1.2.3`. The other six Skills are unchanged.
+
+## [1.3.5] - 2026-10-27
+
+### 新增
+
+- `sparkx-create-campaign` 覆盖 `create_sp_ad_group`：在已有 SP Campaign 下新建广告组，含推广商品、投放与否定。新增参考文件 `create-sp-ad-group.md`。活动创建按批次 all-or-nothing，广告组创建是非原子的 `partial_success`，两者分别写明。
+- `sparkx-edit-ads` 从 20 条路由扩到 25 条：新增广告组合成员关系、组合预算与起止日期、广告组状态。新增参考文件 `write-ad-group.md` 与 `write-portfolio.md`。
+- `sparkx-query-entity-metadata` 补品类/品牌定向 ID 与投放状态。
+
+### 变更
+
+- 商品诊断的下滑判定新增最低样本基线：`recentSalesBaselineOrders`（默认 `5`）与 `recentSalesBaselineAmount`（默认一个 `T`）。没有它们时 `$1.00 -> $0.70` 也算 30% 下滑。两个参数都可由客户覆盖，并在结构化结果中回显，同时带 `recentSalesBaselineAmountSource`，便于复现分类。
+- `totalDailyBudget` 两面都写清楚：它是成员预算之和，没有任何东西把它当上限强制执行；但它可写，写它会按比例重算每个启用成员的日预算，因此写入前必须在预览里说明影响面。
+- 操作日志补充回填与量级两条：日志会回填约两天，所以计数是运行那一刻的计数；AI 活跃账户的机器行可达每小时数百条，一天的 AI 变更装不进 1,000 行上限。
+- 写入限流（20 calls/min，按 tenant+tool 与 user+tool 分别计）补齐到所有涉及写入的 Skill，此前只在部分文件中有。
+- 回读规则纳入镜像延迟：元数据镜像可落后亚马逊 20 分钟以上，回读不一致不等于写失败，也绝不构成重发的理由，该行报 `pending sync`；`ambiguous_write` 或 `timeout` 之后结果明确标为未知，而不是"已写入"。
+
+### 修复
+
+- `*ActionStatus` 这组字段名并不存在。8 个文件共 56 处是错的，字段参考开头的提示框还专门拿它当例子。真实字段是 `budgetDaypartStatus`、`budgetDynamicStatus`、`budgetRedistributeStatus`。未知字段会被静默丢弃，所以按旧名字写的调用返回成功而开关从未变动。
+- `keywordCurrentBid` 在 Skill 里有三种互相矛盾的说法——两处要求拿它当调价基准，一处警告它会读到 `0`。统一为：以 `keywordBid` 为基准，`keywordCurrentBid` 仅作参考，且必须判 `0`。
+- `targetCurrentBid` 原描述为"可能与 `targetBid_` 不同"。这只对关键词成立；其他定向类型下两个字段映射同一列，永远不可能不同，因此"相等"不能被读成"AI 没调过"。
+- `changedBy: Amazon Console` 是来源而不是操作人——它表示改动来自亚马逊侧，不计入人工修改。共修正 10 处，包括共享的归因规则和大促复位的复位清单，这类行在回滚前必须先说明来源。
+- `bidRangeType=1` 标注为单位未确认，并移除原来 `0.01`-`100` 的"百分比"校验：按系数理解，该边界会拒掉合法值又放行非法值。`budgetNumType` 与 `bidRangeType` 的枚举行拆开，这是此前四处口径不一致的根源。
+- `get_entity_metadata` 的未知 `select` 字段是丢弃而非拒绝——写进全部 14 份共享 platform-notes，并说明这与 filter/metric 的 `invalid_params` 是两种行为。
+- `currentBudget = 0` 与 `asinPrice = 0` 是哨兵值（当天无 AI 调整记录；未回填），不是零预算或免费商品，且 `>=` 过滤会静默丢掉这类行。
+- `get_operation_log entities:['audience']` 对任何查询都返回 0 行，因此空结果不携带任何信息，不能读成"这段时间没有改动"。
+- 删除"内部 ID 是小整数、亚马逊 ID 是 15-19 位"的位数启发式。同一条日志行会同时带两者，长度不是契约——按字段名判断。
+- 跨表比对：同一窗口同一对象的两个数字来自不同表就会有细微差异。一个判断，一个来源。
+
+### 版本
+
+- `sparkx-query-ads-performance` `1.4.7` -> `1.4.8`、`sparkx-query-entity-metadata` `1.4.7` -> `1.4.8`、`sparkx-query-operation-log` `1.3.6` -> `1.3.7`、`sparkx-create-ai-group` 与 `sparkx-edit-ai-group` `1.2.3` -> `1.2.4`、`sparkx-edit-ads` `1.1.5` -> `1.1.6`、`sparkx-create-campaign` `1.0.4` -> `1.0.5`、`sparkx-weekly-ads-report` `1.1.3` -> `1.1.4`、`sparkx-monthly-ads-report` `1.2.0` -> `1.2.1`、`sparkx-ads-structure-analysis` `1.1.4` -> `1.1.5`、`sparkx-product-diagnosis` `1.2.1` -> `1.2.2`、`sparkx-search-term-diagnosis` 与 `sparkx-promo-reset` `1.0.3` -> `1.0.4`。`sparkx-delete-ai-group` 保持 `1.0.9`。
+
+## [1.3.4] - 2026-10-22
+
+### 新增
+
+- `aiGroup` 新增只读字段 `hasAdvice`（仅限开通按行动空间力度的账号）：`true` 表示有可直接应用的人格推荐，`false` 表示没有，`null` 表示推荐服务暂时不可用。`null` 明确写为"未知"而不是"没有"；该字段不可过滤，字段缺失也不能用来判定账号类型。
+- 补充网关对 `save_sp_sb_ai_managed_group` 的 `evidence` / `isApplyP` 硬约束：最多 4 条、每个 service 最多一次、`personality` 必须 `1`-`5`、SB 不能传 `service=placement`、编辑时每条的 `aiGroupId` 必须是 `0` 或等于组 ID。
+
+### 变更
+
+- **对消费 JSON 的下游是破坏性变更**：`sparkx-monthly-ads-report` 的 `structured_report` 中 `newProducts` 改名为 `newlyAdvertisedProducts`，并新增 `existingProductsNewlyAdvertised`。
+- 操作日志的时间戳有三种时钟而不是两种：广告实体单店铺用店铺时间、多店铺用 UTC；SP/SB 托管组是 UTC；SD 托管组用下游数据库时区，没有任何地方声明是哪个。因此可能返回 SD 托管组行的查询给不了统一的时区标签，排序也从"newest first"改为按原始时间戳字符串排序。全部 24 份 platform-notes 同步。
+- 鉴权失败：token 无效或过期现在返回 401/403 而不是 503。这是永久错误，应重新鉴权而不是重试。覆盖 16 份 platform-notes。
+
+### 修复
+
+- `get_operation_log` 的 `resourceIds` 对 `campaign` 和 `adGroup` 要求亚马逊 ID。商品诊断原来教的是内部 ID，传进去匹配不到任何行且不报错——调用成功返回空，和"确实没人动过"长得一模一样。改为三跳解析：`productAd` 取内部 ID、`campaign` 实体换 `amazonCampaignId`、`adGroup` 实体换 `amazonAdGroupId`，第三跳不能省。`campaign`、`adGroup`、`aiGroup` 现在是三次独立调用并显式传 `entities`，这也恢复了真实分页。
+- `changeBy: manual` 现在被服务端直接拒绝（忽略大小写，含 `IN`、`NOT_IN` 或混选）。此前 Skill 的说法只是"会漏掉邮箱归属的变更"。共修正 7 处；`Manual` 标记为展示值而非过滤值。
+
+## [1.3.3] - 2026-10-21
+
+### 变更
+
+- 商品诊断把原来那个五选一的生命周期标签拆成**两个正交的轴**。起因是客户反馈公开的定义看不明白；根因不是文案，而是那一个标签把两件互不相干的事压在了一起，用运营语言读会得到几个讲不通的结论：一个产品的"生命周期"取决于它在你账户里的花费排名；明星和衰退互斥；换个时间窗口生命周期就变了；没有成熟期；衰退只看广告订单，而广告订单随你改出价预算而动。
+  - **投放分层**（`star` / `core` / `longTail` / `noAdSpend`）：按本期花费份额加 ACOS，账户相关、窗口相关，回答"钱花在哪"。
+  - **生命阶段**（`new` / `growth` / `mature` / `declining` / `insufficientData`）：按 SP 投放时长加独立的 12 整周总销售额趋势，产品固有，不随报告周期变。
+  - 明星 × 衰退是单标签表达不了、也最有价值的一格。
+- 新增 Step 2f：按周一聚合的 12 周周粒度序列。用 12 周不是 13 周——84 天一次调用拿得完，91 天超 `get_ads_perf` 的 90 天上限。两端对齐周一/周日，否则尾部残周会被读成不存在的下跌。同比伴随调用往前推 364 天，周一仍是周一。
+- 衰退有两条路径：缓降（归一化斜率 <= `-0.10` 且回撤 >= `0.25`）或断崖（回撤 >= `0.50` 单独成立）。
+
+### 修复
+
+- 小时与 AMS 数据的 AI 指标是占位值：`AISpend` / `AISales` 回 0，`AIACOS` / `AIROAS` 回 null，和 `keywordPlacement` 一样。原文只在 `keywordPlacement` 上写了这条，容易被理解成 hourly 可以拆 AI 和手动。AI 归因只能走日粒度。结构分析里的 hour-of-day 表不再出 AI 列。
+- 小时数据的时间戳是店铺本地 IANA 时区，不是 UTC。指南不再回避"晚上 8 点达峰"这类说法，但要求注明是店铺本地时间，夏令时切换当天按歧义处理。
+- 三处互相打架的时效口径统一为证据支持的说法：约 2 小时出首次数据，之后会回填，最终稳定窗口未知。T+2 是日粒度管线自己的数字，不是 hourly 归因完成的时点。最近的小时按 `provisional`（可读但可能被上修）处理，不是 `incomplete`。
+
+## [1.3.2] - 2026-10-20
+
+### 新增
+
+- 创建与编辑托管组两个 Skill 各新增参考文件 `ai-personality.md`，覆盖按行动空间的 AI 人格。账号分两类，只在工具调用时才判定：新账号上组级 `aiPersonality` 在写入前即被拒，改用 `aiActionSettings` 里的 12 个 `*AiPersonality`（或批量 `operation=actionSpaceIntensity`）。SB 只支持其中 6 个，传其余 6 个（含传 `null`）整单拒绝。排期与托管组形状不同：人格字段必须嵌进各优化模块，周排期带人格整单拒绝，固定日期排期省略某项不是"保持原值"而是回落到该排期的 `aiPersonality`。
+- 分析类 Skill 的第二批内容：父 ASIN 本身不可投放时展开成子 ASIN；同一广告组下的变体为何分不了按 ASIN 的预算；读完小时数据后实际能改什么（开关与人格可写，小时矩阵不可写）；停之前先查谁依赖它，并优先暂停而不是不可逆的归档；竞品 ASIN 定向的三步流程，先从建议里剔除客户自己的 ASIN。
+
+### 变更
+
+- platform-notes 补充 `capability_unavailable` 错误说明。
+- 14 个 Skill 各升一个 patch，以线上 Skill Hub 的版本为基准（线上此前比仓库高一个 patch）。顶层 release `v1.3.1` -> `v1.3.2`。
+
 ## [1.3.1] - 2026-10-13
 
 ### 新增

@@ -9,7 +9,7 @@ description: >-
   hourly data, by hour, intraday, AMS, Amazon Marketing Stream, keyword placement,
   vendor, seller, distributorView, sellingProgram, shipped revenue, ordered revenue, TACOS
 metadata:
-  version: 1.4.8
+  version: 1.4.9
 ---
 
 # Query Ads Performance Skill
@@ -356,7 +356,27 @@ For ASIN business analysis, additionally (asin entity only):
 
 Note the `ACOS` threshold above is `20`, not `0.2` — confirmed percentage metrics such as `ACOS`, `TACOS`, and the derived `*Rate` fields listed in Platform Notes are returned pre-scaled ×100 (e.g. `17.61` means 17.61%), so `{"ACOS": {"<": 20}}` means "ACOS under 20%". Writing `0.2` is the common construction mistake: it filters for "under 0.2%". Do not infer the scale of an unlisted field from its name alone.
 
-Supported operators: `>`, `<`, `>=`, `<=`, `=`, `in`, `like`
+Supported operators: `>`, `<`, `>=`, `<=`, `=`, `!=`, `in`, `like`, `ilike`, `isNull`, `isNotNull`
+
+`notin` is **not** accepted on this path - only `campaignAudience` supports it (see its
+`audienceSegmentType` note above). The server's own error text lists `notin` among the
+expected operators, but nothing here implements it and the filter comes back as
+`Unsupported filter operator: NOTIN`.
+
+**Text matching** (except `campaignAudience`):
+
+- Use `ilike` for case-insensitive matching of names, keyword text, and search terms. Use `like` when the user explicitly requests case-sensitive matching; capitalization alone does not imply that requirement.
+- Pass a single string pattern. Arrays, numbers, booleans, and null are invalid.
+- Choose the pattern from the requested match; `%` matches any number of characters and `_` matches one character. Escape them when searching for literal `%` or `_` characters.
+
+| User intent | Operator and pattern |
+|---|---|
+| Contains `perun`, regardless of case | `{"ilike": "%perun%"}` |
+| Starts with `perun`, regardless of case | `{"ilike": "perun%"}` |
+| Ends with `perun`, regardless of case | `{"ilike": "%perun"}` |
+| Contains exact-case `Perun` | `{"like": "%Perun%"}` |
+
+For `campaignAudience`, use its `search` parameter for case-insensitive audience-name matching as described above; do not send `ilike` filters.
 
 Nested example:
 ```json
@@ -374,8 +394,6 @@ Nested example:
 Dimension-field filters run in `WHERE`; metric-field filters run in `HAVING`.
 
 **Do not pass null as a filter value** — it returns `invalid_params`. To match rows where a field is genuinely empty use the explicit form `{"field": {"isNull": true}}` or `{"isNotNull": true}` (the boolean says whether the test holds, so `{"isNull": false}` = `{"isNotNull": true}`). See platform-notes "Null Filter Values Are Rejected".
-
-**`like` wildcard note**: any `%` you write is stripped and replaced with an automatic leading+trailing `%` — the match is always "contains" regardless of where you place `%` in the pattern.
 
 ## Response Structure
 

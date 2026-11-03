@@ -11,7 +11,7 @@ description: >-
   those uses sparkx-create-ai-group / sparkx-edit-ai-group / sparkx-delete-ai-group. Not for
   reading data (use sparkx-query-ads-performance / sparkx-query-entity-metadata).
 metadata:
-  version: 1.1.6
+  version: 1.1.7
 ---
 
 # Edit Ads

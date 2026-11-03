@@ -90,19 +90,27 @@ if you need to.
 
 ## When the token survives a failure and when it does not
 
-| Phase 2 outcome | Token |
-|---|---|
-| Fingerprint mismatch (you changed a parameter) | **consumed** - re-run Phase 1 |
-| Different user | **consumed** |
-| Expired / not found | gone |
-| Rejected on top-level `request.profileIds` authorization | **still usable** within the TTL |
-| Rejected on a **nested item's** `profileId` | **consumed** - that check runs inside the strategy, after the token is spent |
-| Rejected by the archived guard | **still usable** within the TTL |
-| Wrong / unregistered route | **still usable** |
-| Wrote successfully | consumed |
+Split these by **where** the failure happens. The routes that validate the whole batch up
+front reject before the token is touched at all.
 
-**Exactly three failures leave the token unspent**: a top-level `request.profileIds`
-authorization rejection, an archived-state guard rejection, and an unregistered route.
+**Rejected before the token is consumed** - it stays usable within the TTL:
+
+| Failure | Applies to |
+|---|---|
+| Top-level `request.profileIds` authorization rejection | every route |
+| Archived-state guard rejection | every route |
+| Wrong / unregistered route | every route |
+| Any field, enum, or **nested item `profileId`** rejection | `keyword` + `updateBid` / `updateStatus`, `target` + `updateBid` / `updateStatus`, `negativeKeyword` + `updateStatus` - these validate the whole batch before confirmation |
+
+**Consumed** - re-run Phase 1:
+
+| Failure | Note |
+|---|---|
+| Fingerprint mismatch (you changed a parameter) | |
+| Different user | |
+| Expired / not found | the token is gone either way |
+| Nested item's `profileId` rejected on **any other** route | that check runs inside the strategy, after the token is spent |
+| Wrote successfully | |
 
 But "unspent" is only half the test. **Re-sending the same token also requires an identical
 `request`**, because the fingerprint covers it. So:
@@ -115,9 +123,15 @@ But "unspent" is only half the test. **Re-sending the same token also requires a
   the old token is dead even though it was never consumed. **Run Phase 1 again**, and get a
   fresh yes for the new (smaller) scope.
 
-**Everything else consumes the token outright** - fingerprint mismatch, a different user, and
-(easy to miss) a **nested item's** `profileId` failing authorization, because that check runs
-inside the strategy after the token is spent.
+**The failures the table marks as consumed really are consumed** - fingerprint mismatch, a
+different user, and - on every route **except** those listed under "Rejected before the
+token is consumed" - a **nested item's** `profileId` failing authorization: outside those
+routes that check runs inside the strategy, after the token is spent.
+
+**A confirmation-service outage is the one case with no answer.** Depending on where the
+failure landed the token may or may not have been spent, and the response does not say
+which. Treat its state as unknown: do not re-send it, and re-preview once the service
+recovers.
 
 Never tell the user "the token is still valid": either you are re-sending an unchanged request
 within the TTL, or you are re-previewing.
@@ -147,9 +161,10 @@ is no single schema. Roughly:
 | `campaign` + `updatePlacementBid` | `index`, `id`, `profileId`, `campaignType`, and whichever placement fields you sent (requested absolute percentages, not queried current values) |
 | `campaign` + `updateBudget` | `index`, `campaignId`, `profileId`, `campaignName`, `currentBudget`, `adjustmentType`, `adjustmentAmount`, `projectedBudget` (+ `warnings` only when non-empty) |
 | `campaign` + `updateStatus` | `index`, `campaignId`, `profileId`, `campaignName`, `campaignType`, `currentState` (always `"unknown"`), `targetState` |
-| `keyword` / `target` + `updateBid` | `id`, `previousBid`, `projectedBid` (+ `campaignType` on target) |
-| `keyword` / `target` / `negativeKeyword` / `negativeTarget` + `updateStatus` | `id`, current text / matchType / state as far as the lookup resolved them, `targetState` |
-| `productAd` + `archive` | `id`, `targetState` (always `archived`) - built from your request only, no lookup |
+| `keyword` + `updateBid` | `index`, `id`, `profileId`, `keywordText` (looked up), `matchType` (echoed from your request), `previousBid`, `adjustmentType`, `adjustmentAmount`, `projectedBid` |
+| `target` + `updateBid` | `index`, `id`, `profileId`, `targetText` (looked up), `campaignType`, `previousBid`, `adjustmentType`, `adjustmentAmount`, `projectedBid` - no `matchType` on this route |
+| `keyword` / `target` / `negativeKeyword` / `negativeTarget` + `updateStatus` (archiving) | `index`, `id`, `profileId`, the entity's own text field (`keywordText` / `targetText` / `negativeTargetText`), its type field (`matchType` / `targetMatchType` / `negativeTargetType`), `currentState` (looked up), `targetState` (always `"archived"`). `negativeKeyword` also carries `businessType`; every route except `keyword` also carries `campaignType` |
+| `productAd` + `archive` | `index`, `id`, `profileId`, `campaignType`, `targetState` (always `"archived"`) - built from your request only, no lookup |
 | `portfolio` + `updateBudget` | `index`, `id`, `profileId`, `current`, `submitted`, `defaultSources`, `mayBeSkipped` |
 
 **Do not infer which route a preview came from by looking at its keys**, and do not assume a
@@ -176,13 +191,25 @@ it is not an empty array. Treat missing as empty.
 
 ### A null field means the lookup failed, not that the value is empty
 
-Preview enrichment reads current text / state / bid from the platform, and **those reads
-fail silently** - on error, no match, or a missing field, you get `null` and a server-side
-log line, not an error. Unlike the archived guard, the preview does not fail closed.
+Depending on the route, preview enrichment reads **some** of the text, type and state fields
+from the platform - the per-route table above says which. The rest are echoed straight back
+from your request and prove nothing about the live row: `campaignType` and `businessType`
+wherever they appear, and `matchType` on both `keyword` routes (on `negativeKeyword` and
+`target` the type field **is** looked up). Text and `currentState` are always looked up.
+
+**The platform reads fail silently** - on error, no match, or a missing field, you get
+`null` and a server-side log line, not an error. Unlike the archived guard, the preview does
+not fail closed.
 
 - Never present a `null` preview field to the user as the current value.
-- `projectedBid` will also be `null` for relative bid changes when `previousBid` could not
-  be resolved.
+- **The bid preview reads no bid at all.** `previousBid` is echoed straight back from your
+  request and `projectedBid` is computed from it. The preview never queries the live bid and
+  never checks your `previousBid` against it, so a preview that looks right is **not**
+  evidence that the baseline is current - re-read the bid immediately before Phase 1.
+- `projectedBid` is `null` only when the request itself lacks a usable `bid.type` /
+  `bid.amount`, or lacks `previousBid` on a relative type - never because a lookup failed.
+  On the keyword and target routes those fields are validated before the preview, so you
+  should not see it there.
 - `campaign + updateStatus` previews always show `currentState: "unknown"` - the underlying
   query does not return state at all. Do not report it as the campaign's real state; read
   it with `get_entity_metadata` if the user needs to know.
@@ -193,12 +220,25 @@ All four confirmation failures come back as `errorType: business_error`, and the
 wrapped by the service layer, e.g.
 `Service [Amazon_SA_Service] returned an error: Confirmation token expired or not found. Generate a new preview first.`
 
+The four, by message:
+
+- `Confirmation token expired or not found. Generate a new preview first.` - the 5-minute
+  TTL ran out
+- `Confirmation token was issued to a different user`
+- `Request parameters changed since preview. Generate a new preview first.` - the payload no
+  longer matches the fingerprint the token was bound to
+- `Confirmation service unavailable; cannot issue token` (Phase 1) or
+  `...; cannot verify token` (Phase 2) - the confirmation service itself is down
+
 **Branch on `errorType`, not on message text.** If you must distinguish them, substring-match
 on `Confirmation token` / `Request parameters changed` / `Confirmation service unavailable`,
 never on a whole sentence.
 
-If the confirmation service itself is unavailable, no token is issued and nothing is
-written - fail-closed. Report it and stop; do not try to write without a token.
+If the confirmation service itself is unavailable, **no write is executed** - fail-closed.
+What it means depends on the phase: in Phase 1 no token is issued at all
+(`cannot issue token`), while in Phase 2 a token that **was** issued cannot be verified
+(`cannot verify token`). Report it and stop; do not try to write without a token, and do not
+assume a Phase 2 token survived - re-preview once the service recovers.
 
 
 ## Running Phase 2 unattended

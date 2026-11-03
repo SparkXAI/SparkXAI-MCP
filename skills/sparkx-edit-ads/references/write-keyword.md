@@ -101,16 +101,21 @@ Payload: `request.data[]`:
 |---|---|---|---|
 | `id` | number | yes | `keywordId` from metadata |
 | `profileId` | string | yes | |
-| `campaignType` | string | **send it** | not validated by this route, but needed to resolve the row |
-| `matchType` | string | **send it** | echo metadata verbatim - selects the physical table |
+| `campaignType` | string | yes | `sponsoredProducts` / `sponsoredBrands` - enum-validated |
+| `matchType` | string | yes | `exact` / `phrase` / `broad` / `group` / `theme` - enum-validated |
 | `state` | string | yes | `enabled` / `paused` / `archived` |
 
-`matchType` is **not** enum-validated on this route - any string passes MCP and is
-forwarded. That is exactly why you must echo metadata rather than construct it: a plausible
-wrong value fails later as `unable to resolve owning campaign`, or resolves a row you did
-not mean.
+`campaignType` and `matchType` are both **enum-validated before the preview is issued**. A
+missing or out-of-enum value is rejected as `invalid_params` naming the exact path - for
+example `Parameter 'request.data[0].matchType' is required` - and **no `confirmToken` is
+issued**, so the request never reaches the confirm step. `matchType = "theme"` additionally
+requires `campaignType = "sponsoredBrands"`.
 
-No ad-type restriction on this route.
+Validation does not remove the reason to echo metadata rather than construct these values: a
+wrong but in-enum value passes validation, then resolves a row you did not mean or fails
+later as `unable to resolve owning campaign`.
+
+`sponsoredDisplay` is **not** accepted on this route - keyword rows exist only under SP and SB.
 
 ---
 
@@ -122,8 +127,8 @@ Payload: `request.data[]`:
 |---|---|---|---|
 | `id` | number | yes | `keywordId` |
 | `profileId` | string | yes | |
-| `campaignType` | string | **send it** | row resolution |
-| `matchType` | string | **send it** | row resolution |
+| `campaignType` | string | yes | `sponsoredProducts` / `sponsoredBrands` - enum-validated |
+| `matchType` | string | yes | `exact` / `phrase` / `broad` / `group` / `theme` - enum-validated |
 | `bid.type` | string | yes | see below |
 | `bid.previousBid` | number | yes | `>= 0`; read it from metadata immediately before |
 | `bid.amount` | number | yes | must be **> 0** for every type, including `setTo` |
@@ -139,12 +144,26 @@ increasePercent       decreasePercent
 - `increasePercent` <= 10000, `decreasePercent` <= 99.
 - **`setTo` with `amount: 0` is rejected.** Older docs said 0 was allowed; it is not. To
   stop spend on a keyword, pause it instead.
-- `previousBid` is forwarded raw - the server does no arithmetic with it and **does not
-  verify it**. A stale value is not detected. Re-read the current bid rather than reusing a
-  cached one; the AI or another user may have changed it.
+- `previousBid` is forwarded raw - the **write path** does no arithmetic with it and **does
+  not verify it**. A stale value is never detected, and the preview will still compute a
+  plausible-looking `projectedBid` from it, so the preview cannot catch this for you.
+  Re-read the current bid rather than reusing a cached one; the AI or another user may have
+  changed it.
 - Extra fields inside `bid` are silently dropped.
 
 Bid changes are **not idempotent** for relative types.
+
+### Verifying this write - not with `keywordCurrentBid`
+
+Read `keywordBid` back, never `keywordCurrentBid`. On the stores where
+`keywordCurrentBid` reads `0` it is **still `0` after a successful write**, so a `0`
+read-back is not evidence that the bid failed to land - see `sparkx-query-entity-metadata`'s
+field reference for the observed scale of this.
+
+If `keywordBid` has not moved either, report the write as **accepted but unconfirmed** and
+tell the user to check the value in the Amazon console. Do **not** re-send the same write,
+and do not fall back to pausing the keyword or cutting the campaign budget because the
+read-back looked wrong - that changes something the user did not ask for.
 
 ---
 
@@ -217,9 +236,15 @@ row - do not infer it from whether `adGroupId` looks populated.
 lowercase enum in a codebase that is camelCase everywhere else, so it is easy to "correct"
 into a value that does not exist.
 
-An older spec version claimed SB + `businessType=campaign` is rejected on this route. **It
-is not** - that restriction exists only on `copy`. Do not pre-filter those items away; if
-the combination is invalid the page endpoint decides.
+**SB negatives exist only at ad-group level.** `campaignType = "sponsoredBrands"` together
+with `businessType = "campaign"` is rejected on **both** this route and `copy`, as a batch
+pre-check - nothing is written and no `confirmToken` is issued:
+
+- `updateStatus` - `request.updates[N].businessType=campaign is not supported for sponsoredBrands; use adgroup`
+- `copy` - `request.target[N].campaignType=sponsoredBrands only supports businessType=adgroup`
+
+Echo back the `businessType` the metadata row carried; an SB row will never legitimately
+carry `campaign`.
 
 Because this route reads `updates` (not `data`), the archived-confirmation trigger also
 looks in `updates`.

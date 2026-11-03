@@ -10,7 +10,7 @@ description: >-
   sparkx-weekly-ads-report / sparkx-monthly-ads-report / a lighter ad-hoc analysis skill), product-level diagnosis
   (use sparkx-product-diagnosis), or search-term diagnosis (use sparkx-search-term-diagnosis).
 metadata:
-  version: 1.1.5
+  version: 1.1.6
 ---
 
 # Ads Structure Analysis

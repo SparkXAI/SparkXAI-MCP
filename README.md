@@ -2,7 +2,7 @@
 
 把 SparkX AI 的广告能力接进你自己的 AI Agent（WorkBuddy、Claude、ChatGPT 等），数据从此融入你的工作流——大白话查数据、做分析、算真账，还能和你自己的成本、利润、目标放在一起算。完成授权后，无需反复登录平台、导出表格或在系统之间来回切换。
 
-当前版本 v1.3.1 支持数据查询、AI 托管组管理、SP Campaign 创建和 Amazon Sponsored Ads 广告实体编辑。可创建包含广告组、推广商品、投放与广告位设置的 SP Campaign，也可修改 Campaign 预算、状态和 SP 竞价策略，管理关键词与 Target 的状态和竞价，以及推广商品和否定投放。暂不支持创建 SB/SD Campaign 或使用独立删除操作，但支持通过状态更新归档 Campaign。
+当前版本 v1.3.6 支持数据查询、AI 托管组管理、SP Campaign 与广告组创建，以及 Amazon Sponsored Ads 广告实体编辑。可创建包含广告组、推广商品、投放与广告位设置的 SP Campaign，也可在已有 SP Campaign 下新建广告组；可修改 Campaign 预算、状态和 SP 竞价策略，调整广告组合归属、组合预算与起止日期、广告组状态，并管理关键词与 Target 的状态和竞价，以及推广商品和否定投放。暂不支持创建 SB/SD Campaign 或使用独立删除操作，但支持通过状态更新归档 Campaign。
 
 ---
 
