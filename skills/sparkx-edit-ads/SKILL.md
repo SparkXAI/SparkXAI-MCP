@@ -4,14 +4,15 @@ description: >-
   Edit live Amazon Sponsored ad entities in bulk through the single tool
   `batch_update_ads` - campaign daily budget / state / bidding strategy, keyword and target
   status and bids, promoted products (product ads), negative keywords and negative product
-  targets, campaign portfolio membership, portfolio budgets/dates, and ad group state. 25
-  entity+action routes; 12 of them can run a two-phase platform confirmation. Use when the user wants to change / pause / enable / archive / raise / lower
+  targets, campaign portfolio membership, campaign name and end date, portfolio budgets/dates,
+  and ad group state, name and default bid. 29
+  entity+action routes; 13 of them can run a two-phase platform confirmation. Use when the user wants to change / pause / enable / archive / raise / lower
   / add / copy something on the ads themselves - 改预算 / 暂停广告 / 调价 / 加词 / 加否定词 /
   投放商品 / 复制否定词. Not for AI managed groups (托管组) - creating, editing or deleting
   those uses sparkx-create-ai-group / sparkx-edit-ai-group / sparkx-delete-ai-group. Not for
   reading data (use sparkx-query-ads-performance / sparkx-query-entity-metadata).
 metadata:
-  version: 1.1.7
+  version: 1.2.0
 ---
 
 # Edit Ads
@@ -21,7 +22,7 @@ Use the exact camelCase `budget.type` and `bid.type` values from the tool schema
 (for example, `setTo` or `increasePercent`), without spaces. Percent modes use
 `amount: 10` for 10%, not `0.1`. Legacy space-separated inputs are accepted for
 compatibility; use camelCase when constructing new requests.
-`entity` + `action` select one of **25 registered routes**; an unregistered pair is refused.
+`entity` + `action` select one of **29 registered routes**; an unregistered pair is refused.
 
 Read [`references/platform-notes.md`](references/platform-notes.md) once first - scope,
 the response envelope, the full `errorType` list, rate limits, and how to tell
@@ -38,9 +39,9 @@ targets just as much as to campaigns.
 
 Do not confuse "irreversible" with "always confirms" - they are different sets:
 
-- **Always confirms, on every call** (7 routes): `campaign + updateBudget`,
+- **Always confirms, on every call** (8 routes): `campaign + updateBudget`,
   `campaign + updateAudienceBid`, `campaign + updatePlacementBid`,
-  `keyword + updateBid`, `target + updateBid`, `productAd + archive`,
+  `keyword + updateBid`, `target + updateBid`, `adGroup + updateBid`, `productAd + archive`,
   `portfolio + updateBudget`.
 - **Confirms only when the payload contains `archived`** (5 routes): the `updateStatus`
   routes of `campaign`, `keyword`, `target`, `negativeKeyword`, `negativeTarget`.
@@ -124,6 +125,8 @@ distinct rejection messages: [`references/archived-guard.md`](references/archive
 | change campaign daily budget | `campaign` + `updateBudget` | always |
 | enable / pause / archive a campaign | `campaign` + `updateStatus` | if `archived` |
 | change SP bidding strategy | `campaign` + `updateBiddingStrategy` | - |
+| rename a campaign | `campaign` + `updateName` — **not atomic, on any ad type**; 128 UTF-16 units, no control characters, no U+200B, no HTML tags | - |
+| change a campaign's end date | `campaign` + `updateDates` — `endDate` only, `startDate` is read-only; **clearing is blocked on SD** | - |
 | add negative keywords to a campaign | `negativeKeyword` + `create` | - |
 | enable / pause / archive negative keywords | `negativeKeyword` + `updateStatus` — **SB cannot be paused; archiving is the only alternative and it is irreversible. Never substitute it automatically - get the user's explicit choice, then follow the normal confirmation / waiver policy** | if `archived` |
 | copy negative keywords elsewhere | `negativeKeyword` + `copy` | - |
@@ -146,11 +149,13 @@ distinct rejection messages: [`references/archived-guard.md`](references/archive
 | set, change or remove a portfolio budget cap | `portfolio` + `updateBudget` | always |
 | change portfolio budget dates | `portfolio` + `updateDates` | - |
 | enable / pause / archive an ad group | `adGroup` + `updateStatus` | - |
+| rename an ad group | `adGroup` + `updateName` | - |
+| change an ad group's default bid | `adGroup` + `updateBid` — **SP / SD only**; SB ad groups have no editable default bid | always |
 
 Per-route payloads, enums and limits live in the write references:
 [campaign](references/write-campaign.md) - [keyword & negative keyword](references/write-keyword.md) -
 [target & negative target](references/write-target.md) - [product ad](references/write-product-ad.md) -
-[portfolio operations](references/write-portfolio.md) - [ad group state](references/write-ad-group.md).
+[portfolio operations](references/write-portfolio.md) - [ad group state, name and default bid](references/write-ad-group.md).
 The payload **array name differs per route** (`data` / `updates` / `campaigns`+`asins` /
 `businessType`+`target`) and a wrong name is silently dropped, then reported as
 "required array missing" - check [`references/route-matrix.md`](references/route-matrix.md)
@@ -179,7 +184,7 @@ Step 8 is not optional for anything irreversible or bid/budget related.
 
 ## Two-phase confirmation
 
-Twelve routes can return a preview instead of writing. Full protocol, preview field meanings and
+Thirteen routes can return a preview instead of writing - eight always, five only when the payload contains `archived`. Full protocol, preview field meanings and
 failure modes: [`references/confirmation.md`](references/confirmation.md). The parts you
 cannot get wrong:
 
@@ -329,15 +334,16 @@ the id, and the lookup is fuzzier than it looks:
 
 ## Confirm it yourself when the platform does not
 
-Twelve entity+action pairs **can** require a preview - seven always, five only when the
-payload contains `archived`. The other thirteen write **immediately**, with no preview and
+Thirteen entity+action pairs **can** require a preview - eight always, five only when the
+payload contains `archived`. The other sixteen write **immediately**, with no preview and
 no undo:
 
-`campaign + updateBiddingStrategy` - `keyword + create` - `target + create` -
+`campaign + updateBiddingStrategy` - `campaign + updateName` - `campaign + updateDates` -
+`keyword + create` - `target + create` -
 `negativeKeyword + create` - `negativeKeyword + copy` - `negativeTarget + create` -
 `negativeTarget + copy` - `productAd + create` - `productAd + updateStatus` -
 `campaign + addPortfolio` - `campaign + removePortfolio` - `portfolio + updateDates` -
-`adGroup + updateStatus`.
+`adGroup + updateStatus` - `adGroup + updateName`.
 
 **Do not add the `updateStatus` routes of `keyword` / `negativeKeyword` / `target` /
 `negativeTarget` to that list.** Those write immediately **only for `enabled` / `paused`**;
@@ -432,7 +438,7 @@ Amazon Ads knowledge, because the platform's behaviour here is what matters:
   managed-group settings themselves belong to the managed-group skills. One mechanism *is*
   documented: editing a group's **total** budget rescales its campaigns' daily budgets
   proportionally, so a daily budget set here can be overwritten that way.
-- **Switching away from `ruleBased`** bidding strategy.
+- **Switching away from `ruleBased`** bidding strategy. (Switching *to* it is not possible here at all - that route rejects `ruleBased`.)
 - **`profileType`** for `productAd + create` when `profiles[].storeType` came back empty
   (server-side degradation) - there is no other source, so ask.
 - **A platform minimum daily budget.** `setTo` requires an amount above 0, but the real
@@ -483,5 +489,5 @@ read the entities back first and tell the user what you found.
 | [`references/write-keyword.md`](references/write-keyword.md) | Keywords and negative keywords |
 | [`references/write-target.md`](references/write-target.md) | Targets and negative targets |
 | [`references/write-portfolio.md`](references/write-portfolio.md) | Campaign membership, portfolio budget caps and dates |
-| [`references/write-ad-group.md`](references/write-ad-group.md) | Ad group state changes |
+| [`references/write-ad-group.md`](references/write-ad-group.md) | Ad group state, name and default bid |
 | [`references/write-product-ad.md`](references/write-product-ad.md) | Promoted products |

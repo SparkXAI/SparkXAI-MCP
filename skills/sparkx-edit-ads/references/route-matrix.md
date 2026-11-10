@@ -1,12 +1,12 @@
 # Route matrix
 
-25 registered `entity` + `action` routes. An unregistered pair throws
+29 registered `entity` + `action` routes. An unregistered pair throws
 `Batch update route is not implemented` (the message lists what is registered).
 
 `entity` values that have routes here: `campaign`, `keyword`, `target`, `productAd`,
 `negativeKeyword`, `negativeTarget`, `portfolio`, `adGroup`.
 `action` values: `create`, `updateStatus`, `updateBudget`, `updateBiddingStrategy`,
-`updateAudienceBid`, `updatePlacementBid`, `updateBid`, `addPortfolio`,
+`updateAudienceBid`, `updatePlacementBid`, `updateBid`, `updateName`, `addPortfolio`,
 `removePortfolio`, `updateDates`, `archive`, `copy`.
 
 ## The payload array name differs per route
@@ -42,6 +42,10 @@ that points at the field you thought you sent.
 | 23 | `portfolio` + `updateBudget` | `request.data` | portfolio | always |
 | 24 | `portfolio` + `updateDates` | `request.data` | portfolio | - |
 | 25 | `adGroup` + `updateStatus` | `request.data` | SP / SB / SD | - |
+| 26 | `adGroup` + `updateName` | `request.data` | SP / SB / SD, one campaignType per batch | - |
+| 27 | `adGroup` + `updateBid` | `request.data` | **SP / SD only**, one campaignType per batch | always |
+| 28 | `campaign` + `updateName` | `request.data` | SP / SB / SD, one campaignType per batch | - |
+| 29 | `campaign` + `updateDates` | `request.data` | SP / SB / SD, one campaignType per batch | - |
 
 `request.profileIds` is required on **every** route.
 
@@ -62,7 +66,7 @@ the destination rather than moving anything.
 Routes 1-2, 4, 7, 10 are "internal" routes; the rest are "page" routes. For a Skill the
 only observable differences are:
 
-| | Internal (1-2, 4, 7, 10) | Page (the other 20) |
+| | Internal (1-2, 4, 7, 10) | Page (the other 24) |
 |---|---|---|
 | Invalid item | whole batch refused, **message lists every bad item** ("N of M items are invalid") | whole batch refused, **message names only the first** |
 | Success payload | `{total, successCount, failCount, results[{id, success, message}]}` — `results[].id` is the **outer item's** key (`campaignId` at campaign level, `adGroupId` at ad-group level), not a created child id; `message` is `success` or the failure reason | `{code, message, data}` on success only |

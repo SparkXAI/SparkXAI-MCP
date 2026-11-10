@@ -16,24 +16,43 @@ won't enforce them, so you must. (Exact field names: `field-reference.md`.)
   mixed-currency set, either convert per store and write per store, or switch them to a
   percentage and say why.
 - **Bid range** (`bidRangeStatus=1`) -> also `bidRangeType` and `bidRange` `[min,max]`
-  (array length exactly 2, **min <= max**). `bidRangeType=2` (fixed): `min >=` the site's
-  minimum bid.
+  (array length exactly 2, **min strictly < max** - equal ends are rejected with
+  `Parameter 'aiActionSettings.bidRange' min must be less than max when bidRangeStatus=1`, so
+  "pin the bid to exactly X" cannot be expressed as `[X, X]`; say so rather than widening the
+  range yourself). `bidRangeType=2` (fixed): `min >=` the site's minimum bid.
 
-  ⚠️ **`bidRangeType=1` - treat the meaning as unconfirmed.** This file used to call it
-  "percentage" and bound it to `0.01 <= min`, `max <= 100`. The platform UI appears to take a
-  **bid coefficient** instead (values like `0.5` - `1.13`), which the old bound would reject as
-  illegal while accepting a percentage-shaped number that means something else entirely. Until
-  the backend confirms the enum: **do not reject a `bidRangeType=1` value for falling outside
-  `0.01`-`100`**, do not convert between percent and coefficient, pass what the user gave,
-  and tell them the unit is unconfirmed so they can check the value in the UI after the write.
-  Note:
-  **BidDaypart and BidAdjustment share this one `bidRange`** - if both are on it applies
-  to both.
+  ⚠️ **`bidRangeType=1` is a bid COEFFICIENT, not a percentage.** This file used to call it
+  "percentage" and bound it to `0.01 <= min`, `max <= 100`. The platform's own "Optimize base
+  bids" readback settles it: a group sent `bidRange: [-50, 15]` came back as *"If the targeting
+  bid is $1.00, the optimized bid range is expected to be 0.00~15.00"* - the `15` means **15x**
+  the base bid, and the `-50` was stored as `0`.
+
+  What this means for you:
+
+  - **Never convert a percentage into this field.** A user asking for "between -50% and +15%"
+    wants `[0.5, 1.15]`, not `[-50, 15]`. Sending the percentage numbers creates a 0x-15x
+    range, which is not a restriction at all - it is a licence to bid fifteen times the base.
+  - **A negative or sub-zero lower bound is silently clamped to `0`** rather than rejected, so
+    the write succeeds and a read-back echoes what you sent. The stored behaviour is not what
+    the echo shows. If the user's intent only makes sense as a percentage, stop and confirm the
+    unit before writing.
+  - **Read the result back in the UI, not from this API.** The read-back repeats the request;
+    the "Optimize base bids" panel shows what was actually stored.
+  - **BidDaypart and BidAdjustment share this one `bidRange`** - if both are on it applies to
+    both, so a coefficient chosen for one silently governs the other.
 - **B2B range** (`btbRangeStatus=1`) -> `btbMin`/`btbMax`: `btbMin >= 0`, `btbMax <= 900`,
   min <= max, at least one end non-null.
 - **Placement ranges** (`bidAdPlaceRangeStatus=1`) -> **at least one** of the `tos*`/
   `pdp*`/`ros*` min/max pairs non-null (don't enable the switch with all null); each pair
   `min >= 0`, `max <= 900`, min <= max.
+
+  ⚠️ **Ranges are not preserved for you.** Only `targetOptimization` and
+  `brandOptimization` are back-filled from the current config; everything in
+  `bidOptimization` comes from your request alone, so an omitted `tos*` / `pdp*` / `ros*` /
+  `bidRange` value reaches the downstream as absent, not as "unchanged". Send the complete
+  `bidOptimization` block whenever you change any part of it, and **read the group back
+  afterwards and check the ranges actually landed** - a success response does not prove they
+  did.
 
 ## Performance budget (按表现调预算) and budget reallocation (预算重新分配) are linked
 

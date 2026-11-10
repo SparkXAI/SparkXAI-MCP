@@ -13,9 +13,11 @@ rejected outright.
 > `budgetDynamicStatus`, `budgetRedistributeStatus`, `targetHarvestStatus`,
 > `negativeTargetStatus` — the same names the read side returns.
 >
-> **Why this mattered:** an unknown field is dropped, not rejected, so a write built on the
-> old names answered `success` while the switch never moved. If you have call templates
-> saved from an earlier version of this file, check them.
+> **Why this mattered:** a wrong field name is **rejected**, not dropped: schema validation
+> fails the call before the tool runs (`isError: true`, `Tool (...) input validation failed: ...`).
+> A call built on the old names never answers `success` with the switch unchanged — if such
+> calls fail, fix the names. If you have call templates saved from an earlier version of this
+> file, check them.
 >
 > What **does** differ is **SD-create fields vs SP/SB fields** — those are genuinely
 > different field sets. When building a write call, use the exact names in this file and
@@ -28,7 +30,7 @@ rejected outright.
 | `aiPersonality` | `1`=非常保守, `2`=保守, `3`=平衡, `4`=激进, `5`=非常激进. **>=3 required when `targetType=3` (volume/冲量)** - front-end rule, not backend-enforced. ⚠️ **Group-level only, and rejected outright on accounts that set personality per action space** - check [`ai-personality.md`](ai-personality.md) before sending it |
 | `campaignNameSign` | `0`=off, `1`=on |
 | `budgetNumType` | `1`=percentage, `2`=fixed value |
-| `bidRangeType` | `2`=fixed value. `1` = **unit unconfirmed** — documented here as "percentage" historically, but the platform UI looks coefficient-like (`0.5`-`1.13`). Do not validate, convert or restate the unit; see [`coupling-rules.md`](coupling-rules.md) |
+| `bidRangeType` | `2`=fixed value. `1`=**bid coefficient** (`1.15` = 1.15× the base bid), **not a percentage** — never convert `+15%` into `15`. A lower bound below `0` is silently clamped to `0`. Same range also governs bid dayparting; see [`coupling-rules.md`](coupling-rules.md) |
 | `*MatchType` (branded/competitor/harvest/negative) | `1`=exact(等于/精确), `2`=phrase(包含/词组) |
 | `*ListType` (harvest/negative) | `1`=include/whitelist, `2`=exclude/blacklist |
 
@@ -122,7 +124,7 @@ One extra field, only meaningful with rule 13:
 
 | Field | Type | Notes |
 |---|---|---|
-| `budgetDaypartExcuteDays` | string | Comma-separated days for budget dayparting. **`1`-`6` = Mon-Sat, `0` = Sunday.** Default `"1,2,3,4,5,6,0"` (every day). Note the spelling - `Excute`, not `Execute` |
+| `budgetDaypartExcuteDays` | string | Comma-separated days for budget dayparting. **`1`-`6` = Mon-Sat, `0` = Sunday.** Default `"1,2,3,4,5,6,0"` (every day). Note the spelling - `Excute`, not `Execute`. ⚠ Currently not saved by the SP/SB save — passing it has no effect |
 
 `budgetRedistributeStatus` and `bidAmazonBusinessStatus` have no Rule mode; only
 their `aiActionSettings` on/off switch applies.

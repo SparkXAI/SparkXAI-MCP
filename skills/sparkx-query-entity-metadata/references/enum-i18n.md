@@ -25,7 +25,7 @@ Display labels for enum values returned in the `{field}Text` companion fields. S
 | `legacyForSales` | SP Dynamic bids - down only | SP动态竞价-仅降低 | SP動的入札-減少のみ |
 | `autoForSales` | SP Dynamic bids - up and down | SP动态竞价-提高和降低 | SP動的入札-増加と減少 |
 | `manual` | SP Fixed bids | SP固定竞价 | SP固定入札 |
-| `ruleBased` | Rule Based | 基于规则 | ルールベース |
+| `ruleBased` | SP Rule-based bidding | SP基于规则的竞价 | SPルールベースの入札 |
 | `autoForSalesSb` | SB Automated bidding | SB自动竞价 | SB自動入札 |
 | `maximizeImmediateSales` | Maximize Immediate Sales | 最大化即时销售 | 即時売上最大化 |
 | `maximizeNewToBrandCustomers` | Maximize New-to-Brand Customers | 最大化品牌新客 | ブランド新規顧客最大化 |
@@ -58,9 +58,9 @@ Display labels for enum values returned in the `{field}Text` companion fields. S
 
 | API value | EN | ZH | JA |
 |---|---|---|---|
-| `conversions` | Optimize for Conversions | 转化优化 | コンバージョン最適化 |
-| `clicks` | Optimize for Clicks | 点击优化 | クリック最適化 |
-| `reach` | Optimize for Reach | 覆盖优化 | リーチ最適化 |
+| `conversions` | Optimize for conversions | 针对转化率 | コンバージョン率向け |
+| `clicks` | Optimize for page visits | 针对页面访问量 | ページビュー向け |
+| `reach` | Reach | 触达 | リーチ |
 
 ## targetMatchType
 
@@ -69,14 +69,14 @@ Display labels for enum values returned in the `{field}Text` companion fields. S
 | `broad` | Keyword-Broad | 关键词-广泛 | キーワード-広範 |
 | `phrase` | Keyword-Phrase | 关键词-词组 | キーワード-フレーズ |
 | `exact` | Keyword-Exact | 关键词-精准 | キーワード-完全一致 |
-| `asinSameAs` | PAT-Individual Product | 商品-单个商品 | 商品-単一商品 |
-| `asinExpandedFrom` | ASIN-Expanded | 商品-扩展ASIN | ASIN-拡張 |
+| `asinSameAs` | ASIN-Exact | 单个商品-精确定向 | 単品-精密ターゲティング |
+| `asinExpandedFrom` | ASIN-Expanded | 单个商品-拓展定向 | 単品-拡張ターゲティング |
 | `asinCategorySameAs` | PAT-Category | 商品-品类 | 商品-カテゴリ |
 | `asinAccessoryRelated` | Auto-Complements | 自动-关联商品 | 自動-関連商品 |
 | `asinSubstituteRelated` | Auto-Substitutes | 自动-同类商品 | 自動-類似商品 |
-| `queryHighRelMatches` | Auto-Close Match | 自动-紧密匹配 | 自動-密なマッチ |
-| `queryBroadRelMatches` | Auto-Loose Match | 自动-宽泛匹配 | 自動-緩いマッチ |
-| `similarProduct` | Similar Product | 相似商品 | 類似商品 |
+| `queryHighRelMatches` | Auto-Close match | 自动-紧密匹配 | 自動-密なマッチ |
+| `queryBroadRelMatches` | Auto-Loose match | 自动-宽泛匹配 | 自動-緩いマッチ |
+| `similarProduct` | Similar to advertised products | 与推广商品类似的商品 | 広告商品に類似する商品 |
 | `keywordGroupSameAs` | SP-Keyword Group | SP-关键词组 | SP-キーワードグループ |
 
 ## placement
@@ -88,9 +88,9 @@ different things. Each row also carries `writeField`, the field name to use when
 
 | API value | writeField | EN (console) | ZH (console) | JA |
 |---|---|---|---|---|
-| `topOfSearch` | `topAdjustment` | Top of search (first page) | 搜索结果顶部（首页） | 検索結果上部（1ページ目） |
+| `topOfSearch` | `topAdjustment` | Top of search (first page) | 搜索结果顶部（首页） | 検索結果のトップ（ホームページ） |
 | `productPage` | `productPageAdjustment` | Product pages | 商品页面 | 商品ページ |
-| `restOfSearch` | `restOfSearchAdjustment` | Rest of search | 搜索结果的其余位置 | 検索結果ページのその他の位置 |
+| `restOfSearch` | `restOfSearchAdjustment` | Rest of search | 搜索结果的其余位置 | 検索結果のその他の位置 |
 | `siteAmazonBusiness` | `siteAmazonBusinessAdjustment` | Amazon Business | 企业购 | Amazon Business |
 
 **SB** (`sponsoredBrands`)
@@ -98,7 +98,7 @@ different things. Each row also carries `writeField`, the field name to use when
 | API value | writeField | EN (console) | ZH (console) | JA |
 |---|---|---|---|---|
 | `topOfSearch` | (empty — the write side is `topOfSearchAdjustment`) | Top of search | 搜索结果顶部 | 検索結果上部 |
-| `other` | `otherAdjustment` | Rest of search | 搜索结果的其余位置 | 検索結果ページのその他の位置 |
+| `other` | `otherAdjustment` | Rest of search | 搜索结果的其余位置 | 検索結果のその他の位置 |
 | `home` | `homeAdjustment` | Home | 首页 | ホーム |
 | `detailPage` | `detailPageAdjustment` | Product page | 商品页面 | 商品ページ |
 
@@ -106,8 +106,7 @@ different things. Each row also carries `writeField`, the field name to use when
 search results; SB's **首页** is the Amazon *homepage* (`home`). Always pair the Chinese label
 with its campaign type, and never carry a value across campaign types.
 
-⚠️ `placementText` is only translated for the SP values — SB rows come back with the raw
-`home` / `detailPage` / `other`. Use this table for SB labels.
+`placementText` follows the row’s `campaignType` for `topOfSearch`; other SP/SB placement values also have translated labels.
 
 Sponsored Display has no placement rows. The **performance** entity
 (`get_ads_perf(factEntity='placement')`) uses a different value set again (`SP-`/`SB-` prefixed
@@ -118,9 +117,9 @@ display strings) — the two are not interchangeable.
 | API value | EN | ZH | JA |
 |---|---|---|---|
 | `PORTFOLIO_STATUS_ENABLED` | Delivering | 投放中 | 配信中 |
-| `PORTFOLIO_OUT_OF_BUDGET` | Portfolio Out of Budget | 广告组合超预算 | ポートフォリオ予算超過 |
-| `PORTFOLIO_ENDED` | Portfolio Ended | 广告组合已结束 | ポートフォリオ終了 |
-| `PORTFOLIO_PENDING_START_DATE` | Portfolio Pending | 广告组合未开始 | ポートフォリオ配信待ち |
+| `PORTFOLIO_OUT_OF_BUDGET` | Portfolio out of budget | 广告组合超预算 | ポートフォリオ予算超過 |
+| `PORTFOLIO_ENDED` | Portfolio ended | 广告组合已结束 | ポートフォリオ終了 |
+| `PORTFOLIO_PENDING_START_DATE` | Portfolio pending | 广告组合未开始 | ポートフォリオ未開始 |
 | `ADVERTISER_PAYMENT_FAILURE` | Payment Failure | 付款失败 | 支払い失敗 |
 | `ADVERTISER_ARCHIVED` | Advertiser Archived | 广告主已存档 | 広告主アーカイブ |
 | `ADVERTISER_EXCEED_SPENDS_LIMIT` | Advertiser Exceed Spends Limit | 广告主超支出限额 | 広告主支出限度超過 |
@@ -129,16 +128,16 @@ display strings) — the two are not interchangeable.
 
 | API value | EN | ZH | JA |
 |---|---|---|---|
-| `dateRange` | Date Range | 日期范围 | 日付範囲 |
-| `monthlyRecurring` | Monthly Recurring | 按月 | 月次 |
+| `dateRange` | Date range | 日期范围 | 日付範囲 |
+| `monthlyRecurring` | Month range | 按月 | 月次 |
 
 ## aiStatus
 
 | API value | EN | ZH | JA |
 |---|---|---|---|
-| `0` | AI Never Turned On | 未开启 | AI未使用 |
-| `1` | AI Currently Running | 已开启 | AI運用中 |
-| `2` | AI Turned Off | 已暂停 | AI一時停止中 |
+| `0` | AI never turned on | 未开启 | AI未使用 |
+| `1` | AI currently running | 已开启 | AI運用中 |
+| `2` | AI turned off | 已取消 | AI一時停止中 |
 
 ## aiTargetType (targetType)
 
@@ -148,9 +147,9 @@ replace `targetType=2` with its category or copy the English option into a Chine
 
 | API value | EN option | ZH option | JA | UI category |
 |---|---|---|---|---|
-| `1` | Drive growth | 推动增长 | 成長の推進 | Increase sales / 扩大销量 |
-| `2` | Optimize ROAS | 保持订单稳定 | 安定の維持 | Drive efficiency / 控制成本 |
-| `3` | Promotion sales boost | 活动冲量 | キャンペーンの推進 | Increase sales / 扩大销量 |
+| `1` | Drive growth | 推动增长 | 成長促進 | Increase sales / 扩大销量 |
+| `2` | Optimize ROAS | 保持订单稳定 | 注文安定維持 | Drive efficiency / 控制成本 |
+| `3` | Promotion sales boost | 活动冲量 | イベントによる注文増加 | Increase sales / 扩大销量 |
 
 ## aiPersonality
 
@@ -160,11 +159,11 @@ with these descriptive labels.
 
 | API value | EN | ZH | JA |
 |---|---|---|---|
-| `1` | Very Conservative | 非常保守 | 非常に保守的 |
-| `2` | Conservative | 保守 | 保守的 |
-| `3` | Balanced | 平衡 | バランス |
-| `4` | Aggressive | 激进 | 積極的 |
-| `5` | Very Aggressive | 非常激进 | 非常に積極的 |
+| `1` | Conservative | 保守 | 保守 |
+| `2` | Moderately Conservative | 较保守 | やや保守的 |
+| `3` | Balanced | 中庸 | バランス型 |
+| `4` | Moderately Aggressive | 较激进 | やや積極的 |
+| `5` | Aggressive | 激进 | 積極的 |
 
 ## AI Action Space feature switches (aiGroup)
 
@@ -241,7 +240,7 @@ All are `0`/`1` except `targetPausedAddStatus` which is `0`/`1`/`2`.
 | API value | EN (SP example) | ZH (SP example) | JA (SP example) |
 |---|---|---|---|
 | `ELIGIBLE` | SP Eligible | SP 符合广告条件 | SP 広告対象 |
-| `INELIGIBLE` | SP Ineligible | SP 不符合广告条件 | SP 広告対象外 |
+| `INELIGIBLE` | SP Ineligible | SP 不符合广告条件 | SP 広告条件に不適合 |
 
 ## asinIsDelete
 
@@ -256,7 +255,7 @@ All are `0`/`1` except `targetPausedAddStatus` which is `0`/`1`/`2`.
 
 | API value | EN | ZH | JA |
 |---|---|---|---|
-| `0` | No Budget Cap | 不限预算 | 予算上限なし |
+| `0` | No Budget Cap | 无预算上限 | 予算上限なし |
 | `1` | Budget Cap Enabled | 有预算上限 | 予算上限あり |
 
 ## countryCode (profile)
@@ -272,16 +271,16 @@ All are `0`/`1` except `targetPausedAddStatus` which is `0`/`1`/`2`.
 | `FR` | France | 法国 | フランス |
 | `IT` | Italy | 意大利 | イタリア |
 | `ES` | Spain | 西班牙 | スペイン |
-| `NL` | Netherlands | 荷兰 | オランダ |
+| `NL` | The Netherlands | 荷兰 | オランダ |
 | `AU` | Australia | 澳大利亚 | オーストラリア |
 | `SG` | Singapore | 新加坡 | シンガポール |
 | `BR` | Brazil | 巴西 | ブラジル |
 | `SE` | Sweden | 瑞典 | スウェーデン |
-| `AE` | UAE | 阿联酋 | アラブ首長国連邦 |
+| `AE` | United Arab Emirates | 阿拉伯联合酋长国 | アラブ首長国連邦 |
 | `PL` | Poland | 波兰 | ポーランド |
 | `IN` | India | 印度 | インド |
 | `TR` | Turkey | 土耳其 | トルコ |
-| `SA` | Saudi Arabia | 沙特 | サウジアラビア |
+| `SA` | Saudi Arabia | 沙特阿拉伯 | サウジアラビア |
 | `BE` | Belgium | 比利时 | ベルギー |
 | `EG` | Egypt | 埃及 | エジプト |
 | `ZA` | South Africa | 南非 | 南アフリカ |

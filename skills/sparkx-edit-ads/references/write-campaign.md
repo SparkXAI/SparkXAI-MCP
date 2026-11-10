@@ -1,6 +1,8 @@
 # Campaign writes
 
-Four routes: daily budget, state, bidding strategy, audience bid adjustment.
+Seven routes: daily budget, state, bidding strategy, audience bid adjustment, placement bid
+adjustment, name, end date. (Moving a campaign in or out of a portfolio lives in
+[`write-portfolio.md`](write-portfolio.md).)
 
 ## `campaign` + `updateAudienceBid` - always confirms
 
@@ -28,10 +30,11 @@ Two values, matching the two radio buttons under 选择受众类型 / Select aud
 | `SPONSORED_ADS_AMC` | Increase bids on a custom audience created in AMC | 提高针对自定义 AMC 人群的竞价 |
 | `BEHAVIOR_DYNAMIC` | Increase bids for audiences built by Amazon | 提高针对亚马逊人群的竞价 |
 
-It is **required and has no default here**, and this is the hard part: **nothing you can read
-tells you which one an already-bound campaign is using.** `entity: campaign` returns only
-`audienceId` and `audienceBidPercentage` - the segment type is not on the row, and a live
-check against a bound campaign returned it empty.
+It is **required and has no default here**, and this is the hard part: **you cannot count on
+reading which one an already-bound campaign is using.** `entity: campaign` does return
+`audienceSegmentType` next to `audienceId` and `audienceBidPercentage`, but it may be empty - a
+live check against a bound campaign returned it empty. Treat empty or any other value as unknown
+and confirm the pool as described below.
 
 **Sending the wrong one fails silently.** The two values address separate audience pools. An
 `audienceId` from one pool submitted with the other is accepted by this tool, accepted
@@ -183,9 +186,10 @@ Use the exact camelCase values above, with no spaces. Any type containing `Sugge
 **Units first, before the bounds below:**
 
 - **Percent modes take `10` for 10%, not `0.1`.**
-- **Amounts are in the profile's local currency** - never cents, never USD-converted. Money
-  read back from metadata is a **decimal string** (`"100.00"`); parse it before doing
-  arithmetic.
+- **Amounts are in the profile's local currency** - never cents, never USD-converted. Budget
+  (`dailyBudget` / `currentBudget`) read back from metadata is a JSON number; other amounts
+  such as `targetBid` / `portfolioBudget` may still be **decimal strings** (`"100.00"`) - parse
+  those before doing arithmetic.
 - **Adjustment amounts are always non-negative.** To decrease, use a `decreaseAmount`, `decreasePercent`,
   `decreaseSuggestAmount` or `decreaseSuggestPercent` mode with
   a positive amount - **never pass a negative number**.
@@ -273,20 +277,114 @@ does not return state. Do not report it as fact.
 | `id` | number | yes | the campaign's internal id (note: `id`, not `campaignId`) |
 | `profileId` | string | yes | |
 | `campaignType` | string | yes | must be `sponsoredProducts` |
-| `biddingStrategy` | string | yes | one of the four below |
+| `biddingStrategy` | string | yes | one of the three below |
 
-### The four strategies
+### The three strategies
 
 | Value | Meaning |
 |---|---|
 | `legacyForSales` | Dynamic bids - **down only** / 动态竞价-仅降低 |
 | `autoForSales` | Dynamic bids - **up and down** / 动态竞价-提高和降低 |
 | `manual` | **Fixed** bids / 固定竞价 |
-| `ruleBased` | Rule-based bidding; the rule itself is configured downstream, not here |
 
 Older versions of the product spec labelled both `legacyForSales` and `manual` as
-"固定竞价" and omitted `ruleBased`. **The table above is the correct mapping** - picking by
-the old labels silently sets the wrong strategy and the call still succeeds.
+"固定竞价". **The table above is the correct mapping** - picking by the old labels silently
+sets the wrong strategy and the call still succeeds.
 
-Any other field in an item is silently dropped. `businessType` is injected server-side; do
-not set it.
+⚠️ **`ruleBased` is rejected on this route.** It is a legitimate value to *read* back from
+`get_entity_metadata` and `get_ads_perf` - campaigns really do run on it - but this batch route
+will not set it, because it does not create the rule conditions that make rule-based bidding
+mean anything. A campaign already on `ruleBased` can be switched to one of the three above;
+moving *to* `ruleBased` has to happen in the console. Say that rather than picking a
+substitute.
+
+### What this route now refuses instead of ignoring
+
+- **Any field that is not `id` / `profileId` / `campaignType` / `biddingStrategy`** -
+  `name`, `state`, `startDate`, `endDate`, `portfolioBudget`, `amazonPortfolioId`,
+  `defaultBid`: `only accepts id, profileId, campaignType and biddingStrategy`. These used to
+  be dropped silently, so a request that "worked" before can now fail - send one action per
+  call rather than bundling.
+- **The same campaign twice** in one batch: the whole batch is rejected.
+- **Ended or archived campaigns.** The shared guard only looked at `campaignState`, so a
+  campaign with `campaignState: enabled` and `processStatus: Ended` used to go through. It is
+  now re-checked and refused, as are campaigns whose state cannot be verified. A no-op request
+  (sending the strategy a campaign already has) does not bypass this.
+
+`businessType` is injected server-side; do not set it.
+
+---
+
+## Campaign name and end date - no confirmation
+
+Two routes, both on `request.data`, both **executing immediately** - no preview, no
+`confirmToken`, no undo. Get the user's agreement before calling either; a rename changes what
+every report and every later lookup calls that campaign.
+
+**One `campaignType` per batch** (`Campaign name/date edits require one campaignType per
+batch`), SP, SB and SD all supported. Every item carries `id` (the internal campaign id),
+`profileId` and `campaignType`, plus exactly one of `name` or `endDate`.
+
+**Neither route accepts anything else.** `budget`, `portfolio`, `defaultBid` and `state` are
+refused outright (`Campaign name/date edits do not accept budget, portfolio, bid or state`),
+and so is `startDate` - **`startDate` is read-only here**
+(`Campaign startDate is read-only; updateDates accepts endDate only`). Archived, ended or
+unverifiable campaigns are refused before anything is written.
+
+### `campaign` + `updateName`
+
+`name` is required and non-blank; `endDate` must not be sent. The checks, all applied to the
+**raw** value before trimming unless stated:
+
+| Rule | Error |
+|---|---|
+| at most **128 UTF-16 code units** after trimming | `Campaign name must contain at most 128 characters after trimming` |
+| no ISO control characters - leading/trailing tabs, newlines, U+0007, DEL, C1 | `Campaign name must not contain control characters` |
+| no **U+200B ZERO WIDTH SPACE**, anywhere | `Campaign name must not contain U+200B ZERO WIDTH SPACE` |
+| no HTML or script tags, comments included | `Campaign name must not contain HTML or script tags` |
+
+The limit is measured with Java's `String.length()`, i.e. **UTF-16 code units, not visible
+characters**. Anything outside the Basic Multilingual Plane - most emoji, and the rarer CJK
+extension characters - costs **two** units each, so a name of 70 emoji is already over the
+limit while 128 Latin letters is exactly at it. Count conservatively rather than trusting a
+character count from elsewhere.
+
+U+200B is singled out because Amazon rejects such names with `FORBIDDEN_CHARS` /
+`campaign name has invalid characters`, and it is invisible: it survives `strip()`, is not an
+ISO control character, and makes two names that look identical compare as different. **The
+batch is rejected rather than the character silently removed** - so the name you sent is the
+name you get or an error, never a quietly altered third thing. Other zero-width characters
+(U+200C, U+200D) are *not* blocked; they have legitimate uses in some scripts and emoji
+sequences. If a name you did not compose comes back refused, show the user the offending name
+rather than cleaning it up for them.
+
+⚠️ **Renaming is not atomic on any ad type, and the failure mode is different from
+everything else here.** The SP/SB page has only a **single-campaign** rename endpoint, so items
+are submitted **one at a time, in request order** - and SD goes through the same loop, one item
+per downstream call, even though its endpoint takes a list. Do not read "SD uses a list API" as
+"SD is atomic". If one fails after earlier ones succeeded, the call stops and
+returns an ambiguous-write error naming the ids already accepted:
+`Campaign rename stopped at id=...; previously accepted IDs=[...]; later items were not
+submitted.` **Never replay the batch.** Read the current names back with
+`get_entity_metadata(entity='campaign')` and resend only the campaigns that still have the old
+name. Each response also needs reading item by item - acceptance is not Amazon
+synchronization.
+
+### `campaign` + `updateDates`
+
+`endDate` is required - **omitting it or sending `null` is rejected**, which is the opposite of
+most optional fields here. `name` must not be sent.
+
+- Format `yyyyMMdd`.
+- **An empty string clears the end date** on SP and SB.
+- **Clearing is blocked on SD**: `Clearing SD campaign endDate is temporarily unsupported until
+  the downstream synchronization is fixed`. This is a real downstream defect - the empty string
+  reaches Amazon verbatim and comes back `End date has invalid date format, must be yyyyMMdd`,
+  so the sync fails after the local write appears to succeed. Setting a non-empty SD end date
+  is fine; only clearing is blocked. Tell the user to clear it in the console.
+- **`endDate` must not be earlier than the campaign's current `startDate`** - the server reads
+  the current value to check it (`endDate must not be before current startDate`).
+- **It is not compared with today.** A past end date is accepted here; that is deliberate, not
+  an oversight, so do not assume the platform will stop you from ending a campaign in the past.
+
+Unlike renaming, `updateDates` goes downstream as **one batch call**.

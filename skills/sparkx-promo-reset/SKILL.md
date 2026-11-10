@@ -13,7 +13,7 @@ description: >-
   general budget or bid edits with no promo behind them (use sparkx-edit-ads /
   sparkx-edit-ai-group).
 metadata:
-  version: 1.0.4
+  version: 1.0.5
 ---
 
 # Promo Reset (大促调整复位)

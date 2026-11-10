@@ -7,7 +7,7 @@ description: >-
   budget adjustment, AI auto-adjustment, pause/enable records, operation audit,
   modification timeline, ad adjustment log
 metadata:
-  version: 1.3.8
+  version: 1.3.9
 ---
 
 # Query Operation Log Skill
@@ -32,9 +32,21 @@ Profile, tenant, and user scope are resolved from the authenticated bearer token
 
 **Mode A — Real pagination** (when `entities` is explicitly set to **exactly one non-`aiGroup` entity**, e.g. `["campaign"]`):
 - Supports `page` (1-based, default 1) + `pageSize` (default 100, max 1,000). Response includes `page`, `pageSize`, `hasNextPage`.
+
+⚠️ **One entity is necessary but not sufficient.** Pagination also needs the query to resolve
+to **one** downstream branch. The server groups operation types into five resource groups
+(profile / portfolio / campaign / adGroup / target); if your `entities` + `operationType` +
+`actionType` combination still spans more than one of them, `page` is **silently ignored** and
+each branch returns its own first batch instead. The same applies when the entity name maps to
+no known operation types at all.
+
+**So do not predict the mode — read it off the response.** `page` / `pageSize` / `hasNextPage`
+present means you are paginating; `limit` / `truncated` means you are not. If you sent `page: 2`
+and got `limit` / `truncated` back, **you did not get page 2 — you got the first batch again**.
+Never merge such results as if they were consecutive pages.
 - **To get the complete history, loop `page` (incrementing each call) while `hasNextPage=true`.** This is the preferred way to retrieve a complete change history for one entity type — no date-splitting needed. (`hasNextPage` is the real-pagination equivalent of `truncated`.)
 
-**Mode B — limit-only** (when `entities` is empty/omitted, has **multiple** entities, or is **only `aiGroup`**):
+**Mode B — limit-only** (when `entities` is empty/omitted, has **multiple** entities, is **only `aiGroup`**, or is a **single entity that does not resolve to exactly one downstream branch** — either it maps to no known operation types at all, or its types span more than one resource group):
 - `page` is ignored. A single call returns at most `pageSize` rows (default 100, max 1,000; **`aiGroup`-only max 10,000**), sorted on the raw timestamp string (newest-first only when every row shares one clock — see Shared Rules). Response includes `limit` and `truncated`.
 ⚠️ **The cap is small relative to how fast the log grows.** In an account where AI is
 active, machine rows alone can run into the hundreds per hour (measured: ~530/h in one
@@ -123,9 +135,11 @@ bid range or rule configuration as proof of the ceiling or trigger that applied 
 | dateStart | string | **Yes** | — | Start date `YYYY-MM-DD`. Max span vs `dateEnd` is 90 inclusive calendar days (see platform-notes.md for the precise off-by-one-safe definition); cannot be more than 15 months before today |
 | dateEnd | string | **Yes** | — | End date `YYYY-MM-DD` |
 | userContext | string | **Yes** | — | User's original query + reason, max 100 chars |
-| entities | array[string] | No | all entities except `audience` | Entity type filter |
+| entities | array[string] | No | all eight entity types | Entity type filter. Unknown values (incl. `keyword`, `audience`, `productLine`) are rejected with `invalid_params`, and the error lists the valid values. See [field-reference.md](references/field-reference.md) -> entities |
 | resourceIds | array[object] | No | — | Resource ID filter (see below) |
 | changeBy | object | No | — | Operator filter (see below) |
+| changeField | string | No | — | **Exact** raw `changeField` value, e.g. `servingStatus` or `dailyBudget` — the same string the response rows carry, so read one off a row and feed it back. Exact match, not a prefix or pattern. **Requires explicit `entities` that exclude `aiGroup`**; a blank string is rejected. Narrower than `operationType`: it targets the field that changed rather than the kind of change |
+| operationSources | array[string] | No | — | Channel filter: `PAGE` / `MCP` / `FEISHU`, case-insensitive. Omit it or pass `[]` for no filter. **Read "`operationSources` - the channel filter" below before using it**: it behaves very differently on ad logs and managed-group logs, and two of the three values currently return nothing |
 | actionType | object | No | — | Action type filter — coarse-grained (see below). ⚠️ **Only use values from the [actionType enum table](references/field-reference.md#actiontype)** — do not invent or guess values |
 | operationType | object | No | — | Operation type filter — fine-grained (see below). ⚠️ **Only use values from the [complete operationType table](references/field-reference.md#complete-operationtype-values-by-entity)** — do not invent or guess values |
 
@@ -136,11 +150,63 @@ bid range or rule configuration as proof of the ceiling or trigger that applied 
 | page | int | No | 1 | Page number (1-based). **Only effective when `entities` is exactly one non-`aiGroup` entity** (Mode A); ignored for multi-entity or `aiGroup`-only queries (Mode B) |
 | pageSize | int | No | 100 | Max rows per page (Mode A) / per call (Mode B). Non-`aiGroup` max **1,000**; **`aiGroup`-only max 10,000**. Results are sorted on the raw timestamp string, which is newest-first only within one clock |
 
+## `operationSources` - the channel filter
+
+`operationSources` takes `PAGE`, `MCP` and `FEISHU` (case-insensitive; an unknown value is
+rejected and the error lists the three). It looks like one filter over one field. It is not:
+ad logs and managed-group logs store the channel in completely different ways, and the filter
+is pushed down differently for each.
+
+**Managed-group (`aiGroup`) logs are currently skipped whenever you pass this filter.** The
+server-side push-down for them is behind a switch that is **off**, so if `aiGroup` is in scope
+and `operationSources` is non-empty, that half of the query is not run at all and `meta.hint`
+says so: `operationSources filtering is not yet available for aiGroup logs, so aiGroup logs
+were not queried` (with `; rows contain ad logs only` appended when ad logs were in scope too).
+**Read the hint before reporting.** Rows coming back without a managed-group row in them is
+not evidence no managed-group change happened - the query never looked.
+
+**`FEISHU` returns nothing at all today.** Ad logs have no Feishu channel, and the only rows
+that could carry it are the managed-group rows that get skipped. `operationSources: ["FEISHU"]`
+therefore produces an empty result that means "not queried", not "no Feishu changes". Do not
+report it as an answer.
+
+**`PAGE` is an approximation.** Ad logs have no channel column; `PAGE` is pushed down as
+`sourceType = platform`, which covers the web console but also API and some AI-initiated
+changes. Narrow it with `changeBy` when the distinction matters, and describe the result as
+"platform-originated" rather than "done in the console".
+
+**`MCP` is exact on ad logs.** Changes written through this server are rewritten to the `MCP`
+source downstream, so the filter matches them precisely, and they are the only ad rows whose
+`operationSource` comes back non-null.
+
+**You cannot reproduce `PAGE` by filtering the returned rows.** An MCP ad row reports
+`sourceType: platform` as well - the MCP channel shows up in `operationSource`, not in
+`sourceType`. Filtering returned rows on `sourceType == "platform"` therefore sweeps MCP
+changes back in. Push the filter down, or split on `operationSource`.
+
+| You want | Pass | What actually comes back |
+|---|---|---|
+| Only MCP changes to ads | `["MCP"]` | Exact. Managed-group rows skipped - say so |
+| Console / platform changes to ads | `["PAGE"]` | Platform-originated, may include API and AI. Managed-group rows skipped |
+| Feishu changes | - | Not available. `["FEISHU"]` returns zero rows regardless |
+| Everything, including managed groups | omit the parameter | Full result; split by `operationSource` client-side |
+
+Combined with a concrete `changeBy`, both filters apply (intersection). If the combination
+leaves no possible source, no ad logs come back - an empty result there is the filter, not the
+data.
+
 ## Parameter Details, ChangeLogVO Field Reference
 
 **See [`references/field-reference.md`](references/field-reference.md)** for the complete parameter enum reference (entities, resourceIds, campaignTypes, changeBy, actionType, operationType, targetTypes, placementTypes) and the ChangeLogVO response field table.
 
 ## Response Structure
+
+`data.rowCount` is **this response's** row count. `data.totalSize`, when present, is the total
+matching rows before pagination - see "Getting a Complete Count". It is **absent**, not `0`,
+when it cannot be determined. The `meta` block carries either `page` / `pageSize` /
+`hasNextPage` (paginated) or `limit` / `truncated` (limit-only), never both - that pair is how
+you tell which mode you actually got. The example below is the **paginated** shape; a
+limit-only response carries `limit` / `truncated` instead and has **no** `totalSize`.
 
 ```json
 {
@@ -170,11 +236,13 @@ bid range or rule configuration as proof of the ceiling or trigger that applied 
         "changedBy": "AI"
       }
     ],
-    "rowCount": 1
+    "rowCount": 1,
+    "totalSize": 37
   },
   "meta": {
-    "limit": 100,
-    "truncated": false,
+    "page": 1,
+    "pageSize": 100,
+    "hasNextPage": false,
     "effectiveProfileIds": [4404871489220462],
     "hint": "Limit conclusions to this query's scope. Missing fields are not zero, and empty results do not prove that no matching business data exists. Do not present partial or paginated results as complete. Distinguish returned facts from analytical inferences; state limitations or query further when evidence is insufficient."
   },
@@ -241,6 +309,22 @@ On error, the response instead follows the shared error envelope described in Pl
 
 There is no server-side `groupBy` for this tool — to answer "how many budget changes did each operator make" or "count of placement adjustments per campaign" **completely and correctly**, first pull the complete row set, then aggregate client-side. How you get the complete set depends on the mode:
 
+**First, look for `data.totalSize`.** When the query qualifies for Mode A, the response may
+carry `totalSize`: the **total matching log rows before pagination**. Three rules:
+
+- **It counts rows, not entities.** It is not a distinct-campaign count - do not report it as
+  "N campaigns were changed".
+- **Omitted means unavailable, not zero.** It appears only when a single non-`aiGroup` entity
+  resolves to one downstream query *and* the count can be determined; otherwise the key is
+  simply absent. Treat absence as "unknown" and fall back to the loops below.
+- **`totalSize: 0` is a real zero**, but only reliably so on the first page - the downstream
+  omits zero counts, so the server can only conclude "0" when page 1 came back empty and
+  successful.
+
+When `totalSize` is present you can answer "how many" without paging at all. When it is absent
+but `hasNextPage` is `true`, that means **another page may exist** - not that it does. **The
+next page can come back empty**, which is a normal stop condition, not an error.
+
 **If you can scope to a single non-`aiGroup` entity (Mode A) — preferred:** loop `page` (incrementing each call) while `hasNextPage=true`, collecting rows; raise `pageSize` toward the max (1,000) to cut round trips. Once `hasNextPage=false` you have the complete set — aggregate and you're done. No date-splitting needed.
 
 **Otherwise (Mode B: multi-entity or `aiGroup`-only) — use date-splitting:**
@@ -301,10 +385,10 @@ managed groups, AI's hourly `currentBudget` rows also land under `Budget Increas
 - `dateEnd` must be equal to or later than `dateStart`
 - Max date span is 90 days, max lookback is 15 months — these are hard limits, not auto-truncation. Split longer windows into multiple calls
 - **Pagination has two modes (decided by `entities`)**: a single non-`aiGroup` entity → real pagination (`page` + `pageSize`, loop until `hasNextPage=false`); multi-entity or `aiGroup`-only → limit-only (`pageSize` caps the call, max 1,000 / `aiGroup` 10,000, check `truncated`). For a complete count in limit-only mode, prefer steering to a single entity, otherwise use the non-overlapping date-split procedure above
-- When `entities` is not specified, returns operations on all entity types **except `audience`**
+- When `entities` is not specified, the server queries all eight entity types - `portfolio`, `campaign`, `profile`, `aiGroup`, `productAd`, `adGroup`, `target`, `placement`
 - `profileIds` is **required**. Always call `get_user_authorized_context` first. If the user doesn't name a store, pass all authorized `profileIds` — but note this also switches ad-entity timestamps to UTC (see above)
 - **Every requested `profileId` must be authorized** — one bad value fails the whole call (`Requested profileIds contain unauthorized values`); nothing is silently dropped
-- `pageSize` on this tool is **clamped** silently (over the max → capped, no error). This differs from `get_ads_perf`/`get_entity_metadata`, where an out-of-range `pageSize` is an error
+- An out-of-range `pageSize` (≤0, or over the max: 1,000, or 10,000 for `aiGroup`-only) or a `page` ≤ 0 is an **error** (`invalid_params`), not clamped — the same as `get_ads_perf`/`get_entity_metadata`; floor any computed value at 1
 - `changeBy`, `actionType`, and `operationType` must be passed as objects with explicit `operator`/`values` (not bare arrays). **Incomplete filters are rejected with `invalid_params`** (no longer silently ignored): a missing `operator`, or `values` that is `null` / an empty array / all-`null`, all fail — build the full `{"operator": "IN", "values": [...]}` object or omit the filter entirely.
 - **`resourceIds` is strictly validated too**: each item must be an object with `idEntity` and an `ids` array of numbers — a missing `idEntity`, a non-numeric ID, or a non-array `ids` returns `invalid_params` (previously such items were silently dropped, e.g. "3 IDs requested, only 2 queried"). **Exception:** an explicit `ids: null` is a *reserved* value meaning "no ID restriction" (different from `[]`, which means the scope genuinely has no results) — it is accepted, not rejected.
 - To find a resource by name (campaign name, keyword text, ASIN) rather than ID, resolve it first via `get_entity_metadata`, then pass the ID into `resourceIds`

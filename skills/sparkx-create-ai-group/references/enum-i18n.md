@@ -27,7 +27,7 @@ the three goals below. `4` is a legacy value not shown in the UI; don't offer it
 | `1` | 推动增长 | Drive growth | 扩大销量 / Increase sales | 增长型、还能涨、拉增长 |
 | `2` | 保持订单稳定 | Optimize ROAS | 控制成本 / Drive efficiency | 稳定型、保利润、提 ROAS、降 ACOS、控成本 |
 | `3` | 活动冲量 | Promotion sales boost | 扩大销量 / Increase sales | 冲量、大促冲量、快速起量、积累订单、放量 |
-| `4` | (旧值,UI 无) | legacy growth | - | - |
+| `4` | (旧值,UI 无) | Drive growth (Budget utilization priority) | - | - |
 
 ## optimizeType (SD) - 优化类型
 
@@ -45,9 +45,9 @@ group reads back as `2` once turned off.
 
 | code | 中文 | English | 说明 |
 |---|---|---|---|
-| `0` | 未开启 | off / never enabled | 创建时传 0 = 不启动 AI |
-| `1` | 开启 | on / running | AI 正在优化、会花钱 |
-| `2` | 暂停 | paused / turned off | 读回值:曾开过又关掉的状态("AI Turned Off") |
+| `0` | 未开启 | AI never turned on | 创建时传 0 = 不启动 AI |
+| `1` | 开启 | AI currently running | AI 正在优化、会花钱 |
+| `2` | 已取消 | AI turned off | 读回值:曾开过又关掉的状态("AI turned off") |
 
 常见说法:开/启用/打开/跑起来 -> `1`;关/关闭/停/暂停/先别开 -> `0`(创建)。
 
@@ -55,11 +55,11 @@ group reads back as `2` once turned off.
 
 | code | 中文 | English |
 |---|---|---|
-| `1` | 非常保守 | Very Conservative |
-| `2` | 保守 | Conservative |
-| `3` | 平衡 | Balanced |
-| `4` | 激进 | Aggressive |
-| `5` | 非常激进 | Very Aggressive |
+| `1` | 保守 | Conservative |
+| `2` | 较保守 | Moderately Conservative |
+| `3` | 中庸 | Balanced |
+| `4` | 较激进 | Moderately Aggressive |
+| `5` | 激进 | Aggressive |
 
 ⚠️ **这份映射只用于理解用户输入**（把"偏保守""跑激进点"这类口语映射到 `1`-`5`）。向用户展示时——确认信息、查询结果、报告——一律直接显示数字（例如 **AI 人格：4**），不要替换或补充成"激进"/"Aggressive"这类文字标签。
 
@@ -80,11 +80,11 @@ group reads back as `2` once turned off.
 | `1` | 百分比 | percentage |
 | `2` | 固定值 | fixed value |
 
-## bidRangeType - 值类型（`1` 待确认）
+## bidRangeType - 值类型
 
 | code | 中文 | English |
 |---|---|---|
-| `1` | 单位待确认（页面疑似竞价系数） | unit unconfirmed — UI looks coefficient-like |
+| `1` | 竞价系数（`1.15` = 基准竞价的 1.15 倍，**不是百分比**） | bid coefficient (`1.15` = 1.15x the base bid), **not a percentage** |
 | `2` | 固定值 | fixed value |
 
 ## 匹配 / 名单类型（action space）

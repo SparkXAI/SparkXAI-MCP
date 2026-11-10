@@ -11,7 +11,7 @@ description: >-
   creates the group itself - it is NOT for enabling or editing an existing group (use
   sparkx-edit-ai-group) or deleting one (use sparkx-delete-ai-group).
 metadata:
-  version: 1.2.4
+  version: 1.2.5
 ---
 
 # Create AI Managed Group
@@ -215,7 +215,8 @@ confirm the meaning first, then use the ad-type reference to pick the field.
      or take the recommendation, or use a template that carries them.
      See [`references/ai-personality.md`](references/ai-personality.md).
    - **Coupled fields** - enabling a switch requires its companion fields, and any
-     range must have min <= max (see [`references/coupling-rules.md`](references/coupling-rules.md)).
+     range must have min <= max - **except `bidRange`, where min must be strictly less than
+     max** (see [`references/coupling-rules.md`](references/coupling-rules.md)).
    - **Invalid values are rejected by the backend now - but pre-validate anyway** so the
      user gets a clear message instead of a downstream error (prod-confirmed):
      `acos` must be > 0 and in range (`0`, negatives, and over-limit are all rejected);

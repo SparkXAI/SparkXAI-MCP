@@ -1,38 +1,70 @@
 ---
 name: sparkx-create-campaign
 description: >-
-  Create new Amazon Sponsored Products campaigns in bulk through `create_sp_sb_campaign`, or add
-  ad groups to an existing SP campaign through `create_sp_ad_group` -
-  promoted products, negatives, and either auto targeting, keywords, or product targets.
-  New-campaign creation also supports placement adjustments and an optional audience. Use when the
-  user wants to build / launch / set up a new campaign - 新建广告活动 / 建一个自动广告 /
-  开个手动词的活动 / 按这批 ASIN 建活动 - or add ad groups under an existing SP campaign.
+  Create new Amazon Sponsored Products, Sponsored Brands and Sponsored Display campaigns in bulk
+  (`create_sp_sb_campaign`, `create_sd_campaign`), add ad groups to an existing campaign
+  (`create_sp_ad_group`, `create_sb_ad_group`, `create_sd_ad_group`), and create advertising
+  portfolios (`create_portfolio`) - promoted products, negatives, SB and SD creatives, and
+  either auto targeting, keywords, product targets or SD audience targeting. New-campaign
+  creation also supports placement adjustments and an optional AMC audience. Use when the
+  user wants to build / launch / set up a new campaign of any type - 新建广告活动 / 建一个自动广告 /
+  开个手动词的活动 / 建个 SB 或 SD 活动 / 按这批 ASIN 建活动 - add ad groups under an
+  existing campaign, or create a portfolio (广告组合).
   It is not for editing existing objects (use sparkx-edit-ads), for AI managed groups (use sparkx-create-ai-group), or
   for reading data (use sparkx-query-ads-performance / sparkx-query-entity-metadata).
 metadata:
-  version: 1.0.5
+  version: 1.1.0
 ---
 
-# Create Sponsored Products campaigns and ad groups
+# Create campaigns, ad groups and portfolios
 
-Two tools: `create_sp_sb_campaign` and `create_sp_ad_group`. Both use scope
-`amazon_sa_campaign_create:write`, separate from the
-edit scope - a token that can edit campaigns cannot necessarily create them.
+Up to six tools, all on scope `amazon_sa_campaign_create:write`, separate from the edit scope -
+a token that can edit campaigns cannot necessarily create them.
 
-## Sponsored Products only, right now
+| Tool | Creates | Read before building |
+|---|---|---|
+| `create_sp_sb_campaign` | new SP or SB campaigns, with ad groups and children | [`sp-fields.md`](references/sp-fields.md) / [`create-sb-campaign.md`](references/create-sb-campaign.md) |
+| `create_sd_campaign` | new SD campaigns, with ad groups, product ads, targets and an optional creative | [`create-sd-campaign.md`](references/create-sd-campaign.md) |
+| `create_sp_ad_group` | ad groups under an **existing** SP campaign | [`create-sp-ad-group.md`](references/create-sp-ad-group.md) |
+| `create_sb_ad_group` | ad groups under an **existing** SB campaign | [`create-sb-ad-group.md`](references/create-sb-ad-group.md) |
+| `create_sd_ad_group` | ad groups under an **existing** SD campaign | [`create-sd-ad-group.md`](references/create-sd-ad-group.md) |
+| `create_portfolio` | one portfolio | [`create-portfolio.md`](references/create-portfolio.md) |
 
-The tool is named `create_sp_sb_campaign`, but this server currently enables **SP only**.
+## Which of them you actually have is server configuration
 
-- **Sponsored Brands is refused at the entry**, with an error naming the types that are
-  enabled. **Do not retry the same type.** Tell the user SB creation is not available here
-  and point them at the web console.
-- **Sponsored Display has no tool at all.** `create_sd_campaign` is not registered, so it
-  will not appear in your tool list. Do not go looking for it.
-- The enabled set is server configuration and can widen later without a code change. **Trust
-  the error over this document**: if a type is refused, it is off; if it succeeds, it is on.
+**Read your own tool list before promising anything.** Each ad type can be turned on or off per
+deployment, and the tools follow:
 
-Everything below describes the SP path. Sections that apply only to
-`create_sp_sb_campaign` or only to `create_sp_ad_group` say so explicitly.
+- `create_sd_campaign`, `create_sb_ad_group` and `create_sd_ad_group` are **not registered at
+  all** when their type is off - they simply will not be in your tool list. Do not go looking
+  for them, and do not tell the user a tool exists because this document names it.
+- SP and SB share `create_sp_sb_campaign`, so a disabled type cannot be hidden that way:
+  it is **refused at the entry** with an error that lists the enabled types. **Do not retry the
+  same type** after that error; tell the user that type is not available here and point them at
+  the web console.
+- **Trust your tool list and the error over this document.** If a type is refused, it is off;
+  if it succeeds, it is on.
+
+## Atomicity is not the same across these tools
+
+This is the difference that decides how you recover from a failure, and it is easy to get
+backwards.
+
+| Tool | On failure |
+|---|---|
+| `create_sp_sb_campaign` | **Fully atomic.** Any failure anywhere and *nothing* is created. Fix and resend the whole batch; never "retry the rest" |
+| `create_sd_campaign` | Campaigns, ad groups, product ads and targets are one transaction - all or nothing. **Creatives are attached afterwards and are NOT rolled back with it**: the call still reports success and lists the failures in `result.creativeFailures`. **You cannot retry those creatives through MCP** - report them and send the user to the console; never re-run the batch |
+| `create_sp_ad_group`, `create_sb_ad_group`, `create_sd_ad_group` | **Not atomic.** Ad groups are created one at a time in request order; the ones already created stay. Expect `partial_success` and retry only the failed items |
+| `create_portfolio` | One portfolio, **not idempotent**. On any failure a local record may already exist - query by profile and name before retrying |
+
+**An "unconfirmed" result is not a failure.** When an ad-group call times out or the downstream
+errors in a way that leaves the outcome unknown, the tool stops, tells you which items are
+confirmed created, and says the rest are unconfirmed. **Never retry those blindly** - call
+`get_entity_metadata(entity='adGroup', filters.campaignId=<campaignId>)` first and retry only
+what is genuinely missing.
+
+The remaining sections describe the SP path unless they say otherwise; each other ad type has
+its own reference file in the table above.
 
 ## These writes create live configuration
 
@@ -63,10 +95,24 @@ rest".
    |---|---|
    | `suggestedKeyword`, `keywordGroup`, `suggestedTarget` | `filters.asin` |
    | `suggestedBid` | `filters.asin`, plus one of two mutually exclusive modes |
-   | `amcAudience` | **`filters.campaignType`** (`sponsoredProducts` / `sponsoredBrands`; SD is rejected). It takes **no `asin`** |
+   | `amcAudience` | **`filters.campaignType`** (`sponsoredProducts` / `sponsoredBrands` / `sponsoredDisplay`). It takes **no `asin`**. What you do with the result differs by type - see below |
 
 4. **For new campaign creation, picking an audience is its own step, not part of the
    suggestion sweep.** `create_sp_ad_group` has no audience fields.
+
+   **An AMC audience is wired in completely differently on SP/SB and on SD** - the same
+   `amcAudience` ids, two unrelated mechanisms. Do not carry one shape to the other:
+
+   | | SP / SB | SD |
+   |---|---|---|
+   | Where it goes | three **campaign-level** fields | one **target** inside an ad group |
+   | What you send | `audienceId` + `audienceSegmentType` + `audienceBidPercentage` - **all three together or none** | a `T00030` target whose expression is `[{"type":"audience","value":[{"type":"audienceSameAs","value":"<audienceId>"}]}]` |
+   | What it does | a bid uplift on an audience the campaign also targets otherwise | it **is** the targeting |
+   | Needs | `create_sp_sb_campaign` | `create_sd_campaign` with `tactic: "T00030"` |
+
+   On SD, also keep `amcAudience` apart from `sdAudience`: the latter is Amazon's own SD
+   audience catalog, a different pool, and an id from one is invalid in the other. Both are
+   used the same way once chosen - as an `audienceSameAs` value under `T00030`.
    `amcAudience` also takes `filters.audienceSegmentType`, and **that filter chooses which of
    the two pools you see**. Omitting it does not widen the search - it silently narrows it to
    `SPONSORED_ADS_AMC`, so every Amazon-built audience is invisible and the user never learns
@@ -250,8 +296,10 @@ equivalent here - say so and point at the console rather than approximating:
    auto campaign run on one default bid instead of per-group bids. This tool always requires
    all four groups in `targetBid`; there is no "just use the default" mode. If the user wants
    a single bid, send the same value four times and tell them that is what you did.
-3. **Adding ad groups to an existing non-SP campaign.** `create_sp_ad_group` supports existing
-   Sponsored Products campaigns only. Use the console for SB or SD.
+3. **Adding ad groups to a campaign whose type is turned off here.** Each ad type has its own
+   ad-group tool (`create_sp_ad_group` / `create_sb_ad_group` / `create_sd_ad_group`) and they
+   are not interchangeable - `create_sp_ad_group` rejects a campaign that is not
+   `sponsoredProducts`. If the tool for that type is not in your list, use the console.
 
 Terminology for everything the tool *does* support is mapped to the console's own labels in
 [`references/sp-fields.md`](references/sp-fields.md) - use those labels when you talk to the
@@ -269,10 +317,12 @@ user.
 Split larger campaign-creation workloads into several calls. Each
 `create_sp_sb_campaign` call is its own atomic unit, so report per call which ones landed.
 
-For `create_sp_ad_group`, the limit is **10 ad groups per call**. That tool is deliberately
-**non-atomic**: it creates rows sequentially and may return `partial_success`. Read
-[`references/create-sp-ad-group.md`](references/create-sp-ad-group.md) before building or
-recovering that request.
+Those four limits apply to `create_sd_campaign` as well, counting its `productAds` and
+`targets` lists.
+
+All three ad-group tools cap at **10 ad groups per call**, and all three are deliberately
+**non-atomic**: they create rows sequentially and may return `partial_success`. Read that
+tool's reference file before building or recovering the request.
 
 ## Workflow
 
@@ -280,8 +330,13 @@ recovering that request.
 1. get_user_authorized_context           -> profileId (one per call)
 2. get_entity_metadata(entity='asin')    -> ASINs, and SKUs on a Seller profile
 3. (optional) suggestion entities        -> keywords / targets / bids / audiences
-4. Route the request: new campaign -> `create_sp_sb_campaign`; new ad groups under an
-   existing SP campaign -> `create_sp_ad_group`.
+4. Route the request by what is being created and the ad type:
+   new SP/SB campaign -> `create_sp_sb_campaign`; new SD campaign -> `create_sd_campaign`;
+   ad groups under an existing campaign -> `create_sp_ad_group` / `create_sb_ad_group` /
+   `create_sd_ad_group` matching that campaign's type; a portfolio -> `create_portfolio`.
+   For SB and SD, collect the ids those tools need first - brand entity, store page, page
+   ASINs, creative assets, SD audiences - all of which live in `sparkx-query-entity-metadata`
+   under "entities that exist for SB and SD creation".
 5. Decide the required targeting type(s). Ambiguous -> ASK, do not pick.
 6. Build the request and check that tool's limits.
 7. Show the user what will be created and get a yes.
@@ -328,15 +383,26 @@ things in your answer".
 - **"用这些词"** - as keywords (they bid on search terms) or as product targets? Different
   child list, different ad group dimension.
 - **"先别花钱"** - create `paused`. Say that you did.
-- Anything the registered tools cannot do - SB, SD (including SD
-  creatives) - say so and point at the console. Do not approximate it with something else.
+- **SB creative type** - `manualCollection`, `storeSpotlight`, `video` and `brandVideo` need
+  different assets and look completely different. Ask which one; do not pick whichever is
+  easiest to assemble from what you already have.
+- **SD tactic** - `T00020` is product / category targeting, `T00030` is audience targeting.
+  They take completely different target expressions and cannot be swapped afterwards here.
+- Anything no registered tool can do - a type that is turned off, an SB `autoCollection` or
+  `productCollection` creative on `create_sb_ad_group`, an SD ad group created paused - say so
+  and point at the console. Do not approximate it with something else.
 
 ## Reference files
 
 | File | Read it when |
 |---|---|
-| [`references/sp-fields.md`](references/sp-fields.md) | Creating a new campaign with `create_sp_sb_campaign`; campaign fields and shared SP labels |
+| [`references/sp-fields.md`](references/sp-fields.md) | Creating a new SP campaign with `create_sp_sb_campaign`; campaign fields and shared SP labels |
+| [`references/create-sb-campaign.md`](references/create-sb-campaign.md) | Creating a new SB campaign with `create_sp_sb_campaign`; creatives, landing pages, SB-only field rules |
+| [`references/create-sd-campaign.md`](references/create-sd-campaign.md) | Creating a new SD campaign with `create_sd_campaign`; tactics, target expressions, the creative second step |
 | [`references/create-sp-ad-group.md`](references/create-sp-ad-group.md) | Adding ad groups to an existing SP campaign; non-atomic results and recovery |
+| [`references/create-sb-ad-group.md`](references/create-sb-ad-group.md) | Adding ad groups to an existing SB campaign |
+| [`references/create-sd-ad-group.md`](references/create-sd-ad-group.md) | Adding ad groups to an existing SD campaign |
+| [`references/create-portfolio.md`](references/create-portfolio.md) | Creating a portfolio with `create_portfolio` |
 | [`references/platform-notes.md`](references/platform-notes.md) | Auth, envelope, errors, and how to name things in your answer |
 
 Sibling skills you will need installed: `sparkx-query-entity-metadata` (ASINs, SKUs,

@@ -9,14 +9,14 @@
 
 | Skill | 版本 | 对应 MCP Tool | 所需 Scope | 用途 |
 |-------|------|--------------|-----------|------|
-| [sparkx-query-ads-performance](sparkx-query-ads-performance/) | 1.4.9 | `get_ads_perf` | `amazon_sa_performance_data:read` | 查询广告效果指标：花费、ACOS、ROAS、趋势、排名、同环比，小时级（AMS）与关键词×广告位，以及 Vendor ASIN 指标口径（shipped/ordered、distributorView/sellingProgram） |
-| [sparkx-query-entity-metadata](sparkx-query-entity-metadata/) | 1.4.9 | `get_entity_metadata` | `amazon_sa_ads_configuration:read` | 查询实体配置与投放状态、品类和品牌定向 ID，以及托管组排期、Campaign 已启用规则类型与托管组规则模式配置 |
-| [sparkx-query-operation-log](sparkx-query-operation-log/) | 1.3.8 | `get_operation_log` | `amazon_sa_ads_logs:read` | 查询操作日志：人工与 AI 的调价、调预算、启停记录（含时间戳时区规则） |
-| [sparkx-create-ai-group](sparkx-create-ai-group/) | 1.2.4 | `create_sd_ai_managed_group` / `save_sp_sb_ai_managed_group` / `save_sp_sb_ai_group_schedule` / `get_ai_group_template` / `get_sp_sb_ai_personality_recommendation` | `amazon_sa_managed_group:write` | 创建 SP、SB 或 SD AI 托管组，可按投放用途推荐并套用平台模板，并可继续设置 SP/SB 排期 |
-| [sparkx-edit-ai-group](sparkx-edit-ai-group/) | 1.2.4 | `edit_sd_ai_managed_group` / `save_sp_sb_ai_managed_group` / `save_sp_sb_ai_group_schedule` / `get_ai_group_template` / `get_sp_sb_ai_personality_recommendation` | `amazon_sa_managed_group:write` | 编辑单个或批量 AI 托管组，可按投放用途推荐并套用模板，维护 SP/SB 排期 |
-| [sparkx-delete-ai-group](sparkx-delete-ai-group/) | 1.0.9 | `delete_ai_managed_group` | `amazon_sa_managed_group_delete:write` | 删除 AI 托管组并释放或迁移 Campaign |
-| [sparkx-edit-ads](sparkx-edit-ads/) | 1.1.7 | `batch_update_ads` | `amazon_sa_campaign_edit:write` | 批量编辑活动预算 / 状态 / 竞价 / 广告组合归属、组合预算与日期、广告组状态、关键词、投放、推广商品和否定项（共 25 条路由，其中 12 条可能需两阶段确认） |
-| [sparkx-create-campaign](sparkx-create-campaign/) | 1.0.5 | `create_sp_sb_campaign` / `create_sp_ad_group` | `amazon_sa_campaign_create:write` | 批量创建 SP 广告活动，或向现有 SP 活动新增广告组 |
+| [sparkx-query-ads-performance](sparkx-query-ads-performance/) | 1.4.10 | `get_ads_perf` | `amazon_sa_performance_data:read` | 查询广告效果指标：花费、ACOS、ROAS、趋势、排名、同环比，小时级（AMS）与关键词×广告位，以及 Vendor ASIN 指标口径（shipped/ordered、distributorView/sellingProgram） |
+| [sparkx-query-entity-metadata](sparkx-query-entity-metadata/) | 1.4.10 | `get_entity_metadata` | `amazon_sa_ads_configuration:read` | 查询实体配置与投放状态、广告活动预算使用率（剩余预算 / 预算状态 / 超预算时长）、SB 与 SD 创建类实体、品类和品牌定向 ID，以及托管组排期、Campaign 已启用规则类型与托管组规则模式配置 |
+| [sparkx-query-operation-log](sparkx-query-operation-log/) | 1.3.9 | `get_operation_log` | `amazon_sa_ads_logs:read` | 查询操作日志：人工与 AI 的调价、调预算、启停记录（含时间戳时区规则） |
+| [sparkx-create-ai-group](sparkx-create-ai-group/) | 1.2.5 | `create_sd_ai_managed_group` / `save_sp_sb_ai_managed_group` / `save_sp_sb_ai_group_schedule` / `get_ai_group_template` / `get_sp_sb_ai_personality_recommendation` | `amazon_sa_managed_group:write` | 创建 SP、SB 或 SD AI 托管组，可按投放用途推荐并套用平台模板，并可继续设置 SP/SB 排期 |
+| [sparkx-edit-ai-group](sparkx-edit-ai-group/) | 1.2.5 | `edit_sd_ai_managed_group` / `save_sp_sb_ai_managed_group` / `save_sp_sb_ai_group_schedule` / `get_ai_group_template` / `get_sp_sb_ai_personality_recommendation` | `amazon_sa_managed_group:write` | 编辑单个或批量 AI 托管组，可按投放用途推荐并套用模板，维护 SP/SB 排期 |
+| [sparkx-delete-ai-group](sparkx-delete-ai-group/) | 1.0.10 | `delete_ai_managed_group` | `amazon_sa_managed_group_delete:write` | 删除 AI 托管组并释放或迁移 Campaign |
+| [sparkx-edit-ads](sparkx-edit-ads/) | 1.2.0 | `batch_update_ads` | `amazon_sa_campaign_edit:write` | 批量编辑活动预算 / 状态 / 竞价 / 广告组合归属、组合预算与日期、活动名称 / 结束日期、广告组状态 / 名称 / 默认竞价、关键词、投放、推广商品和否定项（共 29 条路由，其中 13 条可能需两阶段确认） |
+| [sparkx-create-campaign](sparkx-create-campaign/) | 1.1.0 | `create_sp_sb_campaign` / `create_sd_campaign` / `create_sp_ad_group` / `create_sb_ad_group` / `create_sd_ad_group` / `create_portfolio` | `amazon_sa_campaign_create:write` | 批量创建 SP / SB / SD 广告活动，向现有活动新增广告组，创建广告组合 |
 
 ## 可选 Skills
 
@@ -24,12 +24,12 @@
 
 | Skill | 版本 | 用途 |
 |-------|------|------|
-| [sparkx-weekly-ads-report](sparkx-weekly-ads-report/) | 1.1.5 | 广告周报：KPI 环比卡片、7 天趋势、异常摘要、Top 变化榜、下周行动建议 |
-| [sparkx-monthly-ads-report](sparkx-monthly-ads-report/) | 1.2.2 | 广告月报：全月 KPI（环比 + 同比）、结构拆解、商品与关键词分析、下月建议 |
-| [sparkx-ads-structure-analysis](sparkx-ads-structure-analysis/) | 1.1.6 | 广告结构分析：按广告类型 / 站点 / 组合 / 工作日 / 小时维度拆解花费与效率，定位结构错配 |
-| [sparkx-product-diagnosis](sparkx-product-diagnosis/) | 1.2.3 | 商品诊断：投放分层 + 独立的生命阶段（SP 投放时长 + 12 周总销售额趋势）、变体对比、问题商品诊断卡、去留优化建议 |
+| [sparkx-weekly-ads-report](sparkx-weekly-ads-report/) | 1.1.6 | 广告周报：KPI 环比卡片、7 天趋势、异常摘要、Top 变化榜、下周行动建议 |
+| [sparkx-monthly-ads-report](sparkx-monthly-ads-report/) | 1.2.3 | 广告月报：全月 KPI（环比 + 同比）、结构拆解、商品与关键词分析、下月建议 |
+| [sparkx-ads-structure-analysis](sparkx-ads-structure-analysis/) | 1.1.7 | 广告结构分析：按广告类型 / 站点 / 组合 / 工作日 / 小时维度拆解花费与效率，定位结构错配 |
+| [sparkx-product-diagnosis](sparkx-product-diagnosis/) | 1.2.4 | 商品诊断：投放分层 + 独立的生命阶段（SP 投放时长 + 12 周总销售额趋势）、变体对比、问题商品诊断卡、去留优化建议 |
 | [sparkx-search-term-diagnosis](sparkx-search-term-diagnosis/) | 1.0.4 | 搜索词诊断：按出单、品牌 / 非品牌、关键词 / ASIN 给搜索词分类，给出花费分布、否词候选、扶正候选和投放碎片，门槛用店铺客单价和目标 ACOS 推导 |
-| [sparkx-promo-reset](sparkx-promo-reset/) | 1.0.4 | 大促调整复位：从操作日志找出大促期间人为改过的出价、预算、广告位溢价和托管组设置及其大促前的值，按客户选择全部直接复位，或按大促后表现给出立即复位 / 分天回落 / 由客户决定的建议，确认后执行并回读 |
+| [sparkx-promo-reset](sparkx-promo-reset/) | 1.0.5 | 大促调整复位：从操作日志找出大促期间人为改过的出价、预算、广告位溢价和托管组设置及其大促前的值，按客户选择全部直接复位，或按大促后表现给出立即复位 / 分天回落 / 由客户决定的建议，确认后执行并回读 |
 
 ## 版本
 
@@ -39,7 +39,7 @@
   https://raw.githubusercontent.com/SparkXAI/SparkXAI-MCP/main/skills/manifest.json
   ```
 
-- **人工查看**：每个 Skill 的版本号在其 `SKILL.md` frontmatter 的 `metadata.version` 字段；整体变更历史见 [CHANGELOG.md](../CHANGELOG.md)。
+- **人工查看**：每个 Skill 的版本号在其 `SKILL.md` frontmatter 的 `metadata.version` 字段；整体变更历史见 [CHANGELOG.md](../CHANGELOG.md)——该相对路径按发布后的目录解析（`skills/README.md` 与仓库根的 `CHANGELOG.md` 同级），在源码仓库里浏览本目录时解析不到。
 - **致 AI Agent**：在安装、更新或按本仓库说明配置 Skills 时，将本地 `SKILL.md` 的 `metadata.version` 与上述 manifest 中同名 Skill 的版本比较。本地版本更低时，列出过期 Skill 并提醒用户更新；正常 MCP 查询期间不要重复检查或打断用户。
 - **发布基线**：准备发布时，以 `main` 分支线上 `manifest.json` 为版本基线。同一未发布批次内的多轮本地修正合并为一次版本升级，不从尚未发布的本地版本继续递增。
 - 发布新版本时，`manifest.json` 与 frontmatter 会同步更新，并打对应的 git tag / GitHub Release。

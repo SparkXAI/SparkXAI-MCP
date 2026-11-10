@@ -1,6 +1,6 @@
 # Enum i18n Reference — `get_operation_log`
 
-Display labels for enum values in operation log fields. Used when presenting log entries to users.
+Display labels for enum values in operation log fields. Present the translated `operationType` returned by the tool verbatim. Use the original API codes from `field-reference.md` for request filters; display labels are not filter values.
 
 ### changeBy (changedBy)
 
@@ -52,20 +52,20 @@ Display labels for enum values in operation log fields. Used when presenting log
 | `Campaign Archived` | Campaign Archived | 广告活动归档 | キャンペーンアーカイブ |
 | `AdGroup Bid Increased` | Ad Group Bid Increased | 广告组竞价提高 | 広告グループ入札引き上げ |
 | `AdGroup Bid Decreased` | Ad Group Bid Decreased | 广告组竞价降低 | 広告グループ入札引き下げ |
-| `Keyword Targeting Bid Increased` | Keyword Bid Increased | 关键词竞价提高 | キーワード入札引き上げ |
-| `Keyword Targeting Bid Decreased` | Keyword Bid Decreased | 关键词竞价降低 | キーワード入札引き下げ |
-| `Product Targeting Bid Increased` | Product Target Bid Increased | 商品投放竞价提高 | 商品ターゲティング入札引き上げ |
-| `Product Targeting Bid Decreased` | Product Target Bid Decreased | 商品投放竞价降低 | 商品ターゲティング入札引き下げ |
+| `Keyword Targeting Bid Increased` | Keyword Targets Bid Increased | 关键词竞价提高 | キーワード入札引き上げ |
+| `Keyword Targeting Bid Decreased` | Keyword Targets Bid Decreased | 关键词竞价降低 | キーワード入札引き下げ |
+| `Product Targeting Bid Increased` | Product Targets Bid Increased | 商品投放竞价提高 | 商品ターゲティング入札引き上げ |
+| `Product Targeting Bid Decreased` | Product Targets Bid Decreased | 商品投放竞价降低 | 商品ターゲティング入札引き下げ |
 | `DailyBudget Increased` | Daily Budget Increased | 日预算提高 | 日次予算引き上げ |
 | `DailyBudget Decreased` | Daily Budget Decreased | 日预算降低 | 日次予算引き下げ |
 | `Budget Cap Increased` | Budget Cap Increased | 预算上限提高 | 予算上限引き上げ |
-| `Keyword Targeting Added` | Keyword Added | 关键词新增 | キーワード追加 |
-| `Product Targeting Paused` | Product Target Paused | 商品投放暂停 | 商品ターゲティング一時停止 |
-| `Automatic Targeting Enabled` | Auto Targeting Enabled | 自动投放启用 | 自動ターゲティング有効化 |
-| `TopSearchAdjustment Increased` | Top of Search Adjustment Increased | 搜索顶部广告位加价 | 検索上部掲載位置引き上げ |
-| `ProductPageAdjustment Decreased` | Product Page Adjustment Decreased | 商品页广告位减价 | 商品ページ掲載位置引き下げ |
-| `Bidding Strategy Up And Down` | Bidding Strategy: Up and Down | 竞价策略：提高和降低 | 入札戦略：アップ＆ダウン |
-| `Bidding Strategy Down Only` | Bidding Strategy: Down Only | 竞价策略：仅降低 | 入札戦略：ダウンのみ |
+| `Keyword Targeting Added` | Keyword Targets Added | 关键词新增 | キーワード追加 |
+| `Product Targeting Paused` | Product Target Paused | 商品定向已暂停 | 商品ターゲティング一時停止 |
+| `Automatic Targeting Enabled` | Automatic Targets Enabled | 自动投放启用 | 自動ターゲティング有効化 |
+| `TopSearchAdjustment Increased` | Top of Search Adjustment Increased | 搜索结果顶部(SP)竞价增加 | 検索結果上部(SP)入札額の引き上げ |
+| `ProductPageAdjustment Decreased` | Product Page (SP) Adjustment Decreased | 商品页面(SP)竞价减少 | 商品ページ(SP)入札額の引き下げ |
+| `Bidding Strategy Up And Down` | Bidding Strategy (SP) Up And Down | 竞价策略(SP)浮动出价 | 入札戦略(SP)動的入札 |
+| `Bidding Strategy Down Only` | Bidding Strategy (SP) Down Only | 竞价策略(SP)仅降低 | 入札戦略(SP)引き下げのみ |
 
 ### entity (in response rows)
 

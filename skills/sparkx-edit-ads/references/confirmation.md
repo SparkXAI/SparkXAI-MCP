@@ -1,6 +1,6 @@
 # Two-phase confirmation
 
-Twelve of the 25 routes can defer a write on the first call. Seven always do so; five do so
+Thirteen of the 29 routes can defer a write on the first call. Eight always do so; five do so
 only when the payload contains `state: "archived"`. They return a preview plus a
 `confirmToken`; the write happens only when you call again with that token.
 
@@ -13,6 +13,7 @@ only when the payload contains `state: "archived"`. They return a preview plus a
 - `campaign` + `updatePlacementBid` (including 0%)
 - `keyword` + `updateBid`
 - `target` + `updateBid`
+- `adGroup` + `updateBid` (SP / SD only)
 - `productAd` + `archive`
 - `portfolio` + `updateBudget`
 
@@ -24,7 +25,7 @@ only when the payload contains `state: "archived"`. They return a preview plus a
 - `negativeTarget` + `updateStatus` (`request.data`)
 - `negativeKeyword` + `updateStatus` (**`request.updates`**)
 
-The other thirteen routes execute immediately. `productAd + updateStatus` cannot reach
+The other sixteen routes execute immediately. `productAd + updateStatus` cannot reach
 `archived` at all. `adGroup + updateStatus` does accept `archived`, but that route still
 executes directly; get the user's approval before calling it because archival is irreversible.
 

@@ -25,18 +25,18 @@ Display labels for enum values returned in the `{field}Text` companion fields. T
 | `CAMPAIGN_STATUS_ENABLED` / `running` | Delivering | 投放中 | 配信中 |
 | `CAMPAIGN_PAUSED` / `paused` | Paused | 已暂停 | 一時停止 |
 | `CAMPAIGN_ARCHIVED` | Archived | 已存档 | アーカイブ |
-| `CAMPAIGN_OUT_OF_BUDGET` | Out of Budget | 超出预算 | 予算超過 |
+| `CAMPAIGN_OUT_OF_BUDGET` | Out of budget | 超出预算 | 予算超過 |
 | `ENDED` / `ended` | Ended | 已结束 | 終了 |
-| `PORTFOLIO_OUT_OF_BUDGET` | Portfolio Out of Budget | 广告组合超预算 | ポートフォリオ予算超過 |
-| `PORTFOLIO_ENDED` / `portfolioEnded` | Portfolio Ended | 广告组合已结束 | ポートフォリオ終了 |
-| `PORTFOLIO_PENDING_START_DATE` | Portfolio Pending | 广告组合未开始 | ポートフォリオ配信待ち |
-| `CAMPAIGN_INCOMPLETE` | Campaign Incomplete | 广告活动未完成 | キャンペーン未完了 |
+| `PORTFOLIO_OUT_OF_BUDGET` | Portfolio out of budget | 广告组合超预算 | ポートフォリオ予算超過 |
+| `PORTFOLIO_ENDED` / `portfolioEnded` | Portfolio ended | 广告组合已结束 | ポートフォリオ終了 |
+| `PORTFOLIO_PENDING_START_DATE` | Portfolio pending | 广告组合待开始 | ポートフォリオ配信待ち |
+| `CAMPAIGN_INCOMPLETE` | Campaign incomplete | 广告活动未完成 | キャンペーン未完了 |
 | `ACCOUNT_OUT_OF_BUDGET` | Account Out of Budget | 账户超预算 | アカウント予算超過 |
-| `ADVERTISER_PAYMENT_FAILURE` | Payment Failure | 付款失败 | 支払い失敗 |
+| `ADVERTISER_PAYMENT_FAILURE` | Payment failure | 付款失败 | 支払い失敗 |
 | `ADVERTISER_ARCHIVED` | Advertiser Archived | 广告主已存档 | 広告主アーカイブ |
 | `ADVERTISER_EXCEED_SPENDS_LIMIT` | Advertiser Exceed Spends Limit | 广告主超支出限额 | 広告主支出限度超過 |
-| `PENDING_START_DATE` | Scheduled | 未到开始日期 | 予約済み |
-| `PENDING_REVIEW` | Pending Review | 审核中 | 審査中 |
+| `PENDING_START_DATE` | Scheduled | 已预订 | 予約済み |
+| `PENDING_REVIEW` | Pending review | 审核中 | 審査中 |
 | `INELIGIBLE` | Ineligible | 不符合广告资格 | 広告資格なし |
 | `rejected` / `REJECTED` | Rejected | 未获批准 | 未承認 |
 | `terminated` | Terminated | 已终止 | 終了 |
@@ -62,20 +62,20 @@ Same values as campaignServingStatus above, plus:
 | `TARGETING_CLAUSE_ARCHIVED` | Archived | 已存档 | アーカイブ |
 | `CAMPAIGN_PAUSED` | Campaign Paused | 广告活动已暂停 | キャンペーン一時停止 |
 | `CAMPAIGN_ARCHIVED` | Campaign Archived | 广告活动已存档 | キャンペーンアーカイブ |
-| `CAMPAIGN_OUT_OF_BUDGET` | Out of Budget | 超出预算 | 予算超過 |
-| `CAMPAIGN_INCOMPLETE` | Campaign Incomplete | 广告活动未完成 | キャンペーン未完了 |
+| `CAMPAIGN_OUT_OF_BUDGET` | Out of budget | 超出预算 | 予算超過 |
+| `CAMPAIGN_INCOMPLETE` | Campaign incomplete | 广告活动未完成 | キャンペーン未完了 |
 | `AD_GROUP_PAUSED` | Ad Group Paused | 广告组已暂停 | 広告グループ一時停止 |
 | `AD_GROUP_ARCHIVED` | Ad Group Archived | 广告组已存档 | 広告グループアーカイブ |
-| `AD_GROUP_INCOMPLETE` | Ad Group Incomplete | 广告组未完成 | 広告グループ未完了 |
+| `AD_GROUP_INCOMPLETE` | Ad group incomplete | 广告组未完成 | 広告グループ未完了 |
 | `ENDED` | Ended | 已结束 | 終了 |
-| `PORTFOLIO_OUT_OF_BUDGET` | Portfolio Out of Budget | 广告组合超预算 | ポートフォリオ予算超過 |
-| `PORTFOLIO_ENDED` | Portfolio Ended | 广告组合已结束 | ポートフォリオ終了 |
-| `PORTFOLIO_PENDING_START_DATE` | Portfolio Pending | 广告组合未开始 | ポートフォリオ配信待ち |
+| `PORTFOLIO_OUT_OF_BUDGET` | Portfolio out of budget | 广告组合超预算 | ポートフォリオ予算超過 |
+| `PORTFOLIO_ENDED` | Portfolio ended | 广告组合已结束 | ポートフォリオ終了 |
+| `PORTFOLIO_PENDING_START_DATE` | Portfolio pending | 广告组合待开始 | ポートフォリオ配信待ち |
 | `ACCOUNT_OUT_OF_BUDGET` | Account Out of Budget | 账户超预算 | アカウント予算超過 |
 | `ADVERTISER_ARCHIVED` | Advertiser Archived | 广告主已存档 | 広告主アーカイブ |
-| `ADVERTISER_PAYMENT_FAILURE` | Payment Failure | 付款失败 | 支払い失敗 |
+| `ADVERTISER_PAYMENT_FAILURE` | Payment failure | 付款失败 | 支払い失敗 |
 | `ADVERTISER_EXCEED_SPENDS_LIMIT` | Advertiser Exceed Spends Limit | 广告主超支出限额 | 広告主支出限度超過 |
-| `PENDING_START_DATE` | Scheduled | 未到开始日期 | 予約済み |
+| `PENDING_START_DATE` | Scheduled | 已预订 | 予約済み |
 
 ## biddingStrategy (`campaign.biddingStrategy_`)
 
@@ -84,7 +84,7 @@ Same values as campaignServingStatus above, plus:
 | `legacyForSales` | SP Dynamic bids - down only | SP动态竞价-仅降低 | SP動的入札-減少のみ |
 | `autoForSales` | SP Dynamic bids - up and down | SP动态竞价-提高和降低 | SP動的入札-増加と減少 |
 | `manual` | SP Fixed bids | SP固定竞价 | SP固定入札 |
-| `ruleBased` | Rule Based | 基于规则 | ルールベース |
+| `ruleBased` | SP Rule-based bidding | SP基于规则的竞价 | SPルールベースの入札 |
 | `autoForSalesSb` | SB Automated bidding | SB自动竞价 | SB自動入札 |
 | `maximizeImmediateSales` | Maximize Immediate Sales | 最大化即时销售 | 即時売上最大化 |
 | `maximizeNewToBrandCustomers` | Maximize New-to-Brand Customers | 最大化品牌新客 | ブランド新規顧客最大化 |
@@ -110,14 +110,14 @@ Same values as campaignServingStatus above, plus:
 
 | API value | EN | ZH | JA |
 |---|---|---|---|
-| `MINIMIZE_SPEND` | Minimize Spend | 最小化站外花费 | 支出を最小化 |
-| `MAXIMIZE_REACH` | Maximize Reach | 最大化站外覆盖 | リーチを最大化 |
+| `MINIMIZE_SPEND` | Minimize Spend | 限制在亚马逊站外的花费 | Amazon外での支出を制限 |
+| `MAXIMIZE_REACH` | Maximize Reach | 扩大受众触达 | リーチを最大化 |
 
 ## siteRestrictions (`campaign.siteRestrictions_`)
 
 | API value | EN | ZH | JA |
 |---|---|---|---|
-| `AMAZON_BUSINESS` | Amazon Business | Amazon企业购 | Amazonビジネス |
+| `AMAZON_BUSINESS` | Amazon Business | 亚马逊企业购 | Amazonビジネス |
 | `AMAZON_HAUL` | Amazon Haul | Amazon Haul | Amazon Haul |
 
 ## isAiCreate (`campaign.isAiCreate_`)
@@ -131,9 +131,9 @@ Same values as campaignServingStatus above, plus:
 
 | API value | EN | ZH | JA |
 |---|---|---|---|
-| `conversions` | Optimize for Conversions | 转化优化 | コンバージョン最適化 |
-| `clicks` | Optimize for Clicks | 点击优化 | クリック最適化 |
-| `reach` | Optimize for Reach | 覆盖优化 | リーチ最適化 |
+| `conversions` | Optimize for conversions | 针对转化率 | コンバージョン率向け |
+| `clicks` | Optimize for page visits | 针对页面访问量 | ページビュー向け |
+| `reach` | Reach | 触达 | リーチ |
 
 ## targetMatchType (`target.targetMatchType_`)
 
@@ -142,17 +142,17 @@ Same values as campaignServingStatus above, plus:
 | `broad` | Keyword-Broad | 关键词-广泛 | キーワード-広範 |
 | `phrase` | Keyword-Phrase | 关键词-词组 | キーワード-フレーズ |
 | `exact` | Keyword-Exact | 关键词-精准 | キーワード-完全一致 |
-| `asinSameAs` / `asin` | PAT-Individual Product | 商品-单个商品 | 商品-単一商品 |
-| `asinExpandedFrom` / `asinExpanded` / `asin-expanded` | ASIN-Expanded | 商品-扩展ASIN | ASIN-拡張 |
+| `asinSameAs` / `asin` | PAT-Individual product | 单个商品-精确定向 | 単品-精密ターゲティング |
+| `asinExpandedFrom` / `asinExpanded` / `asin-expanded` | ASIN-Expanded | 单个商品-拓展定向 | 単品-拡張ターゲティング |
 | `asinCategorySameAs` / `category` | PAT-Category | 商品-品类 | 商品-カテゴリ |
 | `asinAccessoryRelated` / `complements` | Auto-Complements | 自动-关联商品 | 自動-関連商品 |
 | `asinSubstituteRelated` / `substitutes` | Auto-Substitutes | 自动-同类商品 | 自動-類似商品 |
-| `queryHighRelMatches` / `close-match` / `closeMatch` | Auto-Close Match | 自动-紧密匹配 | 自動-密なマッチ |
-| `queryBroadRelMatches` / `loose-match` / `looseMatch` | Auto-Loose Match | 自动-宽泛匹配 | 自動-緩いマッチ |
-| `keywordGroupSameAs` / `keywordGroup` | SP-Keyword Group | SP-关键词组 | SP-キーワードグループ |
-| `audience` | Audience | 受众投放 | オーディエンス |
-| `views` | Views Remarketing | 浏览再营销 | 閲覧リマーケティング |
-| `purchases` | Purchases Remarketing | 购买再营销 | 購入リマーケティング |
+| `queryHighRelMatches` / `close-match` / `closeMatch` | Auto-Close match | 自动-紧密匹配 | 自動-密なマッチ |
+| `queryBroadRelMatches` / `loose-match` / `looseMatch` | Auto-Loose match | 自动-宽泛匹配 | 自動-緩いマッチ |
+| `keywordGroupSameAs` / `keywordGroup` | SP-Keyword group | SP-关键词组 | SP-キーワードグループ |
+| `audience` | AMZ Audience | 亚马逊受众 | Amazonオーディエンス |
+| `views` | Views Remarketing | 浏览再营销 | 閲覧リターゲティング |
+| `purchases` | Purchases Remarketing | 购买再营销 | 購入リターゲティング |
 
 ## matchType (SearchTerm `matchType_`)
 
@@ -168,8 +168,8 @@ Same values as campaignServingStatus above, plus:
 | `CLOSE-MATCH` | Auto-Close Match | 自动-紧密匹配 | 自動-密なマッチ |
 
 ⚠️ **Casing/format verified for these four Auto values, not for the other `matchType` rows above** (`broad`/`phrase`/`exact`/`targeting`/`asin-expanded`/`asin`/`category` are unverified — don't assume they're upper-case too until confirmed). Only `LOOSE-MATCH`/`CLOSE-MATCH` are hyphenated; `SUBSTITUTES`/`COMPLEMENTS` are single words with no hyphen.
-| `asin-expanded` / `asinExpanded` | ASIN-Expanded | 商品-扩展ASIN | ASIN-拡張 |
-| `asin` | PAT-Individual Product | 商品-单个商品 | 商品-単一商品 |
+| `asin-expanded` / `asinExpanded` | ASIN-Expanded | 单个商品-拓展定向 | 単品-拡張ターゲティング |
+| `asin` | PAT-Individual product | 商品-单个商品 | 商品-単一商品 |
 | `category` | PAT-Category | 商品-品类 | 商品-カテゴリ |
 
 ## placement (`placement.placement_`, `factEntity: "placement"`)
@@ -201,9 +201,9 @@ table in [`field-reference.md`](field-reference.md).
 | API value | EN | ZH | JA |
 |---|---|---|---|
 | `PORTFOLIO_STATUS_ENABLED` | Delivering | 投放中 | 配信中 |
-| `PORTFOLIO_OUT_OF_BUDGET` | Portfolio Out of Budget | 广告组合超预算 | ポートフォリオ予算超過 |
-| `PORTFOLIO_ENDED` | Portfolio Ended | 广告组合已结束 | ポートフォリオ終了 |
-| `PORTFOLIO_PENDING_START_DATE` | Portfolio Pending | 广告组合未开始 | ポートフォリオ配信待ち |
+| `PORTFOLIO_OUT_OF_BUDGET` | Portfolio out of budget | 广告组合超预算 | ポートフォリオ予算超過 |
+| `PORTFOLIO_ENDED` | Portfolio ended | 广告组合已结束 | ポートフォリオ終了 |
+| `PORTFOLIO_PENDING_START_DATE` | Portfolio pending | 广告组合未开始 | ポートフォリオ未開始 |
 | `ADVERTISER_PAYMENT_FAILURE` | Payment Failure | 付款失败 | 支払い失敗 |
 | `ADVERTISER_ARCHIVED` | Advertiser Archived | 广告主已存档 | 広告主アーカイブ |
 | `ADVERTISER_EXCEED_SPENDS_LIMIT` | Advertiser Exceed Spends Limit | 广告主超支出限额 | 広告主支出限度超過 |
@@ -212,34 +212,34 @@ table in [`field-reference.md`](field-reference.md).
 
 | API value | EN | ZH | JA |
 |---|---|---|---|
-| `dateRange` | Date Range | 日期范围 | 日付範囲 |
-| `monthlyRecurring` | Monthly Recurring | 按月 | 月次 |
+| `dateRange` | Date range | 日期范围 | 日付範囲 |
+| `monthlyRecurring` | Month range | 按月 | 月次 |
 
 ## aiStatus (`aiGroup.aiStatus_`)
 
 | API value | EN | ZH | JA |
 |---|---|---|---|
-| `0` | AI Never Turned On | 未开启 | AI未使用 |
-| `1` | AI Currently Running | 已开启 | AI運用中 |
-| `2` | AI Turned Off | 已暂停 | AI一時停止中 |
+| `0` | AI never turned on | 未开启 | AI未使用 |
+| `1` | AI currently running | 已开启 | AI運用中 |
+| `2` | AI turned off | 已取消 | AI一時停止中 |
 
 ## aiTargetType (`aiGroup.aiTargetType_`)
 
 | API value | EN | ZH | JA |
 |---|---|---|---|
-| `1` | Drive Growth | 推动增长 | 成長の推進 |
-| `2` | Maintain Stable Orders | 保持订单稳定 | 安定の維持 |
-| `3` | Event Boost | 活动冲量 | キャンペーンの推進 |
+| `1` | Drive growth | 推动增长 | 成長促進 |
+| `2` | Optimize ROAS | 保持订单稳定 | 注文安定維持 |
+| `3` | Promotion sales boost | 活动冲量 | イベントによる注文増加 |
 
 ## aiPersonality (`aiGroup.aiPersonality_`)
 
 | API value | EN | ZH | JA |
 |---|---|---|---|
-| `1` | Very Conservative | 非常保守 | 非常に保守的 |
-| `2` | Conservative | 保守 | 保守的 |
-| `3` | Balanced | 平衡 | バランス |
-| `4` | Aggressive | 激进 | 積極的 |
-| `5` | Very Aggressive | 非常激进 | 非常に積極的 |
+| `1` | Conservative | 保守 | 保守 |
+| `2` | Moderately Conservative | 较保守 | やや保守的 |
+| `3` | Balanced | 中庸 | バランス型 |
+| `4` | Moderately Aggressive | 较激进 | やや積極的 |
+| `5` | Aggressive | 激进 | 積極的 |
 
 ⚠️ **Query results and reports show the numeric level only** (e.g. **AI 人格：4**) — don't replace or supplement it with this table's text label. This mapping is for understanding a user's own wording ("偏保守", "跑激进点"), not for how you present the value back.
 
@@ -293,7 +293,7 @@ All are `0`/`1` except `targetPausedAddStatus` and `targetHarvestStatus` which a
 | API value | EN (SP example) | ZH (SP example) | JA (SP example) |
 |---|---|---|---|
 | `ELIGIBLE` | SP Eligible | SP 符合广告条件 | SP 広告対象 |
-| `INELIGIBLE` | SP Ineligible | SP 不符合广告条件 | SP 広告対象外 |
+| `INELIGIBLE` | SP Ineligible | SP 不符合广告条件 | SP 広告条件に不適合 |
 
 (Replace "SP" with "SB"/"SD" for the other two fields.)
 
@@ -308,7 +308,7 @@ All are `0`/`1` except `targetPausedAddStatus` and `targetHarvestStatus` which a
 
 | API value | EN | ZH | JA |
 |---|---|---|---|
-| `0` | No Budget Cap | 不限预算 | 予算上限なし |
+| `0` | No Budget Cap | 无预算上限 | 予算上限なし |
 | `1` | Budget Cap Enabled | 有预算上限 | 予算上限あり |
 
 ## countryCode (`profile.countryCode_`)
@@ -324,16 +324,16 @@ All are `0`/`1` except `targetPausedAddStatus` and `targetHarvestStatus` which a
 | `FR` | France | 法国 | フランス |
 | `IT` | Italy | 意大利 | イタリア |
 | `ES` | Spain | 西班牙 | スペイン |
-| `NL` | Netherlands | 荷兰 | オランダ |
+| `NL` | The Netherlands | 荷兰 | オランダ |
 | `AU` | Australia | 澳大利亚 | オーストラリア |
 | `SG` | Singapore | 新加坡 | シンガポール |
 | `BR` | Brazil | 巴西 | ブラジル |
 | `SE` | Sweden | 瑞典 | スウェーデン |
-| `AE` | UAE | 阿联酋 | アラブ首長国連邦 |
+| `AE` | United Arab Emirates | 阿拉伯联合酋长国 | アラブ首長国連邦 |
 | `PL` | Poland | 波兰 | ポーランド |
 | `IN` | India | 印度 | インド |
 | `TR` | Turkey | 土耳其 | トルコ |
-| `SA` | Saudi Arabia | 沙特 | サウジアラビア |
+| `SA` | Saudi Arabia | 沙特阿拉伯 | サウジアラビア |
 | `BE` | Belgium | 比利时 | ベルギー |
 | `EG` | Egypt | 埃及 | エジプト |
 | `ZA` | South Africa | 南非 | 南アフリカ |

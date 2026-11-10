@@ -35,7 +35,7 @@
 | `campaign.dailyBudget_` | Daily budget | — |
 | `campaign.currentBudget_` | Current budget | — |
 
-**⚠️ "How much budget do I have left today?" cannot be reliably answered by combining these fields with today's `Spend`.** `dailyBudget`/`currentBudget` are configuration values (from `get_entity_metadata`, or these dimension fields here) that can change intraday and aren't a live spend-tracking ledger; today's `Spend` from `get_ads_perf` is also subject to the T+2 data delay, so "today's spend so far" is frequently incomplete, not a live real-time figure. Subtracting one from the other (`remaining = dailyBudget − today's Spend`) produces a number that looks precise but is not reliable. If asked this, say plainly that real-time remaining budget can't be computed reliably from this data — don't present a computed number with false confidence. You can still show the configured `dailyBudget` and the most recent *complete* day's `Spend` as background context, clearly labeled as such (not as "today's remaining budget").
+**⚠️ "How much budget do I have left today?" cannot be reliably answered by combining these fields with today's `Spend`.** `dailyBudget`/`currentBudget` are configuration values (from `get_entity_metadata`, or these dimension fields here) that can change intraday and aren't a live spend-tracking ledger; today's `Spend` from `get_ads_perf` is still accumulating through the day (measured: the same query 12 minutes apart returned a higher figure for the current store-local day), so "today's spend so far" is a snapshot that goes stale immediately, not a live balance. Subtracting one from the other (`remaining = dailyBudget − today's Spend`) produces a number that looks precise but is not reliable. If asked this, say plainly that real-time remaining budget can't be computed reliably from this data — don't present a computed number with false confidence. You can still show the configured `dailyBudget` and the most recent *complete* day's `Spend` as background context, clearly labeled as such (not as "today's remaining budget").
 
 | Field | Description | Enum |
 |---|---|---|
@@ -254,7 +254,7 @@ placements — always pair the label with its campaign type. Full label table in
 | `aiGroup.aiGroupId_` / `aiGroup.aiGroupName_` | AI managed group ID/name | — |
 | `aiGroup.aiStatus_` | Status | `0` (not started) / `1` (running) / `2` (paused) |
 | `aiGroup.targetAcos_` | Target ACOS (%) | — |
-| `aiGroup.aiTargetType_` | Objective | `1` (Drive Growth) / `2` (Maintain Stable Orders) / `3` (Event Boost) |
+| `aiGroup.aiTargetType_` | Objective | `1` (Drive growth) / `2` (Optimize ROAS) / `3` (Promotion sales boost) |
 | `aiGroup.aiPersonality_` | AI aggressiveness | `1` (very conservative) … `5` (very aggressive) |
 | `aiGroup.aiGroupStatusOnDate_` / `aiGroup.aiGroupLastStatusOnDate_` / `aiGroup.aiGroupLastStatusOffDate_` | Lifecycle dates | — |
 | `aiGroup.aiCreator_` / `aiGroup.aiGroupCreateTime_` | Creator / create time | — |
@@ -316,6 +316,43 @@ placements — always pair the label with its campaign type. Full label table in
 
 ### Conversion metrics
 `Sales`, `Conversions` (maps from user's "Orders" — there is no metric literally named `Orders`), `Units`, `SalesSameSKU`, `ConversionsSameSKU`, `UnitsSameSKU`, `SalesOtherSKU`, `ConversionsOtherSKU`, `UnitsOtherSKU`
+
+#### ⚠️ The attribution window is not the same for every ad type
+
+A conversion is counted against the **click date**, and how long after that click it still
+counts differs by ad type — and, for SP, by store type. There is no parameter for this: the
+window is fixed per row and the metric name does not reveal it.
+
+| Ad type | Window | Attribution |
+|---|---|---|
+| **SP on a Seller profile** | **7 days** | click only |
+| **SP on a Vendor profile** | **14 days** | click only |
+| **SB** | 14 days | — |
+| **SD** | 14 days | **click + view combined** — `Sales` / `Conversions` include view-attributed conversions; SD also reports them separately |
+| **DSP** | **not fixed** — the advertiser's own click/view lookback setting | varies per advertiser |
+
+`get_user_authorized_context` returns `storeType` (`seller` / `vendor`), so the SP split is
+something you **can** determine before reporting - do it rather than assuming 7 days.
+
+**Three consequences you have to act on:**
+
+1. **Do not compare conversion efficiency across ad types as if it were like-for-like.** On a
+   Seller profile, SP's sales are counted over **7 days** and SB/SD's over **14**. The same
+   true performance therefore reads as a **higher ACOS and a lower ROAS on SP**. Any "SP vs SB
+   vs SD" ranking by ACOS / ROAS / CVR is partly an artefact of the window - say so, or compare
+   within one ad type.
+2. **Seller SP and Vendor SP are not comparable either** (7 vs 14 days). Do not pool them or
+   rank them against each other across profiles of different `storeType`.
+3. **SD's figures include a kind of conversion SP cannot have at all.** View-attributed
+   conversions exist on SD and not on SP, so SD's `Sales` is not just "a wider window" - it is
+   a different definition.
+
+Cross-check against Amazon's Reporting API v3 column definitions: v3 exposes `sales1d` /
+`sales7d` / `sales14d` / `sales30d` for SP and SB and lets the caller choose, while SD's
+`sales` is defined as "Total value of sales occurring within 14 days of an ad click **or
+view**" with `salesClicks` as the click-only variant. The platform picks one column per ad
+type; the table above is that choice. **Never quote an Amazon console figure as a
+cross-check without first establishing which window it was pulled on.**
 
 ### Derived ratio metrics
 | Metric | Formula |

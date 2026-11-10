@@ -14,7 +14,7 @@
 | `negativeTarget` | AdsListMetadataProvider | Negative product-target list (negative ASIN / negative brand) |
 | `portfolio` | AdsListMetadataProvider | Portfolio list |
 | `placement` | AdsListMetadataProvider | Placement list |
-| `aiGroup` | AiGroupMetadataProvider | AI managed group list. Response is a **projection of the currently effective config** — see SKILL.md |
+| `aiGroup` | AiGroupMetadataProvider | AI managed group list. Response is a **projection of the currently effective config** — see [`ai-group-effective-config.md`](ai-group-effective-config.md) |
 | `aiGroup_schedule` | AiGroupScheduleMetadataProvider | Schedules of **one** managed group — **requires exactly one `profileId` and `filters.aiGroupId` only**, ignores pagination/sorting |
 | `asin` | AsinMetadataProvider | ASIN product info (child ASIN + parent ASIN + product line, nested) |
 | `automationRule` | AutomationRuleMetadataProvider | Enabled rule-type codes/names for given campaign(s) — **requires `amazonCampaignId` in filters; does not return template configuration** |
@@ -83,19 +83,21 @@ When a customer needs the currency behind an `aiGroup` budget and you only have 
 
 **Money types are not uniform across entities - check the per-entity table.**
 
-- **Decimal strings** such as `"100.00"`: `dailyBudget`, `currentBudget`, `defaultBid`,
-  `targetBid`, `portfolioBudget`, `profileDailyBudgetCap`, and `placement.multiplier` (which
-  is a **percentage, not an amount**: `"50.00"` = +50%).
-- **Numbers**: the `keyword` entity's `keywordBid` and `keywordCurrentBid`. These are the
-  exception - do not assume the string form just because every other money field uses it.
-  ⚠️ **`keywordCurrentBid` can be `0` for an entire store.** Observed in production:
+- **Decimal strings** such as `"100.00"`: `targetBid`, `portfolioBudget`,
+  `profileDailyBudgetCap`, and `placement.multiplier` (which is a **percentage, not an
+  amount**: `"50.00"` = +50%). MCP passes these through unchanged.
+- **Numbers**: campaign `dailyBudget` / `currentBudget` and adGroup `defaultBid` - the
+  downstream sends decimal strings and MCP normalizes them to JSON numbers (a value that cannot
+  be parsed, e.g. `"N/A"`, is kept as the original string). The `keyword` entity's `keywordBid`
+  and `keywordCurrentBid` are numbers from the downstream already.
+  ⚠ **`keywordCurrentBid` can be `0` for an entire store.** Observed in production:
   76,257 keywords in one profile all reading `0.00` while `keywordBid` was populated
   normally, and a second profile where the two fields matched row for row. Treat `0` as
   "no value", never as a bid, and never filter on it (`keywordCurrentBid >= 0.01` silently
   empties such a store and looks exactly like "no keywords matched").
 
-MCP does not coerce either way. Parse the string form before doing arithmetic, and never
-compare those as strings (`"9.00" > "10.00"` is true as text).
+Parse the string form before doing arithmetic, and never compare those as strings
+(`"9.00" > "10.00"` is true as text).
 
 Internal ids are numbers (`campaignId`, `adGroupId`, `targetId`, `keywordId`, `portfolioId`,
 `aiGroupId`, `productAdId`); Amazon-side ids and `profileId` are strings - except on the
@@ -176,8 +178,9 @@ readability only.
 | targetingType | string | `auto` / `manual` |
 | costType | string | `cpc` / `vcpm` |
 | isAiCreate | int | `1` / `0` |
-| dailyBudget | string | Local-currency **decimal string**, e.g. `"100.00"` |
-| currentBudget | string | Decimal string. **Not the same field the write path adjusts** — budget writes and their previews are based on `dailyBudget`. **`0` is not a budget of zero**: it means no AI-adjusted value is recorded for the day. Never report "this campaign's budget is 0" from this field — read `dailyBudget` |
+| budgetType | string | `daily` / `lifetime`. **Sortable but NOT filterable** — it is the one campaign field where the two lists differ, so `orderBy` accepts it and `filters` rejects it. ⚠️ **SP rows store it blank** and the response falls back to `daily`; sorting uses the **stored** value, so those rows group together under the blank instead of sorting as `daily` — a sort by `budgetType` does not match the values you see |
+| dailyBudget | number | Local-currency amount, e.g. `100.00` (normalized from the downstream decimal string; an unparseable value stays a string) |
+| currentBudget | number | Same normalization as `dailyBudget`. **Not the same field the write path adjusts** — budget writes and their previews are based on `dailyBudget`. **`0` is not a budget of zero**: it means no AI-adjusted value is recorded for the day. Never report "this campaign's budget is 0" from this field — read `dailyBudget` |
 
 **Campaign ID contract:** `campaignId` and `amazonCampaignId` are different identifiers.
 Managed-group create/edit tools accept the internal integer `campaignId`. When starting
@@ -192,7 +195,23 @@ actually asked for, give `amazonCampaignId`. The same split applies to every ent
 Full convention, including the three exceptions, in
 [`platform-notes.md`](platform-notes.md) -> "Naming things in your answer".
 
-**⚠️ "How much budget is left today?" cannot be reliably answered from `dailyBudget`/`currentBudget` alone.** These are configuration values, not a live spend ledger, and can change intraday. Combining them with `get_ads_perf`'s today's-`Spend` doesn't produce a reliable real-time remaining-budget figure either, since that metric is subject to the T+2 processing delay (see PLATFORM_NOTES.md). Tell the user this can't be computed reliably rather than presenting a subtraction as if it were precise.
+**⚠️ "How much budget is left today?" - read `budgetUsage.remainingBudget`, not `dailyBudget`/`currentBudget`.** Those two are configuration values, not a live spend ledger, and subtracting `get_ads_perf`'s today's-`Spend` does not help either, since that figure is still accumulating through the day (see PLATFORM_NOTES.md → Data freshness). Query with `budgetUsageDateStart` = `budgetUsageDateEnd` = today and answer from `budgetUsage` (Amazon's own figure, refreshed each time another 5% of the budget is spent). When `budgetUsage` is null, tell the user it can't be answered reliably rather than presenting a subtraction as if it were precise.
+
+**Budget usage - only when `budgetUsageDateStart`/`budgetUsageDateEnd` are passed** (one nested `budgetUsage` object per row; neither filterable nor sortable; full rules in [`budget-usage.md`](budget-usage.md)):
+
+| Field | Type | Scope | Notes |
+|---|---|---|---|
+| currentBudgetUsagePercentage | number | current | Budget used so far, `25.15` = 25.15%. **Can exceed 100** - report Amazon's value as is |
+| remainingBudget | number | current | `budgetSnapshot × (1 - usage%)`, never below 0, row currency. Derives from the snapshot, **not** from `dailyBudget`, so it can be larger or smaller than the campaign's budget - seen live as a `$1.00` budget against `$97.95` remaining. Never combine it with `dailyBudget` / `currentBudget` |
+| budgetSnapshot | number | current | Budget Amazon recorded with the latest usage update, after budget rules - **not** the configured `dailyBudget`, and on an AI-managed campaign not close to it either (measured: `dailyBudget` `400.00` vs a `$3.11` snapshot). It also moves within a day as budget rules act, so two records of the same day can have different denominators |
+| budgetStatus | string | current | `inBudget` / `outOfBudget` (out = usage ≥ 100%). Budget state only - a **paused** campaign still reports `inBudget` |
+| usageUpdatedTime | string | current | `YYYY-MM-DD HH:mm` in `timezone`. For a daily budget with no update yet today it is that day's 00:00 with usage 0% |
+| lastOutOfBudgetTime | string / null | current | **Start** of the most recent out-of-budget period, `YYYY-MM-DD HH:mm` in `timezone`. `null` = no such record **in the last 30 days** (the retention window), not “never”; unaffected by the window you queried |
+| timezone | string | - | The profile's IANA timezone that all times above use |
+| inBudgetMinutes | number / null | window | Minutes in budget within the window. **Reconstructed, not measured** — rebuilt from the records Amazon sent plus fill-in rules (00:00 and 23:59 are synthesised when missing), so quote it as approximate; ~1 minute of per-day discrepancy is expected |
+| outOfBudgetMinutes | number / null | window | Minutes out of budget within the window. Same reconstruction caveat |
+| inBudgetPercentage | number / null | window | In-budget minutes ÷ **the whole selected window, its end capped at now** (not ÷ the time that has data). Days with no record count in the denominator, so **the pair does not sum to 100** and the shortfall is the no-data share. A campaign with little history is therefore diluted — **do not rank campaigns on this**, use the minutes |
+| outOfBudgetPercentage | number / null | window | Same denominator. **This is the field “which campaigns are capped most” tempts you to sort by, and sorting on it is wrong** whenever the campaigns differ in how much of the window they have data for. null on all four = no known period in the window, not 0 |
 
 **More campaign fields (also filterable):**
 
@@ -202,16 +221,17 @@ Full convention, including the three exceptions, in
 | campaignEndDate | **string — see date note below** | same; `""` when there is no end date |
 | portfolioId | number | **This is the AMAZON portfolio ID, not the internal one** — see "Joining campaigns to portfolios" below |
 | aiGroupId | number | — |
-| campaignAiFirstOnDate | string | — |
-| campaignAiLastOnDate | string | — |
-| campaignAiLastOffDate | string | — |
+| campaignAiFirstOnDate | string | Placeholder - always `""` for now; not sortable (orderBy is rejected) |
+| campaignAiLastOnDate | string | Placeholder - always `""` for now; not sortable (orderBy is rejected) |
+| campaignAiLastOffDate | string | Placeholder - always `""` for now; not sortable (orderBy is rejected) |
 
 **Audience fields — returned, filterable and sortable:**
 
 | Field | Type | Notes |
 |---|---|---|
-| audienceId | string | The audience bound to this campaign - either pool, custom AMC or Amazon-built. **`""` means no audience is bound** - the key is always present, never omitted. SP / SB only; on SD it is permanently `""` because SD supports neither audience pool |
+| audienceId | string | The audience bound to this campaign - either pool, custom AMC or Amazon-built. **`""` means no audience is bound** - the key is always present, never omitted. SP / SB only; on SD it is permanently `""` because the campaign-level audience binding is SP/SB-only - SD targets audiences at the target level (tactic `T00030`) instead, which this field does not reflect |
 | audienceBidPercentage | number | Bid uplift for that audience, `10` = +10%. **`0` does not mean "unbound"** - it is a legitimate value meaning "bound, no uplift". Unbound rows also carry `0`, so this field cannot tell the two apart |
+| audienceSegmentType | string | Audience pool: `SPONSORED_ADS_AMC` (custom AMC audience) or `BEHAVIOR_DYNAMIC` (Amazon-built audience). **May be empty** - treat empty or any other value as unknown and keep the pool-confirmation flow in SKILL.md |
 
 Both can be filtered and sorted on, and **the empty string is a real filter value, not "no
 condition"**: `{"audienceId": ""}` selects the campaigns with no audience bound. The
@@ -220,17 +240,17 @@ confirmed against the implementation and not yet written there - so reading the 
 would lead you to think it is sort-only.
 
 ⚠️ **`{"audienceId": ""}` alone is wrong** - it sweeps in every Sponsored Display campaign,
-whose `audienceId` is permanently `""` because SD supports neither audience pool. Always pair
-it with a `campaignType` filter.
+whose `audienceId` is permanently `""` because the campaign-level audience binding is SP/SB-only
+(SD targets audiences at the target level instead). Always pair it with a `campaignType` filter.
 
 The **enriched** audience fields - `audienceName`, `audienceType`, `proximityLevel`,
 `updateFrequence`, `autoUpdate`, `audienceCount` - are neither filterable nor sortable: MCP
 adds them after the list call, so the downstream has never seen them.
 
-**Is this campaign using an audience?** Test `audienceId != ""`. This covers both pools; the row does not say which one (see SKILL.md). Do not test for the key's
+**Is this campaign using an audience?** Test `audienceId != ""`. This covers both pools; `audienceSegmentType` may say which one, but it can be empty (see SKILL.md). Do not test for the key's
 presence (it is always there) and do not test `audienceBidPercentage` (0 is ambiguous). When a
 row does have an audience, the server also merges that audience's configuration into the same
-row - see "`entity: campaign` - audience configuration arrives on its own" in SKILL.md.
+row - see [`campaign-audience.md`](campaign-audience.md).
 
 
 **⚠️ Date fields: the JSON *type* is certain, the *format* is not.** **campaign** dates come back as **strings** and a live sample contained **both** `"20260101"` and `"2026-01-01"` - the format is not settled, and an empty string also occurs. **portfolio** dates come back as **numbers** in `YYYYMMDD` (`0` when unset). So the type is predictable per entity and the campaign format is not. **Never normalise by stripping the dashes**, and never assume one campaign row's format applies to the next. If you need to filter on a date field **for one known campaign**, read that campaign's row first and build the filter value in **the same JSON type and shape the response actually gave you** - and pin the filter to that campaign's id so it cannot be reused across a mixed set. **Across campaigns there is no safe server-side date filter on these fields**: page to the end and compare client-side. If you cannot read first, say the filter may not match rather than presenting an empty result as "none found". (`campaignAiFirstOnDate` / `campaignAiLastOnDate` / `campaignAiLastOffDate` are placeholder fields with no settled type at all - do not filter on them.) This is different from the `dateStart`/`dateEnd` request parameters on the other two tools, which use `YYYY-MM-DD`. This tool has no `dateStart`/`dateEnd` params of its own — these are just two ordinary campaign config fields that happen to hold dates — in whatever shape the downstream stored them, and **the shapes can be mixed within one result set**. Because a filter can only be written in one shape, **do not filter a date range on these fields across campaigns**: narrow with other filters, page to the end, then parse both shapes client-side.
@@ -275,7 +295,7 @@ client-side instead. See the date note below.
 | adGroupName | string | — |
 | adGroupState | string | `enabled` / `paused` / `archived` |
 | processStatus | string/null | This ad group's enriched delivery status, not its parent's. Selectable but **not filterable or sortable**; empty is unknown |
-| defaultBid | string | Local-currency **decimal string**, e.g. `"0.50"` |
+| defaultBid | number | Local-currency amount, e.g. `0.50` (normalized from the downstream decimal string; an unparseable value stays a string) |
 | sdBidOptimization | string | `clicks` / `conversions` / `reach` (SD only) |
 
 ### target
@@ -528,7 +548,7 @@ configuration output. Do not replace it with `aiPersonalityText` or append a per
   in AI mode are omitted from `aiAutomation` entirely; rules in Rule mode drop their
   AI-only parameters; and the whole set is first trimmed to what the `campaignType`
   supports. **An absent field means "not in effect", not "unset" and not "write failed".**
-  Full rules and the per-ad-type trim table are in SKILL.md — read them before reporting a
+  Full rules and the per-ad-type trim table are in [`ai-group-effective-config.md`](ai-group-effective-config.md) — read them before reporting a
   config or verifying a write.
 - **RBA rule configuration is readable.** For a rule in Rule mode, `aiAutomation.{ruleType}`
   carries its real conditions, actions, condition items, time periods, and (for dayparting)
@@ -601,7 +621,7 @@ just because it appears in the response.
 
 ### aiGroup_schedule (managed-group schedules)
 
-Schedules ("flights") of **one** managed group. Special calling contract — see SKILL.md and [`example-ai-group-schedule.md`](example-ai-group-schedule.md).
+Schedules ("flights") of **one** managed group. Special calling contract — see SKILL.md (`entity: aiGroup_schedule`, still in the entry point) and [`example-ai-group-schedule.md`](example-ai-group-schedule.md).
 
 **Request contract** (all enforced, all fail-closed):
 

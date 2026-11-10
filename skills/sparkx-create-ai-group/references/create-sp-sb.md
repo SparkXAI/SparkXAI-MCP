@@ -57,7 +57,8 @@ for a basic create. Exact field names are in `field-reference.md`.
 ## Action-space coupling rules
 
 Enabling an action-space switch usually requires sending its companion fields (dynamic
-budget -> numType+num; ranges -> min/max with min <= max). Word-list settings are not
+budget -> numType+num; ranges -> min/max with min <= max, except `bidRange` which needs
+min strictly < max). Word-list settings are not
 supported and must not be sent. The supported coupling rules are in the shared
 [`coupling-rules.md`](coupling-rules.md) - read it before enabling any `aiActionSettings`
 switch.

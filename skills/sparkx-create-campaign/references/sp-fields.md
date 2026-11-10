@@ -51,8 +51,9 @@ A user asking for 手动投放 wants `targetingType`, and may well want dynamic 
 Asking for 固定竞价 is what selects `biddingStrategy: "manual"`. Confusing the two silently
 sets the wrong thing and the call still succeeds.
 
-`ruleBased` exists on the **edit** tool but is **not accepted at creation** - create with one
-of the three above and switch afterwards if the user wants rule-based bidding.
+`ruleBased` is **not accepted at creation**, and the batch **edit** route no longer accepts it
+either (it does not create the rule conditions). Create with one of the three above; switching
+a campaign to rule-based bidding has to happen in the console.
 
 ### `siteRestrictions` is the 站点 / Sites radio
 
@@ -88,7 +89,7 @@ tool defaults to `MINIMIZE_SPEND`.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `campaignType` | string | yes | `sponsoredProducts`. `sponsoredBrands` is refused on this server; `sponsoredDisplay` has its own (unregistered) tool |
+| `campaignType` | string | yes | `sponsoredProducts` or `sponsoredBrands` - whichever this server has enabled; a disabled type is refused at the entry with an error listing the enabled ones. `sponsoredDisplay` is **not** valid here: it has its own tool, `create_sd_campaign`, registered only when SD is on. The rest of this file covers the SP fields; SB-specific rules are in [`create-sb-campaign.md`](create-sb-campaign.md) |
 | `name` | string | yes | max **128** characters. Must be unique for the profile - a clash returns "Duplicate name" |
 | `budget` | number | yes | daily budget, local currency. **Whole numbers only on JP** |
 | `startDate` | string | yes | `yyyyMMdd`. Must not be earlier than the shop's current date, evaluated in **the shop's own timezone** - not yours |

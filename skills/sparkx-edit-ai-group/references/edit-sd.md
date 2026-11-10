@@ -5,7 +5,7 @@ aiGroupIds, **max 20**).
 
 ## Two modes
 
-`edit_sd_ai_managed_group` behaves differently depending on whether `operation` is sent:
+`edit_sd_ai_managed_group` behaves differently depending on which of `operation` / `smartCreationName` is sent:
 
 - **Legacy full edit (`operation` omitted).** Every non-null field you send is applied
   to all groups in `ids`. Use this only for changing several settings at once. **For a
@@ -21,7 +21,49 @@ aiGroupIds, **max 20**).
   and three-state (`success` / `partial_failure` / `failed`) result handling. (SP/SB uses
   a different, `request`-wrapped shape.)
 
-The rest of this file documents the fields (used by both modes).
+- **Rename (`smartCreationName` provided).** A third, exclusive mode — see below.
+
+The rest of this file documents the fields (used by the first two modes).
+
+## Rename - `smartCreationName`, and nothing else
+
+Renaming an SD group is its own mode and **will not combine with anything**: `ids` must hold
+**exactly one** id, and no other update field, no `operation`, no `templateId` may be sent.
+Change other settings in a separate call.
+
+The name is trimmed, then must be **1-255 code points**, with **no control characters and no
+invisible formatting characters** (a zero-width space is rejected, not stripped - so a name
+pasted from a doc can fail for something you cannot see). It must be unique within the shop.
+
+**It works whether the group's AI is on or off**, and it is not a settings change in disguise:
+campaign budgets and the enabled/paused campaigns stay as they are. Archived campaigns still
+linked to the group are detached by the downstream as a side effect - mention that if the user
+is counting members.
+
+**Five up-front rejections, none of which change anything:**
+
+| Rejected when | Why it matters |
+|---|---|
+| the new name equals the current one | A no-op is an error here, not a silent success |
+| another group in the profile already uses the name | Unique per shop |
+| the group has **no enabled or paused campaigns** | An empty or all-archived group cannot be renamed at all |
+| the group is not in that profile, or is not SD | Wrong tool - SP/SB rename is not this parameter |
+| the current campaign budgets cannot be verified | Fail Closed: the rename re-sends the budget total, so an unverifiable budget blocks it |
+
+**Reading failures:**
+
+- A budget-shaped error from ai-center (`预算过低` / `预算至少…` / a `{min},{max}` range) means
+  **nothing was changed** - safe to retry.
+- Code **`124035`** is the one you must not retry blindly: **the rename may already have taken
+  effect.** Read the group back before doing anything else.
+- A duplicate name reuses the existing rename-conflict message.
+
+On success, `result` carries `aiGroupId`, `previousName` and `newName` - quote `previousName`
+back to the user, since a rename is otherwise invisible in later queries.
+
+⚠️ **The operation log only records the rename when the group's AI is on.** Renaming a group
+whose AI is off leaves **no log row**, so "who renamed this group" is unanswerable for those
+groups - say so rather than reporting that nobody did.
 
 ## Type fields decide which value field is valid - never mix
 

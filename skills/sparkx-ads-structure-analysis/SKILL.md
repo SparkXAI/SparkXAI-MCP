@@ -10,7 +10,7 @@ description: >-
   sparkx-weekly-ads-report / sparkx-monthly-ads-report / a lighter ad-hoc analysis skill), product-level diagnosis
   (use sparkx-product-diagnosis), or search-term diagnosis (use sparkx-search-term-diagnosis).
 metadata:
-  version: 1.1.6
+  version: 1.1.7
 ---
 
 # Ads Structure Analysis
@@ -73,6 +73,17 @@ Case 4's threshold exists because a silent multi-store aggregate can hide a sing
 
 **`campaignType`** (default) — `campaign.campaignType_` (`sponsoredProducts`/`sponsoredBrands`/`sponsoredDisplay`). A native dimension field; group directly via `select`.
 
+> ⚠️ **The ad types do not share an attribution window, so their efficiency metrics are not like-for-like — and this is the default breakdown of this skill.** On a **Seller** profile, SP conversions are attributed over **7 days** while SB and SD get **14**; on a **Vendor** profile SP also gets 14. SD's `Sales` additionally includes **view-attributed** conversions, which SP has none of. Same true performance, and SP still reads as **higher ACOS / CPA and lower ROAS / CVR**.
+>
+> So when `breakdownBy=campaignType`:
+>
+> - **Do not present an ACOS / ROAS / CVR / CPA ranking across ad types as an efficiency ranking.** Part of the gap is the window. Spend and Sales **share** are unaffected and stay comparable - lead with those.
+> - **State the windows in the report** whenever an efficiency column spans ad types. Read `storeType` from `get_user_authorized_context` to get SP's right (`seller` → 7 days, `vendor` → 14).
+> - **Never recommend shifting budget away from SP purely because its ACOS is higher than SB's or SD's.** That is the single most likely wrong call this breakdown can produce. Compare SP against SP over time, or say explicitly that the cross-type gap is not decision-grade.
+> - A multi-store run that mixes Seller and Vendor profiles has **two different SP windows inside one SP row**. Split by `storeType` or say so.
+>
+> Full table and the Amazon Reporting v3 cross-check: `get_ads_perf`'s field reference → "The attribution window is not the same for every ad type".
+
 **`marketplace`** — `profile.countryCode_`. Only meaningful when `profileIds` spans multiple countries; if it's a single-country selection, say so and suggest `campaignType` or `portfolio` instead of producing a one-row "breakdown."
 
 **`portfolio`** — `portfolio.portfolioId_`, displayed via `portfolio.portfolioName_`. Rows with no portfolio must be grouped as an explicit "no portfolio" bucket, not silently dropped from the total.
@@ -86,7 +97,7 @@ Constraints you must respect and disclose:
 - **7-day window per call, not 30 or 90.** This breaks the skill's default trailing-30-day window: either narrow to ≤7 days, or split the requested window into contiguous ≤7-day calls and aggregate hour-of-day across all chunks. Call it a **sample** only when you deliberately cover a subset (for example, the latest 14 of 30 days), and disclose that subset. If every day is covered by non-overlapping chunks, describe it as a split full-window query, not sampling.
 - **Averaging**: divide each hour's totals by the number of *days* covered, not the number of rows.
 - **No AI columns.** Hourly campaign data returns AI metrics as placeholders (`AISpend`/`AISales` = 0, `AIACOS`/`AIROAS` = null), so an hour-of-day table cannot split AI-managed vs manual spend; leave AI columns out and say so if the user asks.
-- **Recent hours are provisional, not missing.** Hourly rows appear ~2 hours after the hour ends, but conversions are backfilled onto them afterwards, and **when an hour stops changing is undocumented** — T+2 is the daily pipeline's figure and should not be quoted as the hourly settling time. Label the trailing hours provisional, say the final window can't be confirmed, and re-pull before treating them as final, rather than reporting a fake evening collapse.
+- **Recent hours are provisional, not missing.** Hourly rows appear ~2 hours after the hour ends, but conversions are backfilled onto them afterwards, and **when an hour stops changing is undocumented** — conversions attach to the click hour for as long as the ad type's attribution window runs (7-14 days), so do not quote any single settling figure. Label the trailing hours provisional, say the final window can't be confirmed, and re-pull before treating them as final, rather than reporting a fake evening collapse.
 - **Hour labels are store-local** (the profile's IANA `timezone` from `get_user_authorized_context`, not UTC - see `sparkx-query-ads-performance`'s hourly/AMS example). Say so when you name an hour, and treat a daylight-saving changeover day as ambiguous.
 
 **What you can actually change after reading an hourly pattern.** Finding a dead window is
@@ -178,9 +189,9 @@ the user gives one (Step 4).
 
 ### Step 1 · Define the Analysis Window
 
-Default: trailing 30 days ending yesterday (T+2 delay — see below). If the user gives an explicit range, use it, but confirm it satisfies `get_ads_perf`'s 90-day max span and 15-month lookback before issuing the call — if it doesn't, split into multiple ≤90-day calls per the standard procedure (see `sparkx-query-ads-performance`'s aggregation-over-time example) rather than sending an oversized request.
+Default: trailing 30 days ending yesterday (the current store-local day is still accumulating; see below). If the user gives an explicit range, use it, but confirm it satisfies `get_ads_perf`'s 90-day max span and 15-month lookback before issuing the call — if it doesn't, split into multiple ≤90-day calls per the standard procedure (see `sparkx-query-ads-performance`'s aggregation-over-time example) rather than sending an oversized request.
 
-**T+2 data-delay check**: if the window's end date is within 2 days of today, note that the most recent day(s) may not have finished processing yet.
+**Data-maturity check**: traffic and spend are final for any day already past in the store's timezone, but **conversion metrics for the last 7-14 days are still being attributed** (window depends on ad type - see `get_ads_perf`'s field reference). Say which part of the window is provisional; do not imply a 2-day buffer makes it final.
 
 ### Step 2 · Pull Data
 
@@ -380,7 +391,7 @@ answer".
 # 广告结构分析 · {profile_name}
 **维度**：{campaignType / marketplace / portfolio / dayOfWeek / hourOfDay / campaignTier}
 **周期**：{dateStart} ~ {dateEnd}
-{If data may be incomplete due to T+2 delay, or a section is based on a partial sample, note it here}
+{If conversion figures for the window are still maturing, or a section is based on a partial sample, note it here}
 
 ## 一、结构占比
 

@@ -2,10 +2,23 @@
 
 ## The tools
 
-`create_sp_sb_campaign` batch-creates Sponsored Products campaigns and their children.
-`create_sp_ad_group` adds ad groups to existing SP campaigns; it is non-atomic and has its
-own recovery contract in `create-sp-ad-group.md`. `create_sd_campaign` exists in the codebase
-but is **not registered on this server**, so it will not appear in your tool list.
+Six tools, and **which of them exist depends on this server's configuration** - each ad type
+can be turned on or off per deployment. Read your own tool list; do not assume one is there
+because this file names it.
+
+| Tool | Creates | Atomic? |
+|---|---|---|
+| `create_sp_sb_campaign` | new SP or SB campaigns with their children | yes, whole batch |
+| `create_sd_campaign` | new SD campaigns with their children | campaign side yes; **creatives are a separate step and are not rolled back** |
+| `create_sp_ad_group` | ad groups under an existing SP campaign | no |
+| `create_sb_ad_group` | ad groups under an existing SB campaign | no |
+| `create_sd_ad_group` | ad groups under an existing SD campaign | no |
+| `create_portfolio` | one portfolio | single write, **not idempotent** |
+
+SP and SB share `create_sp_sb_campaign`, so a disabled type cannot be hidden by skipping
+registration: it is refused at the entry with an error listing the enabled types. The other
+four tools simply are not registered when their type is off. Each non-atomic tool has its own
+recovery contract in its own reference file.
 
 ## Auth & scope
 
@@ -43,8 +56,43 @@ Success:
 `result` is the list of **internal** campaign ids, in the order you sent the campaigns. There
 is no per-object detail beyond that — no ad group ids, no child ids, no Amazon ids.
 
-Failure comes back in one of two shapes, depending on whether the tool or the surrounding
-pipeline rejected it:
+⚠️ **A third shape exists: `service_unavailable`** — and it is now narrower than it looks.
+Binding an AMC audience makes the server verify that audience against its pool before writing
+anything. **Three outcomes map to two `errorType`s, and telling them apart is the whole
+point** - two of them are answers, only one is a failure:
+
+| What happened | `errorType` | What to do |
+|---|---|---|
+| The pool is **empty** - the store has no audience at all for that `campaignType` + `audienceSegmentType` | **`invalid_params`** (`...has no audience for...`) | **Resending the same request will never work.** Use a different `audienceSegmentType` or store, or drop the audience fields |
+| The pool is **not empty**, but your `audienceId` is not in it | **`invalid_params`** (`...was not returned for...`) | **Re-query `get_entity_metadata(entity='amcAudience')` for that *same* profile / campaignType / pool and use the pair it returns.** The right audience may well be in the same store and the same pool - do not switch pools, and do not infer one. If the audience worked before, the lookup is worth retrying |
+| The lookup **failed** - call errored, non-success code, null or malformed data | `service_unavailable` | Unknown. Retry once |
+
+This split is reliable because the downstream signals failure with a non-success code rather
+than an empty list, so "succeeded and returned nothing" genuinely means the pool is empty.
+
+- **Nothing was created in any of the three cases.** The check runs before any write, and
+  neither an empty pool nor an unknown id lets the write through.
+- **The two `invalid_params` cases are not interchangeable - read the message.** `has no
+  audience for` means the pool is empty and nothing you send will fix it; `was not returned
+  for` means the pool has audiences and yours is not among them, so the fix is a fresh
+  `amcAudience` lookup on the **same** profile / type / pool. Treating the second as the first
+  sends you switching stores for an audience that was one query away.
+- **Never quietly switch pools in either case.** Picking the other pool on the user's behalf
+  changes what the campaign targets; ask.
+- **On `service_unavailable`: your parameters are probably not the cause.** Do not start editing
+  the audience id. Retry once; if it persists, call
+  `get_entity_metadata(entity='amcAudience')` with that exact `profileId`, `campaignType` and
+  `audienceSegmentType` and see what actually comes back before saying anything to the user.
+- **Only the third case (`service_unavailable`) is "we don't know".** Both `invalid_params`
+  cases are definite answers with a definite next step. Earlier guidance said an empty result
+  and a failed query were indistinguishable here - that is no longer true, so never hedge an
+  `invalid_params` as if it might be a transient failure.
+
+`service_unavailable` also covers an unavailable asset library on
+`get_entity_metadata(entity='asset')`; see that skill's platform notes for the full list.
+
+Failure comes back in one of three shapes. Two of them depend on whether the tool or the
+surrounding pipeline rejected it:
 ```json
 { "isError": true, "errorType": "invalid_params", "message": "<message>",
   "recoveryHint": "<hint, if any>" }

@@ -9,7 +9,7 @@ description: >-
   "月度复盘", "这个月表现如何", "monthly report". Not for weekly recaps (use sparkx-weekly-ads-report) or
   quarterly/QBR-level strategic review (use quarterly-ads-report, not yet built).
 metadata:
-  version: 1.2.2
+  version: 1.2.3
 ---
 
 # Monthly Ads Report
@@ -135,7 +135,7 @@ All three windows are single calendar months (28-31 days) — comfortably within
 
 **⚠️ Check the YoY lookback against the 15-month cap.** Same-month-last-year reaches back up to 13 months from "this month" (1 month for MoM + 12 more for YoY) when `month` defaults to last month — comfortably within the 15-month lookback. But if the user explicitly requests a `month` further in the past, recompute the actual YoY lookback distance and confirm it's still ≤15 months before issuing the call; if it isn't, say so explicitly rather than silently returning an error or omitting the YoY column without explanation.
 
-**T+2 data-delay check**: if `month` is very recently completed (e.g. the report is generated on the 1st-2nd of the following month), the last day or two of that month's data may not have finished processing. Check how many days have elapsed since the month ended; if fewer than 2, add an explicit note that the month's final days' figures may still shift slightly.
+**Data-maturity check**: spend and traffic for a finished month are final. **Conversions are not**: a sale counts against its click date and can land up to 7 days (SP on Seller) or 14 days (SP on Vendor, SB, SD) later, so a report generated in the first two weeks after month end still has an immature tail — roughly the month's last week on a 7-day window, its last fortnight on a 14-day one. Say which part of the month is still provisional and that `ACOS` will tend to fall as sales backfill. **MoM is the trap**: the baseline month has fully matured and the reported month has not, so a small apparent decline may be nothing but the window.
 
 ### Step 2 · Pull Data
 
@@ -319,7 +319,7 @@ Remember: **the section headers and labels below are structural placeholders (sh
 # Monthly Ads Report · {profile_name}
 **Month**: {month} ({day_count} days)
 **Baseline**: {MoM / YoY / both}
-{If data may be incomplete due to T+2 delay, or day-count differs from the baseline month, note it here}
+{If conversion figures are still maturing, or day-count differs from the baseline month, note it here}
 
 ## 1. Monthly KPI Overview
 

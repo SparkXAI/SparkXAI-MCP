@@ -4,21 +4,43 @@
 
 ### entities
 
-Entity types (use carefully):
-- `campaign` - campaign
-- `adGroup` - ad group
-- `target` - targeting/keyword
-- `placement` - ad placement
-- `portfolio` - portfolio
-- `profile` - store
-- `aiGroup` - AI managed group
-- `productAd` - product ad
-- `audience` - audience targeting. ⚠️ **Currently returns 0 rows for every query** (verified in production). Until that is fixed, do not read an empty `audience` result as "no audience changes" — it carries no information at all. Say the audience history could not be read. Also excluded from the default "all entities" scan — must be requested explicitly.
+**The accepted set is exactly these eight.** Values are case-insensitive and normalised to the
+spelling below. Any other value - including `keyword`, `audience` and `productLine` - is rejected
+with `invalid_params`, and the error lists the valid values.
+
+| `entities` value | What lands here |
+|---|---|
+| `campaign` | campaign-level changes (budget, state, bidding strategy, dates) |
+| `adGroup` | ad group changes |
+| `target` | **all targeting, keywords and audiences included** - keyword add / pause / enable / archive / bid, keyword groups, negative keywords, product, category and audience targets (`AudienceId Changed`, `AudienceBidPercentage Changed`) |
+| `placement` | **all placement bid adjustments** - top of search, product page, rest of search, home, detail page, other |
+| `productAd` | promoted product changes |
+| `portfolio` | portfolio changes, including a campaign's portfolio membership (`Portfolio Changed`) |
+| `profile` | store-level changes |
+| `aiGroup` | AI managed group changes (a separate downstream query, not one of the ad-log operation types) |
+
+⚠️ **`keyword` is NOT an `entities` value.** It is easy to assume it is, because `keyword`
+*is* a valid `idEntity` under `resourceIds` (see below) - the two parameters do not share a
+vocabulary. Keyword operations are all recorded under `target`. To read keyword history use
+`entities: ["target"]`, and narrow with `targetTypes` or `operationType` if you need only the
+keyword rows. `targetTypes: ["keyword"]` is a substring match and also hits Keyword Group and
+Negative Keyword operations.
+
+⚠️ **`audience` is NOT an `entities` value either.** Audience targets and most audience changes
+are logged under `target`; use `entities: ["target"]` and narrow with `operationType`.
+
+⚠️ **Placement adjustments and portfolio membership do not come back under `campaign`.** They
+describe a campaign and their payload even carries `"entity": "CAMPAIGN"`, but they are
+classified as `placement` / `portfolio`, so `entities: ["campaign"]` structurally cannot return
+them. "Has this campaign's placement modifier been touched?" asked with `entities: ["campaign"]`
+gets a confident, wrong "no". Query `placement` (optionally with `resourceIds` scoped to the
+campaign), or leave `entities` unset. When `entities` contains `campaign` but not `placement`,
+`meta.hint` says so.
 
 **Important**: entities strictly filters only direct operations on that entity type.
 - User says "what operations on this campaign" -> **do NOT** set entities
 - User says "only campaign-level operations themselves" -> set `entities: ["campaign"]`
-- Default (omitted) queries all entity types **except `audience`**
+- Default (omitted) queries all eight values above
 
 ### resourceIds
 
@@ -71,7 +93,7 @@ Operator filter. Always pass an object with explicit `operator` and `values`:
 ```json
 {"operator": "IN", "values": ["ai", "automation"]}
 ```
-Use `"operator": "NOT_IN"` to exclude values instead.
+⚠ **`NOT_IN` is rejected** for `changeBy` (`invalid_params`): excluding operators would also drop every change made by a named user. To get "everything except AI", omit `changeBy` and classify the returned `changedBy` yourself.
 
 Valid values:
 | User says | Value |
@@ -385,7 +407,8 @@ Placement type filter. Narrows placement operations to specific placement types.
 | createdDate | string | Operation timestamp, `yyyy-MM-dd HH:mm:ss`. **⚠️ Timezone is not fixed** — SP/SB `aiGroup` rows are UTC, SD `aiGroup` rows use the downstream DB's timezone (undocumented, so they cannot be labelled at all); `campaign`/`adGroup`/`target`/`placement` rows are **store-local when you pass one `profileId`** and **UTC when you pass several**. Verified 2026-08 on a US (`America/Los_Angeles`) profile: the same pause record returned `2026-08-24 00:01:06` for one profileId and `2026-08-24 07:01:06` for two. Always label the zone, never merge single- and multi-profile results, and remember a mixed-entity response can contain both clocks in one time-sorted list (so it is not reliably chronological). See SKILL.md → "createdDate Timezone" |
 | changedBy | string | Who made the change, as a **display value** - `AI`, `Manual`, `Automation`, `AI-Custom Rule`, `Budget Management`, `Lock Ranking`, `Amazon Console`, `API`, `Labels`, `System` - or a platform user's **email**. These are not the lowercase `changeBy` filter values; see the `changeBy` note above |
 | aiGroupScheduleId | long | Schedule ID (present on aiGroup-related logs) |
-| operationSource | string | Which surface the change was made from (`MCP`, `PAGE`, `FEISHU`, and older values such as `platform` / `automation`). **Read-only and not filterable**; `null` means not recorded, not "manual" - see the section below |
+| operationSource | string | Channel: `PAGE` / `MCP` / `FEISHU`, `null` when unknown. **On ad-entity rows the only non-null value is `MCP`** - everything else is `null`, so an ad row never says `PAGE` or `FEISHU`. Managed-group rows carry the recorded channel. `null` means not recorded, not "manual" - see the section below |
+| sourceType | string | Where the change was made, lowercase: `platform`, `amazon`, `system`, `automation`, `budgetmanagement`, `intelligentoptimization`, ... `null` when the downstream stored nothing. Managed-group rows are always `platform`. ⚠️ **An MCP ad row also reads `platform` here** - the MCP channel is reported in `operationSource`, not in `sourceType`, so you cannot separate console changes from MCP changes by reading `sourceType` |
 
 ---
 
@@ -394,9 +417,10 @@ Placement type filter. Narrows placement operations to specific placement types.
 This field says which surface an operation came from: the web console, MCP, Feishu, and so on.
 It is useful, but it has three properties that make a naive reading wrong.
 
-**1. It is read-only. There is no filter for it.** `get_operation_log` takes no source
-parameter, so "show me only the changes made through MCP" cannot be pushed down - pull the rows
-and group them client-side, and say that is what you did.
+**1. There is now a filter, and it is narrower than it looks.** `operationSources` pushes the
+channel down, but what it can actually express is limited - see
+"`operationSources` - the channel filter" in SKILL.md before reaching for it. For anything the
+filter cannot express, pull the rows and group them client-side, and say that is what you did.
 
 **2. MCP's own writes are tagged, including managed groups.** Every write path this server
 offers stamps the source on the request, so a change you made through MCP comes back as `MCP` -
@@ -414,17 +438,21 @@ as no information: don't read it as manual, as console, or as "not MCP". If the 
 on who made a change, use `changedBy` - that field is populated far more consistently - and use
 `operationSource` to say *where from* once you already know *what* happened.
 
-**3. The values are not a closed set.** The field carries whatever the downstream stored, and
-two vocabularies share it: the older `platform` / `amazon` / `automation` / `recommendations`
-(*where* the change originated) and the newer `MCP` / `PAGE` / `FEISHU` (*which surface inside
-the platform*). A row reading `automation` tells you a rule made the change but not which
+**3. The two vocabularies are now two fields.** They used to share one key. `operationSource`
+carries only the channel (`MCP` / `PAGE` / `FEISHU` or `null`); the older *where it originated*
+vocabulary - `platform` / `amazon` / `automation` / `budgetmanagement` /
+`intelligentoptimization` / ... - moved to its own `sourceType` field, lowercased so that
+`Automation` and `automation` no longer read as two values. Neither field is a closed set; read
+whichever answers the question, and do not expect a value from one to appear in the other. A
+row reading `automation` tells you a rule made the change but not which
 surface configured it. Report the value you got; don't map it onto a list of your own, and
 don't assume a value you haven't seen is impossible.
 
 **What it is good for**, within those limits: saying which surface a change came from once
 you have the row, and separating rule-driven rows from human ones alongside `changedBy`.
-**What it is not good for**: filtering (there is no parameter), counting usage across a
-period (older rows carry no source, so any total is a floor), or any claim that rests on
-`null` meaning something.
+Filtering **is** possible now, through `operationSources`, but only for the channels it
+supports and with the caveats in SKILL.md - it is not a free-form source filter.
+**What it is not good for**: counting usage across a period (older rows carry no source, so
+any total is a floor), or any claim that rests on `null` meaning something.
 
 **Enum i18n**: When presenting enum values to the user or translating between API values and display labels, consult [`enum-i18n.md`](enum-i18n.md) for the complete ZH/EN/JA mapping of all enum fields documented above.

@@ -4,13 +4,14 @@ description: >-
   Modify an EXISTING AI managed group (托管组) for Amazon Sponsored ads - change target
   ACOS/ROAS, budget, turn its AI on/off, personality, adjust SP/SB campaign membership, and
   the AI action space (bid / budget / target / structure optimization) - for one group or
-  many at once (bulk). Use when the user wants to modify / adjust / 修改 / 调整 / 批量改 an
-  existing group's settings or automations, or asks how a group should be set up (suggests a
+  many at once (bulk). Use when the user wants to modify / adjust / rename / 修改 / 调整 / 改名 / 批量改 an
+  existing group's settings or automations (SD groups can be renamed via `smartCreationName`;
+  托管组改名 / 重命名托管组), or asks how a group should be set up (suggests a
   matching platform template - optional). SD uses edit_sd_ai_managed_group; SP/SB uses
   save_sp_sb_ai_managed_group (edit mode). Not for creating a group (use sparkx-create-ai-group)
   or deleting one (use sparkx-delete-ai-group).
 metadata:
-  version: 1.2.4
+  version: 1.2.5
 ---
 
 # Edit AI Managed Group
@@ -24,7 +25,7 @@ the platform UI's validation, so you must enforce the front-end-only rules yours
 
 | Ad type | Tool | Reference |
 |---|---|---|
-| **SD** | `edit_sd_ai_managed_group` (takes an `ids` array - inherently batch, max 20) | [`references/edit-sd.md`](references/edit-sd.md) |
+| **SD** | `edit_sd_ai_managed_group` (takes an `ids` array - inherently batch, max 20). **Renaming is SD-only**, via `smartCreationName`, and is an exclusive mode: exactly one id, nothing else sent | [`references/edit-sd.md`](references/edit-sd.md) |
 | **SP / SB** | `save_sp_sb_ai_managed_group`: `aiGroupId > 0` for one group; `operation + ids` for batch | [`references/edit-sp-sb.md`](references/edit-sp-sb.md) |
 
 Outside batch mode, `aiGroupId = 0`/empty means create (that's sparkx-create-ai-group) and a
@@ -147,6 +148,15 @@ new value.
 3. **Build a partial update - only the fields you're changing** (only once the mapping is
    unique). Both tools take partial input (SP/SB fills the rest from current config; SD
    applies the non-null fields to the `ids`). Don't resend unchanged fields.
+
+   ⚠️ **One exception: the range blocks inside `aiActionSettings`.** This server only
+   back-fills the word-list nodes (`targetOptimization` / `brandOptimization`) from the
+   current config - `bidOptimization` is built from your input alone, so a field you leave out
+   is simply absent from the payload. A customer editing only the bid range found the
+   **placement ranges reset to Off**. Until that is settled, **send the whole
+   `bidOptimization` block you want to end up with** whenever you touch any part of it: the
+   switches *and* every `tos*` / `pdp*` / `ros*` / `btb*` / `bidRange` value you want kept.
+   Read them off the current config first.
 4. **Self-validate the front-end-only rules MCP bypasses** (see references):
    - **ACOS / ROAS / Budget type are mutually exclusive** - the `*Type` decides which
      value field to send; sending the wrong companion (or both) fails. See
@@ -164,7 +174,8 @@ new value.
      batch `actionSpaceIntensity` where those are in use; the wrong form is rejected
      before any write, and **omitting personality entirely is the right move when the
      user didn't ask to change it**. See [`references/ai-personality.md`](references/ai-personality.md).
-     Name not blank; any range min <= max; coupled switches carry their companion fields.
+     Name not blank; ranges min <= max, **but `bidRange` needs min strictly < max**;
+     coupled switches carry their companion fields.
    - **The backend now rejects invalid values - pre-validate anyway** for a clear error
      instead of a downstream one (prod-confirmed): `acos`/`roas` out of range
      (incl. `0`, negative, over-limit), `aiPersonality` outside `1`-`5`, `remark` over
@@ -174,9 +185,10 @@ new value.
      `budget > 0`, `budgetRatio <= 10000`, dynamic-budget `num > 0` (`numType=1` <= 1000,
      `numType=2` <= 100000), and action-space ranges (placement/B2B `0`-`900`). Don't lean
      on the backend for these. **`bidRangeType=1` is the one exception - do not bound it at
-     all.** Its unit is unconfirmed (the UI looks coefficient-like, `0.5`-`1.13`), so the old
-     `0.01`-`100` "percentage" check would reject legal values and wave through illegal ones;
-     pass what the user gave and say the unit is unconfirmed. See
+     all.** It is a **bid coefficient** (`1.15` = 1.15x the base bid), not a percentage, so the
+     old `0.01`-`100` "percentage" check would reject legal values and wave through illegal
+     ones. Never convert a percentage into it: "-50% to +15%" is `[0.5, 1.15]`, and `[-50, 15]`
+     would store a 0x-15x range. A lower bound below `0` is silently clamped to `0`. See
      [`references/coupling-rules.md`](references/coupling-rules.md).
    - **Word-list settings are not supported.** Do not send branded, non-branded,
      competitor, harvest-blacklist, or negative-target-blacklist fields, even if the

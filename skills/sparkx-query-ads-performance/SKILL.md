@@ -9,7 +9,7 @@ description: >-
   hourly data, by hour, intraday, AMS, Amazon Marketing Stream, keyword placement,
   vendor, seller, distributorView, sellingProgram, shipped revenue, ordered revenue, TACOS
 metadata:
-  version: 1.4.9
+  version: 1.4.10
 ---
 
 # Query Ads Performance Skill
@@ -94,7 +94,7 @@ Auxiliary tables for joining and aggregating — referenced via `select`/`filter
 | profileIds | array[long] | **Yes** | — | Profile IDs from `get_user_authorized_context` -> `profiles[].profileId`. **All must be authorized** — one unauthorized value fails the whole call |
 | factEntity | string | **Yes** | — | Fact entity type. Enum: `campaign` / `adGroup` / `target` / `searchTerm` / `placement` / `productAd` / `asin` / `keywordPlacement` / `campaignAudience` |
 | dateStart | string | **Yes** | — | Start date `YYYY-MM-DD`. Max span vs `dateEnd` is 90 inclusive calendar days (see platform-notes.md for the precise off-by-one-safe definition) — **7 days for hourly/AMS queries**; cannot be more than 15 months before today |
-| dateEnd | string | **Yes** | — | End date `YYYY-MM-DD`. Default to yesterday if user gives no end date (T+2 data delay) |
+| dateEnd | string | **Yes** | — | End date `YYYY-MM-DD`. Default to yesterday if user gives no end date (the current store-local day is still accumulating). Note that yesterday is final for traffic/spend only - conversions keep accruing for 7-14 days, see Conversion metrics in the field reference |
 | metrics | array[string] | **Yes** | — | Metric fields (non-empty). Must be valid for the chosen `factEntity` — see Metrics × Entity Support Matrix below |
 | userContext | string | **Yes** | — | User's original query + reason, max 100 chars |
 | select | array[string] | No | [] | Dimension fields, format `entity.field_`; omit for global aggregate (no grouping). **The response returns the plain name** (`asin.asin_` in, `asin` out) — request and response are not symmetric, see below. **`campaignAudience` reads this as an output field whitelist of bare names instead** — see that section |
@@ -103,7 +103,7 @@ Auxiliary tables for joining and aggregating — referenced via `select`/`filter
 | orderBy | array[object] | No | [] | `[{"field": "Spend", "direction": "DESC"}]` (direction ASC or DESC, default DESC) |
 | page | int | No | 1 | Page number (1-based). **`page` ≤ 0 is an error**, not a fallback to 1 |
 | pageSize | int | No | 100 | Rows per page, **max 500**. **Out of range (≤0 or >500) is an error**, not clamped — floor any computed value at 1 |
-| queryType | string | No | — | Meaningful only for `factEntity: target` (semantically required there: `keyword`/`product`/`auto`) and `factEntity: searchTerm` (optional — `keyword`/`product` filter to that source, `auto` errors, **omitting it returns everything, manual + Auto mixed**). On any other `factEntity` (e.g. `campaign`) it's accepted but silently has no effect — verified, not an error |
+| queryType | string | No | — | Meaningful only for `factEntity: target` (semantically required there: `keyword`/`product`/`auto`) and `factEntity: searchTerm` (optional — `keyword`/`product` filter to that source, `auto` errors, **omitting it returns everything, manual + Auto mixed**). **On any other `factEntity` it is now REJECTED**, not ignored: `Parameter 'queryType' is only supported for factEntity in [target, searchTerm]; omit it for factEntity=<x>`. It used to pass silently, so a call that worked before can start failing — drop the parameter rather than changing `factEntity` to match it. Fact sources with their own provider, such as `campaignAudience`, reject it with their own message instead |
 | timeGranularity | string | No | daily | `daily` / `hourly`. **`hourly` is only valid with `factEntity: campaign`**; any other value or entity combination is an error. See Hourly / AMS Data below |
 | language | string | No | **en** | Enum translation language: `zh` / `en` / `ja`. An unrecognized value silently falls back to `en`, so set it explicitly to match the user's language |
 
@@ -302,8 +302,8 @@ Hour-level data comes from Amazon Marketing Stream (AMS) and is reachable two wa
 
 - **Select `hour` explicitly.** `timeGranularity: "hourly"` changes the source table but does not inject an hour grouping into the response. For an intraday curve, include both `date` and `hour` in `select`; omitting `hour` aggregates the hourly source back to the remaining selected dimensions.
 - With `hour` selected, rows carry `hour` (0-23) alongside `date`; group by it to build an intraday curve, and remember each row is one hour of one day — averaging hours across days requires you to divide by the number of days, not the number of rows.
-- **Hourly rows arrive fast, but they are not final.** First data for an hour shows up roughly **~2 hours** after that hour ends (confirmed 2026-08) — far sooner than the daily pipeline's T+2. Conversions keep being backfilled onto earlier hours after the row exists, so treat recent hours as **provisional rather than incomplete**: readable immediately, possibly revised upward later, and a trailing dip may be backfill-in-progress rather than a real decline. Re-pull before treating them as final.
-  **What is *not* established: when an hour stops changing.** That window is undocumented, and **T+2 is the daily pipeline's figure — there is no evidence it is also the point at which hourly attribution completes.** Don't quote T+2 as the hourly settling time in either direction: the honest statement is "first data in about two hours, backfilled afterwards, final window unknown." If a decision depends on the numbers being final, say the window can't be confirmed.
+- **Hourly rows arrive fast, but they are not final.** First data for an hour shows up roughly **~2 hours** after that hour ends (confirmed 2026-08) — far sooner than the daily table settles for the same day. Conversions keep being backfilled onto earlier hours after the row exists, so treat recent hours as **provisional rather than incomplete**: readable immediately, possibly revised upward later, and a trailing dip may be backfill-in-progress rather than a real decline. Re-pull before treating them as final.
+  **What is *not* established: when an hour stops changing.** That window is undocumented. Conversions attach to the click hour for as long as the ad type's attribution window runs (7-14 days), so an hour can still move days later. Don't quote any single settling figure: the honest statement is "first data in about two hours, backfilled afterwards, final window unknown." If a decision depends on the numbers being final, say the window can't be confirmed.
 - **AI metrics don't exist at hourly granularity on either path.** On `factEntity: campaign` + `timeGranularity: hourly`, `AISpend`/`AISales` come back `0` and `AIACOS`/`AIROAS` come back `null` - placeholders, the same as on `keywordPlacement` below. Real AI values are daily-only: for an AI-vs-manual split, query daily. The hourly campaign metric set is also a subset of the daily one (no DPV, video or impression share) - see `references/field-reference.md`.
 - **Request and response names differ everywhere, not just on `keywordPlacement`.** `select` takes the qualified form `entity.field_` (`asin.asin_`, `campaign.campaignName_`); the rows come back keyed by the **plain** name (`asin`, `campaignName`). This is normal, not a sign the example is wrong — but it does mean you cannot echo a `select` entry straight back as a response key, and a reader comparing a documented example against a live result will see two different spellings of the same field.
 - `keywordPlacement` uses an asymmetric field naming convention (bare names in the request, `_`-suffixed keys in the response) — see Field Naming Rules.
@@ -460,7 +460,7 @@ On error, the response instead follows the shared error envelope described in Pl
 - User says "ASIN" -> default to child ASIN, use `asin.asin_`
 - Max date span 90 days on the `dateStart`/`dateEnd` request itself, max lookback 15 months — split longer windows into multiple ≤90-day calls first; week/month aggregation only reduces row count within each call, it does not raise the 90-day cap
 - `dateStart`/`dateEnd` request params use `YYYY-MM-DD`; the `date` field returned in rows uses `YYYYMMDD` — don't mix them
-- Default `dateEnd` to yesterday when unspecified (T+2 data delay)
+- Default `dateEnd` to yesterday when unspecified (the current store-local day is still accumulating; conversions for recent days remain provisional)
 - Always mind data volume to avoid query timeout
 - `groupBy` is auto-filled from raw dimension fields in `select`; only pass it explicitly when `select` contains a custom aggregate expression
 - Multi-profile queries auto-normalize monetary metrics to USD, **except** `asin.asinPrice_` which stays local currency

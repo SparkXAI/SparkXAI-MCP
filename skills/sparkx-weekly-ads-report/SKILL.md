@@ -7,7 +7,7 @@ description: >-
   Not for monthly/quarterly reports (use sparkx-monthly-ads-report / quarterly-ads-report, not yet built),
   nor for deep-dive analysis on a specific question (use the relevant analysis skill instead).
 metadata:
-  version: 1.1.5
+  version: 1.1.6
 ---
 
 # Weekly Ads Report
@@ -123,7 +123,12 @@ never promise to run a skill that may not be there.
 
 These three windows are 7 / 7 / 28 days respectively — all comfortably within `get_ads_perf`/`get_operation_log`'s 90-day single-call cap, so no window-splitting is needed.
 
-**⚠️ T+2 data-delay check (matters especially because this report is meant to run every Monday)**: ad performance data has a T+2 processing delay. If `weekEnding` (default: last Sunday) is less than 2 days before today — e.g. the report runs Monday morning and `weekEnding` is yesterday or the day before — the last 1-2 days of "this week" may not have finished processing yet. Check the gap between `weekEnding` and today before generating the report; if it's under 2 days, add an explicit note at the top of the report ("the last X day(s) of this week's data may not be fully processed yet and could shift slightly") rather than presenting an incomplete number as final.
+**⚠️ Data-maturity check (matters especially because this report is meant to run every Monday)**: there are two different effects and only one of them is about the last day or two.
+
+- **Traffic and spend** for a finished week are final, as long as `weekEnding` is in the past in the **store's** timezone. Only the current store-local day is still accumulating.
+- **Conversions are not.** A sale counts against its click date and can land up to **7 days** (SP on a Seller profile) or **14 days** (SP on Vendor, SB, SD) after that click. A Monday report on the week that ended yesterday is therefore **always** conversion-provisional for the whole week — not just its last day or two. **Do not gate the caveat on a "2 days" test; this report needs it every single run.**
+
+What to do: state once, near the top, that `Sales` / `Conversions` / `ACOS` / `ROAS` / `CVR` for the reported week are **provisional and will move as attribution completes**, and that **ACOS will tend to fall and ROAS to rise** as sales backfill. Be especially careful with **WoW**: if the prior week's window has matured and the reported week's has not, part of any "decline" is the window, not performance — say so instead of reporting it as a finding. See `get_ads_perf`'s field reference → "The attribution window is not the same for every ad type" for the per-type figures.
 
 ### Step 2 · Pull Data
 
@@ -318,7 +323,7 @@ Remember: **the section headers and labels below are structural placeholders (sh
 # Weekly Ads Report · {profile_name}
 **Period**: {week_start} ~ {weekEnding}
 **Baseline**: {last week / last week + 4-week average}
-{If data may be incomplete due to T+2 delay, add a note here}
+{If conversion figures for the reported week are still maturing, add a note here}
 
 ## 1. This Week's KPI Overview
 
@@ -410,7 +415,7 @@ Output JSON schema:
 - **No year-over-year comparison** — YoY belongs at the monthly/quarterly report level
 - **No structural/share-of-spend deep analysis** — that's `sparkx-ads-structure-analysis`'s job
 - **Anomaly rules are a lightweight built-in version** — there's no independent deep-alerting subscription capability
-- **Cannot reliably compute "real-time remaining budget"** — `dailyBudget`/`currentBudget` are configuration values, not a live spend ledger, and today's `Spend` is usually incomplete due to the T+2 delay. If a customer asks this in the weekly-report context, say plainly it can't be computed reliably — don't present a subtraction as if it were precise.
+- **Cannot reliably compute "real-time remaining budget"** — `dailyBudget`/`currentBudget` are configuration values, not a live spend ledger, and today's `Spend` is still accumulating through the day. The platform's own figure, `budgetUsage.remainingBudget` on `get_entity_metadata(entity='campaign')`, is the one to use when available. If a customer asks this in the weekly-report context, say plainly it can't be computed reliably — don't present a subtraction as if it were precise.
 - **`get_entity_metadata` has no historical-snapshot capability** — if this report needs to show "this week's config vs last week's config" (as opposed to performance data), that can only come from `get_operation_log`'s change records, not from querying `get_entity_metadata` for a past point in time.
 
 ## Example Call
@@ -420,7 +425,7 @@ Output JSON schema:
 
 **Skill flow**:
 1. Resolve the profile: `get_user_authorized_context` → find Demo US's `profileId`
-2. `weekEnding` = last Sunday; check the T+2-delay window
+2. `weekEnding` = last Sunday; apply the data-maturity caveat (always, not conditionally)
 3. Run Steps 2-6
 4. Output the markdown report — in English, since the user asked in English
 
