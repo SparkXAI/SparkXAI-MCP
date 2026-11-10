@@ -73,7 +73,7 @@ SparkX AI MCP 支持 OAuth 和 MCP Token 两种授权方式。
 1. 切换到 **Code** 标签页。
 2. 点击输入框旁的 **+ → Plugins → Add plugin**，打开 Plugin browser。
 3. 在 **Marketplaces** 中选择从 repository 添加，输入 `SparkXAI/SparkXAI-MCP`。
-4. 找到并安装 **SparkX AI MCP**。Plugin 会同时安装 MCP server 和全部 12 个 Skills。
+4. 找到并安装 **SparkX AI MCP**。Plugin 会同时安装 MCP server 和全部 14 个 Skills。
 
 > **注意：**Claude Code Desktop 不支持 `/plugin` 命令。该命令仅用于 Claude Code CLI；桌面端请使用 Plugin browser。
 
@@ -83,7 +83,7 @@ SparkX AI MCP 支持 OAuth 和 MCP Token 两种授权方式。
 2. 点击右上角的 **Add → Add a marketplace**。
 3. 输入 `SparkXAI/SparkXAI-MCP` 并添加 marketplace。
 4. 在 **Plugins** 中找到新添加的 marketplace，然后安装 **SparkX AI MCP**。
-5. 新建一个 Codex 任务，MCP server 和全部 12 个 Skills 将在新任务中可用。
+5. 新建一个 Codex 任务，MCP server 和全部 14 个 Skills 将在新任务中可用。
 
 > **注意：**ChatGPT 桌面端 Codex 不支持 `/plugin` 或 `/plugins` 命令。`/plugins` 仅用于 Codex CLI；桌面端必须通过左侧边栏的 Plugins 操作。
 
@@ -107,7 +107,7 @@ codex
 
 进入 Codex CLI 后输入 `/plugins`，从 `sparkx-ai` marketplace 中选择并安装 **SparkX AI MCP**，然后启动新会话。
 
-Plugin 会同时安装 MCP server 和全部 12 个 Skills。当前 Plugin 配置使用 `SPARKX_AI_TOKEN`；设置环境变量并启动新会话。若选择 OAuth，请使用下方 OAuth 配置。
+Plugin 会同时安装 MCP server 和全部 14 个 Skills。当前 Plugin 配置使用 `SPARKX_AI_TOKEN`；设置环境变量并启动新会话。若选择 OAuth，请使用下方 OAuth 配置。
 
 ### 方式三 · 手动配置
 
@@ -296,7 +296,7 @@ Skills 在本仓库 [`skills/`](../skills/) 目录，分两类：
 - `sparkx-edit-ai-group` — 编辑单个或批量 AI 托管组
 - `sparkx-delete-ai-group` — 删除 AI 托管组
 - `sparkx-edit-ads` — 编辑支持的线上 Campaign、关键词、Target、推广商品和否定投放设置
-- `sparkx-create-campaign` — 创建 SP Campaign，包括广告组、推广商品、投放、否定投放、广告位和可选 AMC 受众设置
+- `sparkx-create-campaign` — 创建 SP、SB 或 SD Campaign，包括广告组、推广商品、投放、否定投放、广告位和可选 AMC 受众设置；向已有任意类型 Campaign 新增广告组；创建广告组合
 
 **可选（6 个）**——进阶分析与运营场景，装完必装的再按需添加（位于 [`skills/`](../skills/)）：
 
@@ -350,7 +350,7 @@ Skills 在本仓库 [`skills/`](../skills/) 目录，分两类：
 取决于你的 SparkX 账号权限及本次 OAuth 或 MCP Token 的授权范围，最终可见范围不会超过账号本身的权限。
 
 **Q：这一版支持哪些写操作？**
-v1.3.1 支持创建、编辑和删除 AI 托管组，创建 SP Campaign，以及修改 Campaign 预算、状态、SP 竞价策略、广告位加价和 AMC 受众加价；也支持管理关键词和 Target 的状态与竞价、推广商品及支持的否定投放。写操作会直接修改线上配置并生效，执行前必须核对 Profile 和对象，在要求确认的操作中确认具体变更，并在执行后回查。暂不支持创建 SB/SD Campaign 或使用独立删除操作，但支持通过状态更新归档 Campaign。
+v1.3.7 支持创建、编辑和删除 AI 托管组，创建 SP、SB 或 SD Campaign 及广告组合，以及修改 Campaign 预算、状态、SP 竞价策略、广告位加价和 AMC 受众加价；也支持管理关键词和 Target 的状态与竞价、推广商品及支持的否定投放。写操作会直接修改线上配置并生效，执行前必须核对 Profile 和对象，在要求确认的操作中确认具体变更，并在执行后回查。暂不支持使用独立删除操作，但支持通过状态更新归档 Campaign。
 
 **Q：托管组管理有哪些暂不支持的设置？**
 词库相关设置暂不支持。托管组排期已支持读写（仅 SP/SB，SD 无排期工具）；现有模板可以读取，并可用于创建或编辑托管组，但可复用模板本身仍只能在平台里创建和编辑。RBA 规则配置现在可以读取（含条件、动作、周期与分时矩阵），但不能通过 MCP 修改；允许将行动空间从 RBA 切换为 AI，仍不支持从 AI 切换为 RBA。

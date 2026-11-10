@@ -4,6 +4,37 @@
 
 ## [Unreleased]
 
+## [1.3.7] - 2026-11-10
+
+### Added
+
+- `sparkx-query-entity-metadata` adds five new entity types — `brandEntity`, `store`, `pageAsins`, `asset`, `sdAudience` (new reference `sb-sd-creation-entities.md`); `amcAudience` is extended to `sponsoredDisplay` (SD's AMC audience uses the T00030 `audienceSameAs` field, not the three campaign-level fields); adds the `budgetType` field on campaign (sortable, not filterable; SP stores an empty string and returns `daily` as a fallback, but sorting uses the raw stored value) plus new references `budget-usage.md`, `campaign-audience.md`, `ai-group-effective-config.md`, `suggestion-entities.md`.
+- `sparkx-create-campaign` expands from SP-only to SP/SB/SD plus portfolios: five new reference files (`create-sb-campaign.md`, `create-sd-campaign.md`, `create-sb-ad-group.md`, `create-sd-ad-group.md`, `create-portfolio.md`).
+- `sparkx-query-operation-log` documents `operationSources` filtering, clarifies Mode A pagination (resolve which branch applies from the response's `page`/`pageSize`/`hasNextPage` vs `limit`/`truncated`), and adds the three `data.totalSize` conventions (counts rows not entities, an omitted value is not zero, only an empty-first-page zero is trustworthy) plus the `changeField` parameter.
+- `sparkx-edit-ads` expands from 25 to 29 routes: `adGroup.updateName` / `updateBid`, `campaign.updateName` / `updateDates` (the latter two execute directly; a rename batch is not atomic per-row).
+- `sparkx-edit-ai-group` / `sparkx-query-operation-log` document the new `smartCreationName` rename mode for SD managed groups: exclusive (cannot combine with other fields), exactly one id, 1-255 code points, rejects zero-width characters instead of silently stripping them, five pre-flight rejection conditions, and `124035` must not be retried blindly; no operation log entry is written while AI is off.
+- `sparkx-create-campaign` / platform notes document the new three-outcome mapping for AMC audience validation (rewritten per b25a35c3), split into two distinct `invalid_params` cases — an empty audience pool vs. a non-empty pool that doesn't contain the given id — with opposite remediation.
+- An authoritative attribution-window table, previously uncovered by any Skill: SP·Seller 7 days / SP·Vendor 14 days (click-only), SB 14 days, SD 14 days (click+view combined), DSP per advertiser lookback; `storeType` comes from `get_user_authorized_context`. Cross-ad-type ACOS/ROAS/CVR rankings are partly a window artifact; Seller SP and Vendor SP are not comparable; SD includes a conversion type SP has none of. `sparkx-ads-structure-analysis` (whose default dimension is `campaignType`) gets an explicit warning against moving budget based on ACOS differences caused by this alone.
+
+### Changed
+
+- `sparkx-query-entity-metadata`'s budget-usage reference is rewritten against the platform's own tooltip wording and live measurements: `dateEnd` may be set to tomorrow (timezone headroom, not "today only"); `budgetSnapshot` is not `dailyBudget` (a campaign configured at `dailyBudget=400.00` was observed on the platform's own budget panel at `122.83% / $3.11`, and the snapshot moves intraday as budget rules fire — never compute budget usage against `dailyBudget`/`currentBudget`); the percentage denominator is the full selected window length (confirmed by reverse-solving six rows from one platform query, all resolving to the same ~697.3h denominator) — don't sort by `outOfBudgetPercentage` on short-lived campaigns, use `outOfBudgetMinutes` instead; removed the unsupported "near-real-time" claim and clarified that a null `lastOutOfBudgetTime` means "no record in the last 30 days", not "never out of budget".
+- The platform-wide "T+2 delay" claim (previously stated in all 14 shared platform-notes files) is withdrawn — it had no supporting source and contradicts a live measurement (same-day `Spend`/`Impressions`/`Clicks` increased within ~12 minutes on a repeat query; historical days were byte-identical). Replaced with two separate, accurate statements: today's data is still accumulating (why `dateEnd` defaults back to yesterday, and "today" is the store's own local day), and the 7-14 day attribution window keeps backfilling conversions — waiting two days does not make a number final. `sparkx-weekly-ads-report` / `sparkx-monthly-ads-report`'s old trigger ("add the caveat only when within 2 days of today") was wrong — a Monday weekly report's entire week sits inside the attribution window — and is replaced with an unconditional disclosure plus an explicit WoW/MoM window-mismatch warning.
+- `get_entity_metadata`'s `entities` parameter is not enum-validated server-side: `keyword` / `audience` / `productLine` all silently return 0 rows with no error. `EntityType` has exactly 9 real values; keyword-level operations land under `target`, and placement bid adjustments land under `placement`, not `campaign`. The prior text called `audience` "a bug to be fixed" and listed the default entity set as "all except `audience`" when it is actually "all except `productLine`".
+- `bidRangeType=1` is a bid coefficient, not a percentage (confirmed against the platform's own "Optimize base bids" display) — corrected in 8 places; `bidRange` requires a strict `min < max`.
+
+### Fixed
+
+- Bulk bid-strategy edits no longer silently accept `ruleBased` or tolerate unrelated/duplicate/ended-campaign fields in the same batch.
+- `get_entity_metadata`'s one-sided `>=`/`<=` filters are rejected — both bounds are required together; `campaignState`/`costType` are documented as case-sensitive.
+- `queryType` on entities other than `target`/`searchTerm` now errors instead of being silently ignored.
+- `service_unavailable` is documented for two more sources: the creative asset library and the AMC audience pool.
+- SD creative failures have no public remediation tool; the previous guidance ("retry only the failed ad group's creative") described something that can't actually be done — replaced with reporting `creativeFailures` and pointing the user to the console.
+
+### Versions
+
+- `sparkx-create-campaign` `1.0.5` -> `1.1.0`, `sparkx-edit-ads` `1.1.7` -> `1.2.0` (both reflect real new coverage and route-count changes). `sparkx-query-ads-performance` / `sparkx-query-entity-metadata` `1.4.9` -> `1.4.10`, `sparkx-query-operation-log` `1.3.8` -> `1.3.9`, `sparkx-create-ai-group` / `sparkx-edit-ai-group` `1.2.4` -> `1.2.5`, `sparkx-delete-ai-group` `1.0.9` -> `1.0.10`, `sparkx-weekly-ads-report` `1.1.5` -> `1.1.6`, `sparkx-monthly-ads-report` `1.2.2` -> `1.2.3`, `sparkx-ads-structure-analysis` `1.1.6` -> `1.1.7`, `sparkx-product-diagnosis` `1.2.3` -> `1.2.4`, `sparkx-promo-reset` `1.0.4` -> `1.0.5`. `sparkx-search-term-diagnosis` is unchanged at `1.0.4`.
+
 ## [1.3.6] - 2026-11-03
 
 ### Added

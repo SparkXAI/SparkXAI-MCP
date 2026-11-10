@@ -2,7 +2,7 @@
 
 把 SparkX AI 的广告能力接进你自己的 AI Agent（WorkBuddy、Claude、ChatGPT 等），数据从此融入你的工作流——大白话查数据、做分析、算真账，还能和你自己的成本、利润、目标放在一起算。完成授权后，无需反复登录平台、导出表格或在系统之间来回切换。
 
-当前版本 v1.3.6 支持数据查询、AI 托管组管理、SP Campaign 与广告组创建，以及 Amazon Sponsored Ads 广告实体编辑。可创建包含广告组、推广商品、投放与广告位设置的 SP Campaign，也可在已有 SP Campaign 下新建广告组；可修改 Campaign 预算、状态和 SP 竞价策略，调整广告组合归属、组合预算与起止日期、广告组状态，并管理关键词与 Target 的状态和竞价，以及推广商品和否定投放。暂不支持创建 SB/SD Campaign 或使用独立删除操作，但支持通过状态更新归档 Campaign。
+当前版本 v1.3.7 支持数据查询、AI 托管组管理、SP/SB/SD Campaign 与广告组创建、广告组合创建，以及 Amazon Sponsored Ads 广告实体编辑。可创建包含广告组、推广商品、投放与广告位设置的 SP、SB 或 SD Campaign，也可在已有任意类型的 Campaign 下新建广告组，并可创建广告组合；可修改 Campaign 预算、状态和 SP 竞价策略，调整广告组合归属、组合预算与起止日期、广告组状态，并管理关键词与 Target 的状态和竞价，以及推广商品和否定投放。暂不支持使用独立删除操作，但支持通过状态更新归档 Campaign。
 
 ---
 
@@ -12,7 +12,7 @@
 - **结合你自己的数据算真账**——把你的成本 / 毛利 / 目标交给 AI，让它拉广告花费：「按真实毛利，哪些 campaign 在亏钱——砍还是加？」这种需要把广告数据和你自己的业务数据合起来算的问题，平台单独算不出来。
 - **沉淀你自己的玩法**——把常用问法存成模板，甚至设成每周一自动跑的周报 routine。
 - **管理 AI 托管组**——在明确确认后创建、编辑或删除托管组，并在操作后回查实际状态。
-- **创建 SP Campaign**——创建包含广告组、推广商品、自动/关键词/商品投放、否定投放和广告位设置的 SP Campaign，执行前先展示完整结构。
+- **创建 SP、SB 或 SD Campaign**——创建任意支持类型的 Campaign，包含广告组、推广商品、自动/关键词/商品投放、否定投放和广告位设置，并可创建广告组合，执行前先展示完整结构。
 - **编辑线上广告实体**——修改 Campaign 预算、状态、SP 竞价策略、广告位加价和 AMC 受众加价，调整关键词或 Target 竞价，并管理推广商品和否定投放。写操作会直接在线上账号生效，执行前必须确认对象和具体变更。
 - **诊断搜索词**——按固定规则给搜索词分类，结合店铺客单价与目标 ACOS 推导门槛，识别浪费花费、否词候选、扶正候选和精准词碎片。
 - **安全复位大促调整**——找回大促期间人为修改的出价、预算、广告位溢价和托管组设置，可全部复位，也可按大促后表现分阶段回落；执行前预览、执行后回读。
@@ -25,7 +25,7 @@
 | **实体配置 / 元数据** | 广告活动、广告组、投放、推广商品、ASIN、托管组、产品线信息等 |
 | **操作日志** | 人工与 AI 的操作记录，可按操作者、动作类型、实体、时间窗筛选 |
 | **AI 托管组管理** | 创建、编辑和删除 SP、SB、SD 托管组；调整支持的托管目标、预算、活动归属和 AI 行动空间设置 |
-| **广告实体管理** | 创建 SP Campaign；修改 Campaign 预算、状态、SP 竞价策略、广告位加价和 AMC 受众加价；管理关键词和 Target 的状态与竞价；归档推广商品；创建、复制或更新支持的否定投放 |
+| **广告实体管理** | 创建 SP、SB 或 SD Campaign 及广告组合；修改 Campaign 预算、状态、SP 竞价策略、广告位加价和 AMC 受众加价；管理关键词和 Target 的状态与竞价；归档推广商品；创建、复制或更新支持的否定投放 |
 
 ---
 
@@ -108,7 +108,7 @@ MCP 的 Tool 决定 AI"能拿到什么数据"，Skill 决定 AI"把数据用得�
 | [sparkx-edit-ai-group](skills/sparkx-edit-ai-group/) | `edit_sd_ai_managed_group` / `save_sp_sb_ai_managed_group` / `save_sp_sb_ai_group_schedule` / `get_ai_group_template` | 编辑单个或批量 AI 托管组，套用模板，维护 SP/SB 排期 |
 | [sparkx-delete-ai-group](skills/sparkx-delete-ai-group/) | `delete_ai_managed_group` | 删除托管组，并释放或迁移其中的 Campaign |
 | [sparkx-edit-ads](skills/sparkx-edit-ads/) | `batch_update_ads` | 编辑线上 Campaign 设置、关键词和 Target 竞价/状态、推广商品及否定投放；受保护操作需要明确的两阶段确认 |
-| [sparkx-create-campaign](skills/sparkx-create-campaign/) | `create_sp_sb_campaign` | 创建 SP Campaign，包括广告组、推广商品、自动/关键词/商品投放、否定投放、广告位和可选 AMC 受众设置 |
+| [sparkx-create-campaign](skills/sparkx-create-campaign/) | `create_sp_sb_campaign` / `create_sd_campaign` / `create_sp_ad_group` / `create_sb_ad_group` / `create_sd_ad_group` / `create_portfolio` | 创建 SP、SB 或 SD Campaign，包括广告组、推广商品、自动/关键词/商品投放、否定投放、广告位和可选 AMC 受众设置；向已有任意类型 Campaign 新增广告组；创建广告组合 |
 
 **可选（6 个）**——进阶分析与运营场景，装完必装 Skills 后按需添加：
 
@@ -150,7 +150,7 @@ MCP 的 Tool 决定 AI"能拿到什么数据"，Skill 决定 AI"把数据用得�
 ## 当前版本边界
 
 - **写操作直接生效**：托管组和广告实体写操作会直接修改线上配置。只应向可信用户授予写入或删除权限；执行前必须核对 Profile、对象和变更内容，在要求确认的操作中取得明确确认，执行后必须回查。
-- **写入范围**：当前支持 AI 托管组管理、SP Campaign 创建和部分广告实体编辑。可创建 SP Campaign，并修改 Campaign 预算、状态、SP 竞价策略、广告位加价和 AMC 受众加价，包括通过状态更新归档 Campaign；暂不支持创建 SB/SD Campaign 或使用独立删除操作。
+- **写入范围**：当前支持 AI 托管组管理、SP/SB/SD Campaign 与广告组合创建，以及部分广告实体编辑。可创建 SP、SB 或 SD Campaign 及广告组合，并修改 Campaign 预算、状态、SP 竞价策略、广告位加价和 AMC 受众加价，包括通过状态更新归档 Campaign；暂不支持使用独立删除操作。
 - **暂不支持**：词库相关设置；可复用模板本身的创建与编辑；RBA 规则配置的修改（**可以读取**）。现有模板可以读取，并可用于创建或编辑托管组。托管组排期已支持读写，但仅限 SP/SB。行动空间允许从 RBA 切换为 AI，但不支持从 AI 切换为 RBA。
 - **范围**：你能查的店铺，与你的 SparkX 账号（主 / 子账号）权限一致。
 - **历史回溯**：约可查最近 15 个月。
@@ -169,7 +169,7 @@ MCP 的 Tool 决定 AI"能拿到什么数据"，Skill 决定 AI"把数据用得�
 1. 切换到 **Code** 标签页。
 2. 点击输入框旁的 **+ → Plugins → Add plugin**，打开 Plugin browser。
 3. 在 **Marketplaces** 中选择从 repository 添加，输入 `SparkXAI/SparkXAI-MCP`。
-4. 找到并安装 **SparkX AI MCP**。Plugin 会同时安装 MCP server 和全部 12 个 Skills。
+4. 找到并安装 **SparkX AI MCP**。Plugin 会同时安装 MCP server 和全部 14 个 Skills。
 
 > Claude Code Desktop 不支持 `/plugin` 命令；`/plugin` 仅用于 Claude Code CLI。桌面端请使用上述 Plugin browser。
 
@@ -179,7 +179,7 @@ MCP 的 Tool 决定 AI"能拿到什么数据"，Skill 决定 AI"把数据用得�
 2. 点击右上角的 **Add → Add a marketplace**。
 3. 输入 `SparkXAI/SparkXAI-MCP` 并添加 marketplace。
 4. 在 **Plugins** 中找到新添加的 marketplace，然后安装 **SparkX AI MCP**。
-5. 新建一个 Codex 任务，MCP server 和全部 12 个 Skills 将在新任务中可用。
+5. 新建一个 Codex 任务，MCP server 和全部 14 个 Skills 将在新任务中可用。
 
 > ChatGPT 桌面端 Codex 不支持 `/plugin` 或 `/plugins` 命令；`/plugins` 仅用于 Codex CLI。桌面端必须通过左侧边栏的 Plugins 操作。
 
@@ -203,7 +203,7 @@ codex
 
 进入 Codex CLI 后输入 `/plugins`，从 `sparkx-ai` marketplace 中选择并安装 **SparkX AI MCP**，然后启动新会话。
 
-Plugin 会同时安装 MCP server 和全部 12 个 Skills。当前 Plugin 配置使用 `SPARKX_AI_TOKEN`；如需使用 OAuth，请按[安装说明中的 OAuth 配置](docs/installation.md#oauth)连接。
+Plugin 会同时安装 MCP server 和全部 14 个 Skills。当前 Plugin 配置使用 `SPARKX_AI_TOKEN`；如需使用 OAuth，请按[安装说明中的 OAuth 配置](docs/installation.md#oauth)连接。
 
 ### 通用 MCP 客户端
 
