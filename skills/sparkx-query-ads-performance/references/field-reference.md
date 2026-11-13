@@ -254,8 +254,8 @@ placements — always pair the label with its campaign type. Full label table in
 | `aiGroup.aiGroupId_` / `aiGroup.aiGroupName_` | AI managed group ID/name | — |
 | `aiGroup.aiStatus_` | Status | `0` (not started) / `1` (running) / `2` (paused) |
 | `aiGroup.targetAcos_` | Target ACOS (%) | — |
-| `aiGroup.aiTargetType_` | Objective | `1` (Drive growth) / `2` (Optimize ROAS) / `3` (Promotion sales boost) |
-| `aiGroup.aiPersonality_` | AI aggressiveness | `1` (very conservative) … `5` (very aggressive) |
+| `aiGroup.aiTargetType_` | Objective | `1` (Drive growth) / `2` (Optimize ROAS) / `3` (Promotion sales boost) / `4` (Drive growth with budget utilization priority) |
+| `aiGroup.aiPersonality_` | AI aggressiveness | `1` (conservative) … `5` (aggressive); `2` reads back as `Moderately Conservative`, `4` as `Moderately Aggressive`. ⚠️ **When `aiTargetType_` is `4` this is the stored value only** - the running personality is locked to `5`; never report it as the effective personality |
 | `aiGroup.aiGroupStatusOnDate_` / `aiGroup.aiGroupLastStatusOnDate_` / `aiGroup.aiGroupLastStatusOffDate_` | Lifecycle dates | — |
 | `aiGroup.aiCreator_` / `aiGroup.aiGroupCreateTime_` | Creator / create time | — |
 | `aiGroup.budgetDynamicStatus_`, `aiGroup.competitorStatus_`, `aiGroup.negativeTargetStatus_`, `aiGroup.targetPausedAddStatus_`, `aiGroup.targetHarvestStatus_`, `aiGroup.bidDaypartStatus_`, `aiGroup.bidPerformanceStatus_`, `aiGroup.bidAdPlaceStatus_`, `aiGroup.bidAmazonBusinessStatus_`, `aiGroup.btbRangeStatus_`, `aiGroup.structPauseProductStatus_`, `aiGroup.structPauseCampaignStatus_`, `aiGroup.budgetDaypartStatus_`, `aiGroup.budgetRedistributeStatus_` | Action Space feature switches (`0`/`1`; `targetPausedAddStatus_` and `targetHarvestStatus_` are `0`/`1`/`2` — see enum-i18n) | — |

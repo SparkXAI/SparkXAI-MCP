@@ -27,10 +27,10 @@ rejected outright.
 
 | Field | Values |
 |---|---|
-| `aiPersonality` | `1`=非常保守, `2`=保守, `3`=平衡, `4`=激进, `5`=非常激进. **>=3 required when `targetType=3` (volume/冲量)** - front-end rule, not backend-enforced. ⚠️ **Group-level only, and rejected outright on accounts that set personality per action space** - check [`ai-personality.md`](ai-personality.md) before sending it |
+| `aiPersonality` | `1`=保守, `2`=较保守, `3`=中庸, `4`=较激进, `5`=激进（这是读接口与页面实际显示的文案，`2` 的 `aiPersonalityText` 是「较保守 / Moderately Conservative」而非「保守」；部分写侧工具描述仍写成「very conservative ... very aggressive」，那是错的）. **>=3 required when `targetType=3` (volume/冲量)** - front-end rule, not backend-enforced. ⚠️ **Group-level only, and rejected outright on accounts that set personality per action space** - check [`ai-personality.md`](ai-personality.md) before sending it |
 | `campaignNameSign` | `0`=off, `1`=on |
 | `budgetNumType` | `1`=percentage, `2`=fixed value |
-| `bidRangeType` | `2`=fixed value. `1`=**bid coefficient** (`1.15` = 1.15× the base bid), **not a percentage** — never convert `+15%` into `15`. A lower bound below `0` is silently clamped to `0`. Same range also governs bid dayparting; see [`coupling-rules.md`](coupling-rules.md) |
+| `bidRangeType` | `2`=fixed value (each end `> 0`). `1`=**bid coefficient** (`1.15` = 1.15× the base bid), **not a percentage** — never convert `+15%` into `15`. Each end must be `0.01`-`100` (rejected otherwise). Same range also governs bid dayparting; see [`coupling-rules.md`](coupling-rules.md) |
 | `*MatchType` (branded/competitor/harvest/negative) | `1`=exact(等于/精确), `2`=phrase(包含/词组) |
 | `*ListType` (harvest/negative) | `1`=include/whitelist, `2`=exclude/blacklist |
 
@@ -55,7 +55,10 @@ Flat fields (no nested objects):
 
 Top-level: `aiStatus` (`0`=off, `1`=on - create input is `0`/`1`; a group reads back
 as `2`=paused once off), `targetType` (`1`=drive growth, `2`=maintain stability,
-`3`=volume, `4`=legacy growth), `campaignType` (`sponsoredProducts`/`sponsoredBrands`),
+`3`=volume, `4`=drive growth with **budget utilization priority** - an aggressive variant
+of `1`, gated and SP-only, and it locks the runtime AI personality to `5` while this field
+still reads back the stored value; see [`enum-i18n.md`](enum-i18n.md)),
+`campaignType` (`sponsoredProducts`/`sponsoredBrands`),
 `acos`, `campaignIds`, `campaignNameSign`, `aiPersonality`, `preAddCampaignNums`.
 
 ### `aiActionSettings` (nested) - EXACT names
@@ -74,22 +77,28 @@ Struct (**SP only**): `structPauseProductStatus`, `structPauseCampaignStatus`.
 Budget: **`budgetDaypartStatus`**, **`budgetDynamicStatus`**,
 **`budgetRedistributeStatus`**, `budgetNum`, `budgetNumType`.
 
-Target (**NOT writable via MCP - read-only / platform UI only**):
-`targetHarvestStatus`, `targetHarvestBlackListStatus`,
-`targetHarvestBlackList` (IDs), `targetHarvestListType`, `targetHarvestMatchType`,
-`negativeTargetStatus`, `negativeTargetBlackListStatus`,
-`negativeTargetBlackList` (IDs), `negativeTargetListType`, `negativeTargetMatchType`,
-`targetPausedAddStatus` (`0`=off, `1`=on, `2`=on with supplement). The SP/SB tool
-**hard-rejects** this entire `targetOptimization` module (target harvest / negative
-target / target pause); create defaults it closed. These names may still appear in some
-schemas, but they are read-only - inspect them via `get_entity_metadata`, change them in
-the platform UI, and never send them as write inputs.
+Target (**only the three action switches are writable via MCP; word-list settings are
+platform-only**):
 
-The whole `targetOptimization` module (all fields listed above) and the
-`brandOptimization` module - including `brandedStatus`, `brandedList`, `competitorStatus`,
-`competitorList`, and any `*BlackList*` status/list field - are **currently unsupported**
-(removed from the write path; read-only, platform UI only). Do not send any of these
-status, list ID, match-type, or list-type fields; the tool hard-rejects them.
+- Writable in `aiActionSettings`: `targetHarvestStatus` (`0`=off, `1`=on, `2`=on and also add
+  harvested terms as exact negatives), `negativeTargetStatus` (`0`/`1`), `targetPausedAddStatus`
+  (`0`/`1`; **SP only**, non-zero on SB is rejected; the read-side value `2` is never sent).
+  Out-of-range values are rejected. An omitted switch is `0` on a normal create and follows the
+  template in template mode; your value wins over the template. **Template create caveat:** the
+  zero-fill applies to a normal create only. On a template create, a switch you omit that the
+  template doesn't set is left to the downstream default, which is **on** - send an explicit `0`
+  for any switch the user wants off. ⚠️ **`targetPausedAddStatus` is the exception: it is SP-only.** On an SB group the server forces it to `0` on every create and edit path, so it never lands on - do not tell an SB customer that all three switches came on. Target Harvest (rule 4) and
+  Negative Target (rule 5) are AI-mode only - see [`coupling-rules.md`](coupling-rules.md).
+- Not writable: `targetHarvestBlackListStatus`, `targetHarvestBlackList` (IDs),
+  `targetHarvestListType`, `targetHarvestMatchType`, `negativeTargetBlackListStatus`,
+  `negativeTargetBlackList` (IDs), `negativeTargetListType`, `negativeTargetMatchType`. These names
+  may still appear in some schemas and read back from `get_entity_metadata`; create defaults them
+  closed. Change them in the platform UI and never send them as write inputs.
+
+The whole `brandOptimization` module - including `brandedStatus`, `brandedList`,
+`competitorStatus`, `competitorList` - and the word-list fields above are **currently
+unsupported** (read-only, platform UI only). Do not send any of these status, list ID,
+match-type, or list-type fields; the tool hard-rejects them.
 
 ### `aiAutomation` (flattened mode fields) - EXACT names
 
@@ -111,14 +120,14 @@ to one automation rule number:
 | `aiAutomation` field | Rule | Paired `aiActionSettings` switch |
 |---|---|---|
 | `bidDaypartStatus` | 2 - bid dayparting | `bidDaypartStatus` |
-| `targetHarvestRuleStatus` | 4 - target harvest (**read-only context; not settable at create**) | `targetHarvestStatus` |
-| `negativeTargetRuleStatus` | 5 - negative target (**read-only context; not settable at create**) | `negativeTargetStatus` |
+| `targetHarvestRuleStatus` | 4 - target harvest (AI-only: send `0` or omit) | `targetHarvestStatus` |
+| `negativeTargetRuleStatus` | 5 - negative target (AI-only: send `0` or omit) | `negativeTargetStatus` |
 | `budgetDaypartRuleStatus` | 13 - budget dayparting | `budgetDaypartStatus` |
 | `budgetPerformanceRuleStatus` | 17 - budget by performance | `budgetDynamicStatus` |
 | `placementAdjustmentRuleStatus` | 19 - placement adjustment | `bidAdPlaceStatus` |
 | `pauseCampaignRuleStatus` | 20 - pause campaign | `structPauseCampaignStatus` |
 | `bidPerformanceRuleStatus` | 181 - bid by performance | `bidPerformanceStatus` |
-| `targetPauseSupplementRuleStatus` | 182 - target pause / supplement (**read-only context; not settable at create**) | `targetPausedAddStatus` |
+| `targetPauseSupplementRuleStatus` | 182 - target pause / supplement (send `0` or omit) | `targetPausedAddStatus` |
 
 One extra field, only meaningful with rule 13:
 
@@ -140,5 +149,6 @@ off action spaces from enabled action spaces in AI mode. Details are in
 
 ## Known value-range caveat
 
-- **Avoid `budgetType=3`** where it appears in edit/action paths - a known P0 that can
-  hang the downstream service. Not needed for a basic create.
+- **Avoid `budgetType=3`.** `edit_sd_ai_managed_group` rejects it (only `1` and `2` are valid). The
+  SP/SB batch accepts it, but it is a known-risky value that can hang the downstream service. Not
+  needed for a basic create.

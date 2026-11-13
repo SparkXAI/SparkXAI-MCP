@@ -9,7 +9,7 @@ description: >-
   hourly data, by hour, intraday, AMS, Amazon Marketing Stream, keyword placement,
   vendor, seller, distributorView, sellingProgram, shipped revenue, ordered revenue, TACOS
 metadata:
-  version: 1.4.10
+  version: 1.4.11
 ---
 
 # Query Ads Performance Skill
@@ -359,9 +359,11 @@ Note the `ACOS` threshold above is `20`, not `0.2` — confirmed percentage metr
 Supported operators: `>`, `<`, `>=`, `<=`, `=`, `!=`, `in`, `like`, `ilike`, `isNull`, `isNotNull`
 
 `notin` is **not** accepted on this path - only `campaignAudience` supports it (see its
-`audienceSegmentType` note above). The server's own error text lists `notin` among the
-expected operators, but nothing here implements it and the filter comes back as
-`Unsupported filter operator: NOTIN`.
+`audienceSegmentType` note above). Sending it fails with `Unsupported filter operator: NOTIN.` (the
+operator is echoed upper-cased), followed by the accepted set (`=`, `!=`, `>`, `>=`, `<`, `<=`,
+`in`, `like`, `ilike`, `isNull`, `isNotNull`). Operator names are case-insensitive on this tool
+(`in` / `IN`, `isNull` / `ISNULL`); that is not true of `get_entity_metadata`, whose operator keys
+are case-sensitive.
 
 **Text matching** (except `campaignAudience`):
 

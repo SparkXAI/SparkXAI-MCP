@@ -17,8 +17,8 @@ with `get_ai_group_template`; for a system preset also pass `isSystemTemplate=1`
 templates (`status=2`) are rejected. **The one exception to "AI mode only"**: if you don't
 pass `aiAutomation`, the template's automation rules are carried over as-is, including
 Rule-mode rules (`status=1`) with their condition/action - tell the user in the preview.
-One hard restriction: a template whose rule 4 / rule 5 is bound to specific campaigns and
-ad groups (`isSelf=2`, rule enabled) is rejected. See the main SKILL.md section "Creating
+One hard restriction: a template whose rule 4 (Target Harvest) or rule 5 (Negative Target) is in
+Rule mode (`status=1`) is rejected - those two action spaces are AI-only here. See the main SKILL.md section "Creating
 from a template", and [`template-guide.md`](template-guide.md) for recommending one by
 campaign purpose.
 
@@ -35,7 +35,7 @@ if the user needs to know what's active.
 | `profileId` | long | Shop ID |
 | `aiGroupName` | string | Unique per profile |
 | `acos` | number | Target ACOS on the **x100 scale** - the user's `25%` is sent as **`25`** (not `0.25`). Must be `> 0` |
-| `targetType` | int | `1`=drive growth, `2`=maintain stability, `3`=volume, `4`=legacy growth |
+| `targetType` | int | `1`=drive growth, `2`=maintain stability, `3`=volume, `4`=drive growth with **budget utilization priority** (an aggressive variant of `1`; gated, SP + drive-growth only, and this tool checks none of that - see [`enum-i18n.md`](enum-i18n.md)) |
 | `campaignType` | string | `"sponsoredProducts"` or `"sponsoredBrands"` |
 
 ## Common optional fields
@@ -58,7 +58,9 @@ for a basic create. Exact field names are in `field-reference.md`.
 
 Enabling an action-space switch usually requires sending its companion fields (dynamic
 budget -> numType+num; ranges -> min/max with min <= max, except `bidRange` which needs
-min strictly < max). Word-list settings are not
+min strictly < max and is bounded by `bidRangeType`). The three target switches
+(`targetHarvestStatus`, `negativeTargetStatus`, `targetPausedAddStatus`) are plain on/off
+switches (SP only for the last); word-list settings are not
 supported and must not be sent. The supported coupling rules are in the shared
 [`coupling-rules.md`](coupling-rules.md) - read it before enabling any `aiActionSettings`
 switch.

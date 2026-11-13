@@ -71,7 +71,7 @@ When a managed group runs an action space in **Rule mode**, its effective config
 
 - Well-understood leaves carry a `...Text` companion for display (metric names, logical connectors, action types, placements, periods, hour labels). Leaves whose value domain isn't confirmed are passed through **raw, with no Text** — relay those verbatim and don't invent a label for them.
 - The same raw value can mean different things in different rules (e.g. `amount` under rule 17 is a budget action, under rule 19 it's a placement bid action). Never carry a label across rule types.
-- **This is read-only.** There is no MCP tool that writes RBA rule configuration — see `sparkx-edit-ai-group`. You can show a user their rule setup and explain it; you cannot offer to change it here. Also note the direction constraint: a rule-based group can be switched to AI, but not the reverse.
+- **Read-only here, and authorable nowhere.** No MCP tool lets you write RBA rule conditions or actions; the only way Rule config lands on a group is inheriting it from a platform template applied with `templateId` (a template whose rule 4 or 5 is in Rule mode is rejected) — see `sparkx-edit-ai-group`. You can show a user their rule setup and explain it; you cannot offer to change it here. Also note the direction constraint: a rule-based group can be switched to AI, but not the reverse.
 
 ## Current controller inventory for one campaign
 

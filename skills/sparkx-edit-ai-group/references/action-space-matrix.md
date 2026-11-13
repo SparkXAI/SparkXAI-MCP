@@ -48,7 +48,14 @@ The gap that matters most: **the SD tools (`create_sd_ai_managed_group` /
 `campaignNameSign` (edit: `campaignNameRecoveryType`, `remark`). They do **not** expose
 the full `aiActionSettings`/`aiAutomation` action space (bid daypart / placement /
 struct pause / etc.). Those fields exist **only
-on the SP/SB tool** (`save_sp_sb_ai_managed_group`). **Exception - the SP/SB word-list modules are not writable via MCP:** on `save_sp_sb_ai_managed_group`, the `targetOptimization` module (negative target, target-harvest details, target pause) and `brandOptimization` module (branded / competitor) are removed from the write path - the SP/SB tool hard-rejects them; create defaults them closed and they are managed in the platform UI (read-only via MCP). **This does not affect SD:** the SD tools' own `targetHarvestStatus` (`0`/`1`/`2`) remains writable.
+on the SP/SB tool** (`save_sp_sb_ai_managed_group`). **Exception - the SP/SB word-list settings are not writable via MCP:** on
+`save_sp_sb_ai_managed_group` the word-list fields of `targetOptimization` (harvest / negative
+blacklists, list and match types) and the whole `brandOptimization` module (branded / competitor)
+are removed from the write path - the SP/SB tool hard-rejects them; create defaults them closed and
+they are managed in the platform UI (read-only via MCP). **The three action switches
+`targetHarvestStatus`, `negativeTargetStatus` and `targetPausedAddStatus` (SP only) are writable**;
+rules 4 and 5 are AI mode only. **This does not affect SD:** the SD tools' own `targetHarvestStatus`
+(`0`/`1`/`2`) remains writable.
 
 **SD supports only two of these action spaces** - `预算重新分配` (budgetRedistribute)
 and `定向收割` (targetHarvest). Everything else in the table below is SD N. And even for
@@ -64,7 +71,7 @@ space exposed by MCP. Example: Help Center lists **Placement Rules / 广告位�
 SP/SB automation, while managed-group **广告位调价** remains SP-only here and SB templates
 must be filtered out when pairing a rule with this action space.
 
-**Per-ad-type support - UI/platform level, NOT MCP write support** (for SP/SB the word-list rows below - 添加否定定向 / 定向收割 / branded / competitor - are read-only via MCP per the exception above; SD's 定向收割 `targetHarvestStatus` and 预算重新分配 are writable):
+**Per-ad-type support - UI/platform level, NOT MCP write support** (for SP/SB the word-list details of 添加否定定向 / 定向收割 and branded / competitor are read-only via MCP per the exception above, while the 添加否定定向 / 定向收割 / 定向暂停 on/off switches are writable; SD's 定向收割 `targetHarvestStatus` and 预算重新分配 are writable):
 - **SP - all 12 (AI):** every row below.
 - **SB - 7:** 分时调价 *(Rule only)*, 按表现调价, 分时预算, 按表现调预算, 预算重新分配,
   添加否定定向, 定向收割.
@@ -88,13 +95,12 @@ must be filtered out when pairing a rule with this action space.
 ## The things that trip agents up
 
 - **The group switch is not the negative itself.** `negativeTargetStatus` here is the
-  managed group's "自动添加否定定向" switch and is **read-only through MCP** (so are the
-  word-list settings `targetOptimization` / `brandOptimization`). That does **not** mean
-  negatives are unmanageable: adding, pausing, archiving and copying individual negative
-  keywords and negative product targets all work through `batch_update_ads`
-  (`negativeKeyword` / `negativeTarget` routes) - see the `edit-ads` Skill. Read the two
-  apart before telling a user something cannot be done:
-  `negativeTargetStatus` = "let the AI add negatives" (platform UI only);
+  managed group's "自动添加否定定向" switch. You can turn it on or off through MCP (AI mode only;
+  the word-list settings in `targetOptimization` / `brandOptimization` stay platform-UI only).
+  Adding, pausing, archiving and copying individual negative keywords and negative product
+  targets is a separate thing and works through `batch_update_ads` (`negativeKeyword` /
+  `negativeTarget` routes) - see the `edit-ads` Skill. Read the two apart before telling a user
+  something cannot be done: `negativeTargetStatus` = "let the AI add negatives" (group switch);
   `negativeTargetState` = the state of one specific negative (writable).
 - **SD supports only two** - `budgetRedistribute` + `targetHarvest`. Nothing else on SD.
 - **广告位调价 (placement bids) = SP only.** Enable it via

@@ -43,14 +43,14 @@ language, but don't add claims about switches beyond what it says.
 | Low-cost orders from broad traffic | 低成本捡漏 | Fill in low-cost orders from cheap, broad traffic | Low bids; auto / broad / phrase / category | 关闭出价优化，防止 AI 为抢流量把低价组的出价越抬越高；开启否词和收词，泛流量里不出单的词自动否掉，出单的词收出来单独投。 |
 | Cover scattered long-tail terms | 持续覆盖长尾流量（契合Cosmo算法） | Keep reaching small, scattered, cheap terms | Bids between low-cost and normal | 和低成本捡漏一样不让 AI 抬价；另外开启定向暂停 / 补充：长尾词零散，让 AI 持续淘汰无效词、补充新词。 |
 | Mature product, lower ACOS steadily | 稳定期产品持续优化ACoS | Keep orders steady while testing lower ACOS | If budget goes unspent, the ACOS target is too tight - loosen it | AI 能力全部开启，在不影响出单的前提下全面优化 ACOS。如果预算花不完，说明 ACOS 目标定得太紧，需要放宽。 |
-| B2B product, weak weekends - keep total budget | B端属性产品（总预算不变） | Promotion stage, needs absolute order volume | **New SP group only** - see the note below | 周末转化低，周末自动降预算，省下的预算挪到周一、周二的高转化时段，总预算不变。 |
-| B2B product, weak weekends - cut cost | B端属性产品（成本控制） | Steady or declining stage, wants lower cost | Tell the user overall orders will drop too. **New SP group only** - see the note below | 周末转化低，周末自动降预算，省下的预算不再补回，整体成本和单量都会下降。 |
+| B2B product, weak weekends - keep total budget | B端属性产品（总预算不变） | Promotion stage, needs absolute order volume | **SP groups only** - see the note below | 周末转化低，周末自动降预算，省下的预算挪到周一、周二的高转化时段，总预算不变。 |
+| B2B product, weak weekends - cut cost | B端属性产品（成本控制） | Steady or declining stage, wants lower cost | Tell the user overall orders will drop too. **SP groups only** - see the note below | 周末转化低，周末自动降预算，省下的预算不再补回，整体成本和单量都会下降。 |
 
 **The two B2B templates are SP only** - SB groups have no B2B action space - **and run Budget
-Daypart (rule 13) in Rule mode.** Through MCP they can only be applied by **creating a new SP
-group** from them - the rule is carried over as-is; say in the preview that Budget Daypart runs
-as a fixed rule, not AI. Applying them to an **existing** group is rejected (see "Applying"
-step 8); for that, point the user to the platform.
+Daypart (rule 13) in Rule mode.** They can be applied by **creating a new SP group** or by a
+template edit on an existing SP group; either way the rule is carried over as-is, so say in the
+preview that Budget Daypart runs as a fixed rule, not AI (on an existing group it can switch
+Budget Daypart from AI to Rule).
 
 **These templates are built around SP** (keywords, placements, ASIN targeting). On an SB
 group - **creating** a new one from the template or **editing** an existing one with it - the
@@ -199,8 +199,8 @@ Example (Chinese user):
    Point out anything that differs from the preview.
 8. **If the call rejects the template**, relay the error and offer the alternatives: set it up
    manually, or apply the template in the platform. On create, check by name whether the group
-   was made before retrying - create is not idempotent. **Rule-mode rejection on an SP/SB edit**
-   (the template has automation rules with `status=1`, e.g. the two B2B templates): the error
-   lists three ways out - create a new group from the template, apply it in the platform, or
-   retry with explicit `aiAutomation` in AI mode (which drops the template's rules). Show all
-   three and wait for the user's choice before retrying.
+   was made before retrying - create is not idempotent. **Rule-mode rejection on an SP/SB create or edit** (the template's rule 4 Target Harvest or
+   rule 5 Negative Target has `status=1`): word lists can't be configured here, so these two rules
+   are AI-only. Relay the error and offer a template whose rules 4 / 5 are AI mode, or applying it
+   in the platform, and wait for the user's choice. Rule-mode rules other than 4 / 5 (for example
+   rule 13 in the two B2B templates) are not rejected.

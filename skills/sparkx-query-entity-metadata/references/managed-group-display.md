@@ -41,9 +41,9 @@ into an answer in another language.
 | `1` | Drive growth | 推动增长 | Increase sales / 扩大销量 |
 | `2` | Optimize ROAS | 保持订单稳定 | Drive efficiency / 控制成本 |
 | `3` | Promotion sales boost | 活动冲量 | Increase sales / 扩大销量 |
-| `4` | *(legacy value, no longer offered in the UI)* | *(旧值，UI 无对应选项)* | — |
+| `4` | Drive growth (budget utilization priority) | 推动增长（预算优先消耗） | Increase sales / 扩大销量 |
 
-A group read back with `targetType=4` is a **legacy value from before the current objective UI** — not a current option, and not the same thing as the separate "Budget utilization priority (Beta)" toggle (which is an independent switch, not part of `targetType`; see the create/edit skills' enum reference). Don't render a customer-facing objective name for it. Say the group predates the current objective options and, if the user wants to act on it, that changing it requires selecting one of `1`-`3`.
+A group read back with `targetType=4` is **Drive growth with budget utilization priority (预算优先消耗) turned on** — a live, gated variant of `1`. Earlier guidance here called it a legacy value and told you to say the group predates the current objective options; **that was wrong - do not say it.** Three things belong in the answer instead: (1) the group runs the aggressive budget-utilization variant of Drive growth, which trades ACOS for budget utilization; (2) **its AI personality is locked to `5` at runtime while `aiPersonality` still returns the stored value** - never report the returned personality as what the AI is actually doing; (3) the mode can also come from 预算管理 Auto Pacing, which switches on every AI-enabled group in the budget group at once and cannot be turned off for one group, so don't assume the customer set it here. The create/edit skills' `enum-i18n.md` has the full behaviour.
 
 For a Chinese answer with value `2`, render:
 

@@ -27,19 +27,20 @@ Flat operations use the type selectors and companion values inside `batchParams`
   (a Rule-mode rule stays Rule).
 - Turning an action-space switch on (`aiActionSettings.xxxStatus=1`, from your params or a
   template) restores that space's existing mode - if the group's rule is `status=1`, it
-  resumes in Rule mode.
-- **Template edit** (`templateId` > 0, `isSystemTemplate=1` for system presets): if you omit
-  `aiAutomation` and the template contains any Rule-mode rule (`status=1`), the call is
-  rejected before anything is written; the error offers three options (new group with
-  `aiGroupId=0`, platform UI, or retry with an explicit `aiAutomation` so the template's
-  rules are ignored). Ask the user which one before retrying. Archived templates
-  (`status=2`) are rejected; `aiStatus` is never taken from the template.
-- **RBA configuration is readable but not writable.** For a rule in Rule mode,
-  `get_entity_metadata(entity='aiGroup')` returns its real conditions, actions, condition
-  items, time periods and hour matrices under `aiAutomation.{ruleType}` - you may read and
-  explain that setup. You must **not** attempt to write, preserve, reconstruct, or migrate
-  it: no MCP tool writes rule conditions/actions. For an RBA config change, point the user to
-  the platform.
+  resumes in Rule mode. **Exception:** turning `targetHarvestStatus` / `negativeTargetStatus` from off
+  to on is rejected while rule 4 / 5 is in Rule mode on the group - set that rule to `0` in
+  `aiAutomation` in the same request, or use the platform.
+- **Template edit** (`templateId` > 0, `isSystemTemplate=1` for system presets): if the template's
+  rule 4 (Target Harvest) or rule 5 (Negative Target) is in Rule mode (`status=1`), the call is
+  rejected before anything is written, whether or not you pass `aiAutomation`; offer a template
+  whose rules 4 / 5 are AI mode, or the platform UI. Other Rule-mode rules in the template (e.g.
+  Budget Daypart rule 13) are written as-is when you omit `aiAutomation`; if you pass your own
+  `aiAutomation`, the template's rules are ignored. Archived templates (`status=2`) are rejected;
+  `aiStatus` is never taken from the template.
+- **RBA configuration is readable, and writable only by inheriting a template.** For a rule in
+  Rule mode, `get_entity_metadata(entity='aiGroup')` returns its real conditions, actions,
+  condition items, time periods and hour matrices under `aiAutomation.{ruleType}` - you may read
+  and explain that setup, but never hand-write, reconstruct or migrate it. **You cannot create or edit Rule-mode conditions and actions through MCP.** The one way Rule config reaches a group is applying a platform template with `templateId`: the template's own `aiAutomation` is carried in as-is, Rule-mode rules included, so a template *can* put an action space into Rule mode with its conditions and actions (a template whose rule 4 or 5 is in Rule mode is rejected). You inherit that config, you never author it. For any other RBA change, point the user to the platform.
 - Schedules **are** writable, but through a different tool
   (`save_sp_sb_ai_group_schedule`) - not via these fields. See the Scheduling section in the
   main SKILL.md; note in particular that a read row is not a write payload.
@@ -47,7 +48,7 @@ Flat operations use the type selectors and companion values inside `batchParams`
 ## Editable fields
 
 Top-level: `aiStatus` (`0`=off, `1`=on), `targetType` (`1` growth / `2` stability /
-`3` volume / `4` legacy), `acos`, `campaignIds`, `campaignNameSign`,
+`3` volume / `4` growth with budget utilization priority), `acos`, `campaignIds`, `campaignNameSign`,
 `aiPersonality` (`1`-`5`, **>=3 when `targetType=3`**), and the nested
 `aiActionSettings` / `aiAutomation` objects.
 
@@ -86,8 +87,7 @@ Multi-group edit uses the **operation-based batch protocol** - inside `request`:
 three-state result handling. See [`batch.md`](batch.md).
 
 **SP and SB can be batched together** for operations both support; **SP-only operations**
-(`structOptimization`) must **exclude SB** ids. (`targetPausedAdd` is not usable here -
-it's disabled in SP/SB batch; see the word-list note in [`batch.md`](batch.md).) **SD**
+(`structOptimization`) must **exclude SB** ids. (`targetPausedAdd` is SP-only too; see the target-switch note in [`batch.md`](batch.md).) **SD**
 always uses the other tool (`edit_sd_ai_managed_group`) - never in the same call.
 
 ## Example - retarget one SP group to volume with an aggressive personality

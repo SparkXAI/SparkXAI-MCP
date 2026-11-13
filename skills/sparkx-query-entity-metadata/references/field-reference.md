@@ -506,7 +506,7 @@ because it carries `writeField`.
 Sourced from a separate backend (`td-api getSaAiGroupList`), aggregated from the SA perspective — richer field set than the ads DB.
 
 **Return fields** (partial — full list is long):
-`aiGroupId`, `aiGroupName`, `aiStatus` (`0`=AI never turned on, `1`=AI currently running, `2`=AI turned off), `campaignType`, `targetType` (`1`=Drive growth/推动增长, `2`=Optimize ROAS/保持订单稳定, `3`=Promotion sales boost/活动冲量), `targetAcos`, `aiPersonality` (1-5), `aiPersonalityUpdatedAt`, `profileId`, `profileName`, `countryCode`, `numCampaign`, `numProduct`, `campaignNameSign`, `createTime`, `createBy`, `createUid`, `hasEditAuth`, `isAutoPacing`, `statusOnDate`, `lastStatusOnDate`, `lastStatusOffDate`, `lastOnDays`, `lastOnDaysBegin`, `lastOnDaysEnd`, `totalBudget`, `totalDailyBudget`, `sbStyleNum`, `aiActionSettings`, `aiAutomation`
+`aiGroupId`, `aiGroupName`, `aiStatus` (`0`=AI never turned on, `1`=AI currently running, `2`=AI turned off), `campaignType`, `targetType` (`1`=Drive growth/推动增长, `2`=Optimize ROAS/保持订单稳定, `3`=Promotion sales boost/活动冲量, `4`=Drive growth with budget utilization priority/预算优先消耗 — readable but **not filterable**, see enum-i18n.md), `targetAcos`, `aiPersonality` (1-5), `aiPersonalityUpdatedAt`, `profileId`, `profileName`, `countryCode`, `numCampaign`, `numProduct`, `campaignNameSign`, `createTime`, `createBy`, `createUid`, `hasEditAuth`, `isAutoPacing`, `statusOnDate`, `lastStatusOnDate`, `lastStatusOffDate`, `lastOnDays`, `lastOnDaysBegin`, `lastOnDaysEnd`, `totalBudget`, `totalDailyBudget`, `sbStyleNum`, `aiActionSettings`, `aiAutomation`
 
 **`hasAdvice`** (intensity-enabled accounts only) says whether an AI personality recommendation is
 waiting for this group — it is the cheap way to find the groups worth calling
@@ -522,6 +522,21 @@ waiting for this group — it is the cheap way to find the groups worth calling
 - **Not a filter.** There is no `hasAdvice` filter; pull the rows and group them client-side.
 - **An absent field is "unknown", not `false`, and not proof of a legacy account.** The field is omitted on legacy (non-intensity) accounts **and** whenever the capability check itself fails (`CapabilityDecision.QUERY_FAILED` falls back to the legacy output path). Those two look identical in the response, so read absence as "not enabled, or could not be determined" — never as "this account has no per-action-space intensities".
 - `true` is not an authorisation to write. It only says advice exists; applying it is still the separate user-approved step described in the create / edit skills.
+
+**`recommendedAcos`** (all accounts, **only when `select` includes `recommendedAcos`**) is the
+recommended ACOS for the group as `{acos, minAcos, maxAcos}`. Without it in `select` the field is
+absent and no extra lookup runs, so add it only when the user asks for a recommended / suggested
+ACOS or target ACOS range.
+
+- All three are percentages on the same scale as `targetAcos` (`24.35` = 24.35%), 2 decimals.
+- `acos` is the lower of the last-14-day ACOS and the prior comparison window's. When the group
+  has no valid value (none, or above 200) it falls back to the same profile + ad type ACOS - so it
+  is not always the group's own number.
+- `minAcos` / `maxAcos` are the suggested range from the group's **current** `targetType`
+  (1: ×1.0-1.2, 2: ×0.8-1.0, 3: ×1.2-1.5, 4: ×1.3-1.6, other: ×1.0). `maxAcos` may exceed 200.
+- `null` = no data for the group or its profile, or a failed lookup; `meta.hint` says which.
+  Do not report `null` as 0% or as "no recommendation needed".
+- Not a filter and not sortable.
 
 Display `aiPersonality` as its numeric value `1`-`5` in customer-facing group and schedule
 configuration output. Do not replace it with `aiPersonalityText` or append a personality label.
@@ -648,6 +663,7 @@ Non-empty `orderBy` is rejected. Pagination is ignored; all schedules for the gr
 | `aiPersonality` | int | 1–5. Same inheritance note as `optimizeType` |
 | `aiActionSettings` | object | Per-schedule action-space settings, same shape and same effective-config projection as on the group |
 | `aiAutomation` | object | Per-schedule automation rules, keyed by rule type, same projection rules |
+| `recommendedAcos` | object/null | Only when `select` includes it. The **parent group's** recommended ACOS, same shape and rules as on `aiGroup`, identical on every schedule row. The range follows the group's `targetType`, **not** the schedule's own `optimizeType` |
 
 **Reporting rule**: for a `timeType=2` (weekly) schedule, do **not** report `optimizeType`/`acos`/`aiPersonality` from the schedule row — they're inherited. Read them from the parent group (`entity: aiGroup`) and say so.
 

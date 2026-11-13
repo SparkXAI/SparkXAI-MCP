@@ -230,6 +230,11 @@ table in [`field-reference.md`](field-reference.md).
 | `1` | Drive growth | 推动增长 | 成長促進 |
 | `2` | Optimize ROAS | 保持订单稳定 | 注文安定維持 |
 | `3` | Promotion sales boost | 活动冲量 | イベントによる注文増加 |
+| `4` | Drive growth (Budget utilization priority) | 推动增长（预算优先消耗） | 成長促進（予算消化優先） |
+
+`4` is a live, gated variant of `1`, not a legacy value. It locks the **running** AI personality
+to `5`, so on a `targetType=4` row `aiGroup.aiPersonality_` is the **stored** value and does not
+describe what the AI is doing - never report it as the effective personality.
 
 ## aiPersonality (`aiGroup.aiPersonality_`)
 

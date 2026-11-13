@@ -150,6 +150,11 @@ replace `targetType=2` with its category or copy the English option into a Chine
 | `1` | Drive growth | 推动增长 | 成長促進 | Increase sales / 扩大销量 |
 | `2` | Optimize ROAS | 保持订单稳定 | 注文安定維持 | Drive efficiency / 控制成本 |
 | `3` | Promotion sales boost | 活动冲量 | イベントによる注文増加 | Increase sales / 扩大销量 |
+| `4` | Drive growth (Budget utilization priority) | 推动增长（预算优先消耗） | 成長促進（予算消化優先） | Increase sales / 扩大销量 |
+
+⚠️ `4` is returned by reads but **cannot be filtered on**: `filters.targetType` accepts only
+`1`, `2` and `3` (`must contain only 1, 2, or 3`). To find `targetType=4` groups, read without a
+targetType filter and filter client-side.
 
 ## aiPersonality
 
@@ -171,7 +176,7 @@ These mappings support parsing. For customer-facing names and UI grouping, use
 [`managed-group-display.md`](managed-group-display.md); do not expose the backend field column by
 default. Brand/non-brand/competitor mode is separate from AI Action Space.
 
-All are `0`/`1` except `targetPausedAddStatus` which is `0`/`1`/`2`.
+All are `0`/`1` except **`targetHarvestStatus` and `targetPausedAddStatus`, which are `0`/`1`/`2`**. On `targetHarvestStatus`, `2` means harvesting is on **and** the harvested term is also added as an exact negative in the source ad group; on `targetPausedAddStatus`, `2` means paused-target handling is on **and** targeting supplementation is checked.
 
 **Common 0/1 values**: `0` = Off (关闭 / オフ), `1` = On (开启 / オン)
 
@@ -202,7 +207,7 @@ All are `0`/`1` except `targetPausedAddStatus` which is `0`/`1`/`2`.
 
 | Code / concept | EN | ZH | Notes |
 |---|---|---|---|
-| `aiAutomation` | Rule-based automation settings | 自动化规则设置 | Readable on `aiGroup` / `aiGroup_schedule`; rule config is not writable through MCP. |
+| `aiAutomation` | Rule-based automation settings | 自动化规则设置 | Readable on `aiGroup` / `aiGroup_schedule`; rule conditions / actions cannot be authored through MCP, but a template create / edit carries the template's own Rule-mode rules in. |
 | `2` | Bid dayparting | 分时调价 | Automation template and action-space ruleType. |
 | `3` | Budget rules (legacy/deprecated) | 预算规则（老版废弃） | Standalone legacy automation rule; keep for interpreting historical campaigns, not for new setup. |
 | `4` | Target harvesting | 定向收割 | Managed-group customer label; standalone template name is Add Search Keywords / 添加搜索词. |

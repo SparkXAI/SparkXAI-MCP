@@ -27,10 +27,10 @@ rejected outright.
 
 | Field | Values |
 |---|---|
-| `aiPersonality` | `1`=非常保守, `2`=保守, `3`=平衡, `4`=激进, `5`=非常激进. **>=3 required when `targetType=3` (volume/冲量)** - front-end rule, not backend-enforced. ⚠️ **Group-level only, and rejected outright on accounts that set personality per action space** - check [`ai-personality.md`](ai-personality.md) before sending it |
+| `aiPersonality` | `1`=保守, `2`=较保守, `3`=中庸, `4`=较激进, `5`=激进（这是读接口与页面实际显示的文案，`2` 的 `aiPersonalityText` 是「较保守 / Moderately Conservative」而非「保守」；部分写侧工具描述仍写成「very conservative ... very aggressive」，那是错的）. **>=3 required when `targetType=3` (volume/冲量)** - front-end rule, not backend-enforced. ⚠️ **Group-level only, and rejected outright on accounts that set personality per action space** - check [`ai-personality.md`](ai-personality.md) before sending it |
 | `campaignNameSign` | `0`=off, `1`=on |
 | `numType` / `budgetNumType` | `1`=percentage, `2`=fixed value |
-| `bidRangeType` | `2`=fixed value. `1`=**bid coefficient** (`1.15` = 1.15× the base bid), **not a percentage** — never convert `+15%` into `15`. A lower bound below `0` is silently clamped to `0`. Same range also governs bid dayparting; see [`coupling-rules.md`](coupling-rules.md) |
+| `bidRangeType` | `2`=fixed value (each end `> 0`). `1`=**bid coefficient** (`1.15` = 1.15× the base bid), **not a percentage** — never convert `+15%` into `15`. Each end must be `0.01`-`100` (rejected otherwise). Same range also governs bid dayparting; see [`coupling-rules.md`](coupling-rules.md) |
 | `*MatchType` (branded/competitor/harvest/negative) | `1`=exact(等于/精确), `2`=phrase(包含/词组) |
 | `*ListType` (harvest/negative) | `1`=include/whitelist, `2`=exclude/blacklist |
 
@@ -55,7 +55,10 @@ Flat fields (no nested objects):
 
 Top-level: `aiStatus` (`0`=off, `1`=on - create input is `0`/`1`; a group reads back
 as `2`=paused once off), `targetType` (`1`=drive growth, `2`=maintain stability,
-`3`=volume, `4`=legacy growth), `campaignType` (`sponsoredProducts`/`sponsoredBrands`),
+`3`=volume, `4`=drive growth with **budget utilization priority** - an aggressive variant
+of `1`, gated and SP-only, and it locks the runtime AI personality to `5` while this field
+still reads back the stored value; see [`enum-i18n.md`](enum-i18n.md)),
+`campaignType` (`sponsoredProducts`/`sponsoredBrands`),
 `acos`, `campaignIds`, `campaignNameSign`, `aiPersonality`, `preAddCampaignNums`.
 
 ### `aiActionSettings` (nested) - EXACT names
@@ -74,14 +77,20 @@ Struct (**SP only**): `structPauseProductStatus`, `structPauseCampaignStatus`.
 Budget: **`budgetDaypartStatus`**, **`budgetDynamicStatus`**,
 **`budgetRedistributeStatus`**, `budgetNum`, `budgetNumType`.
 
-Target (**read-only via MCP - not settable at edit; configure in the platform UI**):
-`targetHarvestStatus`, `targetHarvestBlackListStatus`,
-`targetHarvestBlackList` (IDs), `targetHarvestListType`, `targetHarvestMatchType`,
-`negativeTargetStatus`, `negativeTargetBlackListStatus`,
-`negativeTargetBlackList` (IDs), `negativeTargetListType`, `negativeTargetMatchType`,
-`targetPausedAddStatus` (`0`=off, `1`=on, `2`=on with supplement). These read back
-from `get_entity_metadata` but the SP/SB write tool does not apply them - don't send
-them at edit.
+Target (**only the three action switches are writable via MCP; word-list settings are
+platform-only**):
+
+- Writable in `aiActionSettings`: `targetHarvestStatus` (`0`=off, `1`=on, `2`=on and also add
+  harvested terms as exact negatives), `negativeTargetStatus` (`0`/`1`), `targetPausedAddStatus`
+  (`0`/`1`; **SP only**, non-zero on SB is rejected; the read-side value `2` is never sent).
+  Out-of-range values are rejected. An omitted switch keeps the group's current value (template
+  mode: your value, then the template, then the group). Turning `targetHarvestStatus` /
+  `negativeTargetStatus` from off to on is rejected while rule 4 / 5 is in Rule mode on the
+  group - see [`coupling-rules.md`](coupling-rules.md).
+- Not writable: `targetHarvestBlackListStatus`, `targetHarvestBlackList` (IDs),
+  `targetHarvestListType`, `targetHarvestMatchType`, `negativeTargetBlackListStatus`,
+  `negativeTargetBlackList` (IDs), `negativeTargetListType`, `negativeTargetMatchType`. They read
+  back from `get_entity_metadata`, are kept unchanged on edit, and must be changed in the platform UI.
 
 Word-list fields may appear in some schemas, including `brandedStatus`, `brandedList`,
 `competitorStatus`, `competitorList`, `negativeTargetBlackListStatus`, and
@@ -102,14 +111,14 @@ it must never set `1` to switch **AI -> RBA**, and it cannot write RBA condition
 | `aiAutomation` field | Rule | Paired `aiActionSettings` switch |
 |---|---|---|
 | `bidDaypartStatus` | 2 - bid dayparting | `bidDaypartStatus` |
-| `targetHarvestRuleStatus` | 4 - target harvest (read-only, not settable at edit) | `targetHarvestStatus` |
-| `negativeTargetRuleStatus` | 5 - negative target (read-only, not settable at edit) | `negativeTargetStatus` |
+| `targetHarvestRuleStatus` | 4 - target harvest (AI-only: send `0`, or omit to keep) | `targetHarvestStatus` |
+| `negativeTargetRuleStatus` | 5 - negative target (AI-only: send `0`, or omit to keep) | `negativeTargetStatus` |
 | `budgetDaypartRuleStatus` | 13 - budget dayparting | `budgetDaypartStatus` |
 | `budgetPerformanceRuleStatus` | 17 - budget by performance | `budgetDynamicStatus` |
 | `placementAdjustmentRuleStatus` | 19 - placement adjustment | `bidAdPlaceStatus` |
 | `pauseCampaignRuleStatus` | 20 - pause campaign | `structPauseCampaignStatus` |
 | `bidPerformanceRuleStatus` | 181 - bid by performance | `bidPerformanceStatus` |
-| `targetPauseSupplementRuleStatus` | 182 - target pause / supplement (read-only, not settable at edit) | `targetPausedAddStatus` |
+| `targetPauseSupplementRuleStatus` | 182 - target pause / supplement (send `0`, or omit to keep) | `targetPausedAddStatus` |
 
 | Field | Type | Notes |
 |---|---|---|
@@ -125,7 +134,7 @@ now fails the whole call.
 
 **On read**, `aiAutomation` is keyed by rule number (`"2"`, `"4"`, `"181"`, …), AI-mode rules
 are omitted entirely, and Rule-mode rules come back with their full condition/action
-configuration (readable, not writable). An empty `aiAutomation` is ambiguous by itself: read the
+configuration (readable; not authorable here, though a template create / edit carries the template's own Rule-mode rules in). An empty `aiAutomation` is ambiguous by itself: read the
 paired `aiActionSettings` switches to distinguish off action spaces from enabled action spaces in
 AI mode.
 
@@ -142,7 +151,7 @@ which value field is valid - see `edit-sd.md` for the full mutual-exclusion tabl
 | `acosType` | `1`=value (-> `acos`), `2`=recommended (-> `acosStatus=1`), `3`=ratio (-> `acosRatio`) |
 | `acosStatus` | `1`=apply recommended ACOS |
 | `roasType` | `1`=value (-> `roas`), `2`=recommended, `3`=ratio (-> `roasRatio`) |
-| `budgetType` | `1`=total (-> `budget`), `2`=daily (-> `budget`), `3`=ratio (-> `budgetRatio`) |
+| `budgetType` | `1`=total (-> `budget`), `2`=campaign daily (-> `budget`). **`3` (ratio) is rejected on SD**; the SP/SB batch still accepts `3` (-> `budgetRatio`, `> -100` and `<= 10000`), see the caveat below |
 | `campaignNameRecoveryType` | when turning the name label off: `1`=keep current, `2`=restore original |
 | `remark` | free text, max 200 chars |
 | `ids` | array of aiGroupIds to update, **max 20** |
@@ -158,6 +167,9 @@ enum (lowercase is rejected with `does not have a value in the enumeration [...]
 `STRUCT_OPTIMIZATION`, `BUDGET_DAYPART`, `BUDGET_DYNAMIC_ACTION`, `BUDGET_REDISTRIBUTE`,
 `TARGET_HARVEST_ACTION`, `NEGATIVE_TARGET`, `BRAND_TARGET`, `TARGET_PAUSED_ADD`.
 
+On SP/SB, `NEGATIVE_TARGET` and `BRAND_TARGET` are rejected; `TARGET_HARVEST_ACTION` and
+`TARGET_PAUSED_ADD` take only the switch (see `batch.md`).
+
 Flat operations read these fields from `batchParams`: `budgetType`, `budget`,
 `budgetRatio`, `status`, `optimizeType`, `acosStatus`, `acosType`, `acos`,
 `acosRatio`, `roasType`, `roas`, `roasRatio`, `targetHarvestStatus`,
@@ -167,6 +179,7 @@ parameter mapping and mutual-exclusion rules.
 
 ## Known value-range caveat
 
-- **`budgetType=3`** (ratio) is a known-risky value - it can hang the downstream
-  service. Avoid unless ratio mode is specifically needed; if used, send `budgetRatio`
-  and no `budget`.
+- **`budgetType=3`** (ratio) is rejected on SD (`edit_sd_ai_managed_group` accepts only `1` and `2`).
+  On the SP/SB batch it is accepted but is a known-risky value - it can hang the downstream
+  service. Avoid unless ratio mode is specifically needed; if used, send `budgetRatio` and no
+  `budget`.

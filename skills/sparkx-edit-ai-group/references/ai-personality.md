@@ -68,7 +68,10 @@ to. The node column only tells you which switch they modify.
 | `negativeTargetAiPersonality` | `targetOptimization` | supported |
 | `targetPausedAddAiPersonality` | `targetOptimization` | **not supported** |
 
-**Value: an integer `1`-`5`** (`1` = very conservative … `5` = very aggressive). **`null` is
+**Value: an integer `1`-`5`** (`1` = conservative, `2` = moderately conservative, `3` = balanced,
+`4` = moderately aggressive, `5` = aggressive - the labels the read side returns; the tool
+description's "very conservative … very aggressive" wording is wrong, same scale either way).
+**`null` is
 rejected** (`invalid_params`), and **clearing a single action space is not supported at all** -
 to leave one alone, omit the field. Anything else is rejected too, and the error lists **every**
 invalid field at once, so read the whole list rather than fixing one and resending.
@@ -207,9 +210,10 @@ schedule's `aiPersonality`** rather than keeping its previous value - the opposi
 group's edit semantics. Send the full set you want on that schedule, or read it back first and
 re-send what should stay.
 
-**4. Some nodes are stripped.** `targetOptimization` and `brandOptimization` (word-list
-settings) are not configurable here and are dropped if sent - **except** the
-`targetOptimization` personality fields, which are kept.
+**4. Some nodes are stripped.** `brandOptimization` and the word-list fields of
+`targetOptimization` are not configurable here and are dropped if sent - **except** the
+`targetOptimization` personality fields and its three action switches (`targetHarvestStatus`,
+`negativeTargetStatus`, `targetPausedAddStatus`), which are kept.
 
 ## Asking the platform what to set: `get_sp_sb_ai_personality_recommendation`
 

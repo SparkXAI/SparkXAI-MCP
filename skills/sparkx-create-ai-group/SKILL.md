@@ -11,7 +11,7 @@ description: >-
   creates the group itself - it is NOT for enabling or editing an existing group (use
   sparkx-edit-ai-group) or deleting one (use sparkx-delete-ai-group).
 metadata:
-  version: 1.2.5
+  version: 1.2.6
 ---
 
 # Create AI Managed Group
@@ -81,7 +81,7 @@ confirm the meaning first, then use the ad-type reference to pick the field.
   on an unknown default. To preview a cap, base it on the **enabled** campaigns among those
   you're adding (use each one's `dailyBudget`). **SD creation does not support 按表现调预算.**
 - **"target / goal" / "目标"**: 推广目标 `targetType` (1 growth / 2 stability / 3 volume /
-  4 legacy) vs 目标 ACOS (`acos`). **Create has no `roas` field** - if the user says
+  4 growth with budget utilization priority / 预算优先消耗) vs 目标 ACOS (`acos`). **Create has no `roas` field** - if the user says
   "目标 ROAS", do NOT build `roas`; tell them create can't set a target ROAS directly, and
   ask whether they want to set the promotion target or convert it to a target ACOS. Also:
   "ACOS 优先模式 / ACOS priority" is the strict-ACOS switch (see the ACOS-priority item
@@ -216,7 +216,8 @@ confirm the meaning first, then use the ad-type reference to pick the field.
      See [`references/ai-personality.md`](references/ai-personality.md).
    - **Coupled fields** - enabling a switch requires its companion fields, and any
      range must have min <= max - **except `bidRange`, where min must be strictly less than
-     max** (see [`references/coupling-rules.md`](references/coupling-rules.md)).
+     max and each end is bounded by `bidRangeType`: `0.01`-`100` for the coefficient type `1`,
+     `> 0` for a fixed bid `2`** (see [`references/coupling-rules.md`](references/coupling-rules.md)).
    - **Invalid values are rejected by the backend now - but pre-validate anyway** so the
      user gets a clear message instead of a downstream error (prod-confirmed):
      `acos` must be > 0 and in range (`0`, negatives, and over-limit are all rejected);
@@ -228,9 +229,17 @@ confirm the meaning first, then use the ad-type reference to pick the field.
      action-space switch + `budgetNumType` + `budgetNum`. (`acosType`/`budgetType`/
      `budgetRatio` are **edit/batch** fields - do **not** put them in a create call.)
      Catch these up front rather than leaning on the backend error.
-   - **Word-list settings are not supported.** Do not send branded, non-branded,
-     competitor, harvest-blacklist, or negative-target-blacklist fields, even if the
-     routed schema exposes them. Tell the user to configure word lists in the platform.
+   - **Word-list settings are not supported; three target switches are.** Do not send branded,
+     non-branded, competitor, harvest-blacklist, or negative-target-blacklist fields (status, list
+     ID, match type, list type), even if the routed schema exposes them. Tell the user to configure
+     word lists in the platform. What you can send inside `aiActionSettings`: `targetHarvestStatus`
+     (`0`=off, `1`=on, `2`=on and also add harvested terms as exact negatives),
+     `negativeTargetStatus` (`0`/`1`) and `targetPausedAddStatus` (`0`/`1`, **SP only**; non-zero on
+     SB is rejected). Out-of-range values are rejected; an omitted switch is off on a normal create, but on a
+     template create a switch the template doesn't set falls to the downstream default, which is
+     **on** - send an explicit `0` for any switch the user wants off.
+     Target Harvest (rule 4) and Negative Target (rule 5) are AI-mode only (see
+     [`references/coupling-rules.md`](references/coupling-rules.md)).
 6. **Verify it landed - group AND campaigns.** Don't trust the envelope alone:
    - Re-read the group (`entity='aiGroup'`) -> confirm it exists with the intended
      top-level settings.
@@ -333,20 +342,22 @@ A managed group **can** now be created from a platform template via `templateId`
   `smartCreationName`, `campaignIds`. Templates don't carry those. `budget` /
   `budgetChange` are also **not** template-controlled on SD.
 - **One template restriction is a hard error.** If the template's target-harvest (rule 4) or
-  negative-target (rule 5) config is bound to *specific campaigns and ad groups*
-  (`isSelf=2` with the rule enabled), the call is rejected - this tool can't carry those
-  bindings. The error names the offending rules. Tell the user to either apply that template
-  in the platform UI, or pick a template whose rules use "current object" scope.
+  negative-target (rule 5) is in **Rule mode** (`status=1`), the call is rejected - word lists
+  can't be configured through this tool, so these two action spaces support AI mode only. This
+  holds whether or not you pass `aiAutomation` and whether or not the matching switch is on. The
+  error names the offending rules. Tell the user to either apply that template in the platform
+  UI, or pick a template whose rules 4 / 5 use AI mode. (The old separate `isSelf=2` check is
+  gone: `isSelf=2` only takes effect while the rule is on, so this check covers it.)
 - **SP/SB template create carries the template's automation rules as-is, Rule mode
-  included.** If you don't pass `aiAutomation`, every rule in the template's `aiAutomation`
-  is applied unchanged - a rule with `status=1` lands as a **Rule-mode** rule with its
-  condition/action (e.g. the Budget Daypart rule 13 in system templates 12 and 13). This is
-  the only way this tool creates Rule-mode config. Say so in the preview ("this template
-  sets Budget Daypart to Rule mode"). If you pass `aiAutomation` yourself, the template's
-  rules are ignored entirely and only `0` (AI mode) is accepted. SD has no automation
-  rules; a template's `aiAutomation` is ignored on SD. Applying such a template to an
-  **existing** group later is rejected (see `sparkx-edit-ai-group`), so Rule-mode templates
-  are a create-only route through MCP.
+  included - except rules 4 and 5, which must be AI (see above).** If you don't pass
+  `aiAutomation`, every other rule in the template's `aiAutomation` is applied unchanged - a rule
+  with `status=1` lands as a **Rule-mode** rule with its condition/action (e.g. the Budget Daypart
+  rule 13 in system templates 12 and 13). Templates are the only way this tool writes Rule-mode
+  config. Say so in the preview ("this template sets Budget Daypart to Rule mode"). If you pass
+  `aiAutomation` yourself, the template's rules are ignored entirely and only `0` (AI mode) is
+  accepted. SD has no automation rules; a template's `aiAutomation` is ignored on SD. Applying
+  such a template to an **existing** group goes through template edit, which carries the same
+  rules over (see `sparkx-edit-ai-group`).
 - **Templates are not tied to an ad type; on an SB group the SP-only switches are turned off.**
   If the template has any SP-only switch on (`bidAmazonBusinessStatus`, `btbRangeStatus`,
   `bidPerformanceStrictAcosStatus`, `bidAdPlaceStatus`/`bidAdPlaceRangeStatus`,
@@ -358,9 +369,17 @@ A managed group **can** now be created from a platform template via `templateId`
   still rejected.
 - **On create, `aiActionSettings` replaces the template's action space.** If you send it with
   `templateId`, the template's action-space config is skipped entirely (yours wins, it is not
-  merged). To change one switch from a template: create from the template **with AI off**,
+  merged). **Exception: the three target switches** (`targetHarvestStatus`,
+  `negativeTargetStatus`, `targetPausedAddStatus`) are overlaid on the template instead, so sending
+  only those does not replace the template's action space. To change any other switch from a template: create from the template **with AI off**,
   edit that switch, read back, then turn AI on once the user confirms - a staged flow (see
   step 4's exception).
+- **Target switches the template doesn't set default to ON on a template create.** The server
+  zero-fills `targetHarvestStatus`, `negativeTargetStatus` and `targetPausedAddStatus` on a normal
+  create only. If the template detail has no target-optimization config, a switch you leave out is
+  not forced off and the downstream default (on) applies. Read the template detail, state the
+  resulting target switches in the preview, and pass an explicit `0` for any the user wants off
+  (your value overlays the template without replacing its action space). ⚠️ **`targetPausedAddStatus` is the exception: it is SP-only.** On an SB group the server forces it to `0` on every create and edit path, so it never lands on - do not tell an SB customer that all three switches came on.
 - **Templates are read-only through MCP.** You cannot create, edit, or delete a template,
   and you cannot save a group's settings back as one - that's platform-only. Say so rather
   than attempting a workaround.

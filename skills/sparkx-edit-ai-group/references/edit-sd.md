@@ -15,7 +15,7 @@ aiGroupIds, **max 20**).
 - **Batch operation (`operation` provided).** One operation per request - SD is
   **flat/top-level**: put `operation` and its params directly alongside `profileId`/`ids`
   (no `request` wrapper, no `batchParams`), e.g. `{profileId, ids, operation:"BUDGET",
-  budgetType:3, budgetRatio:20}`. Operation values are **UPPER_SNAKE_CASE** (prod-confirmed
+  budgetType:1, budget:500}`. Operation values are **UPPER_SNAKE_CASE** (prod-confirmed
   2026-08-13); verify the exact enum in the tool schema. See
   [`batch.md`](batch.md) - **the "SD" section** - for the shape, id<->profile validation,
   and three-state (`success` / `partial_failure` / `failed`) result handling. (SP/SB uses
@@ -86,13 +86,12 @@ guard this (MCP bypass) - you must.
 
 | `budgetType` | Meaning | Send | Do NOT send |
 |---|---|---|---|
-| `1` | total budget | `budget` (required) | `budgetRatio` |
-| `2` | daily budget | `budget` (required) | `budgetRatio` |
-| `3` | ratio adjust | `budgetRatio` (required) | `budget` |
+| `1` | total budget (whole group) | `budget` (required) | `budgetRatio` |
+| `2` | campaign daily budget | `budget` (required) | `budgetRatio` |
 
-> **`budgetType=3` is a known-risky value** (can hang the downstream ai-center service).
-> Avoid it unless the user specifically needs ratio mode; if you do use it, send
-> `budgetRatio` and no `budget`.
+> **`budgetType=3` (ratio) is not available on SD.** The gateway rejects any value other than `1` or
+> `2` (`must be 1 (total budget) or 2 (campaign daily budget)`), and `budgetRatio` has no effect. For
+> a proportional change, compute the new amount from the current budget and send it as `budget`.
 
 ## Other coupled fields
 

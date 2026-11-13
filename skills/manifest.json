@@ -1,12 +1,12 @@
 {
   "$schema_note": "Machine-readable manifest of SparkX AI MCP official skills. Version fields must stay in sync with each skill's SKILL.md frontmatter (`metadata.version`).",
   "manifest_version": 1,
-  "updated_at": "2026-11-10",
-  "release": "v1.3.7",
+  "updated_at": "2026-11-03",
+  "release": "v1.3.6",
   "skills": [
     {
       "name": "sparkx-query-ads-performance",
-      "version": "1.4.10",
+      "version": "1.4.11",
       "required": true,
       "mcp_tools": ["get_ads_perf"],
       "scopes": ["amazon_sa_performance_data:read"],
@@ -15,7 +15,7 @@
     },
     {
       "name": "sparkx-query-entity-metadata",
-      "version": "1.4.10",
+      "version": "1.4.11",
       "required": true,
       "mcp_tools": ["get_entity_metadata"],
       "scopes": ["amazon_sa_ads_configuration:read"],
@@ -33,7 +33,7 @@
     },
     {
       "name": "sparkx-create-ai-group",
-      "version": "1.2.5",
+      "version": "1.2.6",
       "required": true,
       "mcp_tools": ["create_sd_ai_managed_group", "save_sp_sb_ai_managed_group", "save_sp_sb_ai_group_schedule", "get_ai_group_template", "get_sp_sb_ai_personality_recommendation"],
       "scopes": ["amazon_sa_managed_group:write"],
@@ -42,7 +42,7 @@
     },
     {
       "name": "sparkx-edit-ai-group",
-      "version": "1.2.5",
+      "version": "1.2.6",
       "required": true,
       "mcp_tools": ["edit_sd_ai_managed_group", "save_sp_sb_ai_managed_group", "save_sp_sb_ai_group_schedule", "get_ai_group_template", "get_sp_sb_ai_personality_recommendation"],
       "scopes": ["amazon_sa_managed_group:write"],
@@ -51,7 +51,7 @@
     },
     {
       "name": "sparkx-delete-ai-group",
-      "version": "1.0.10",
+      "version": "1.0.11",
       "required": true,
       "mcp_tools": ["delete_ai_managed_group"],
       "scopes": ["amazon_sa_managed_group_delete:write"],
@@ -123,7 +123,7 @@
     },
     {
       "name": "sparkx-promo-reset",
-      "version": "1.0.5",
+      "version": "1.0.6",
       "required": false,
       "mcp_tools": ["get_operation_log", "get_ads_perf", "get_entity_metadata", "batch_update_ads", "save_sp_sb_ai_managed_group", "edit_sd_ai_managed_group"],
       "scopes": ["amazon_sa_ads_logs:read", "amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_campaign_edit:write", "amazon_sa_managed_group:write"],

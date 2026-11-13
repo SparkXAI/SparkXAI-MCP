@@ -28,8 +28,8 @@ level** next to `profileId`/`ids`:
   "profileId": 123456,
   "ids": [1001, 1002],
   "operation": "BUDGET",
-  "budgetType": 3,
-  "budgetRatio": 20
+  "budgetType": 1,
+  "budget": 500
 }
 ```
 
@@ -55,7 +55,17 @@ Everything inside `request`; **Flat** operation params go in `batchParams`,
 - **Flat** ops -> `batchParams`: `STATUS`, `BUDGET`, `TARGET_TYPE`, `ACOS`, `ROAS`,
   `TARGET_HARVEST`, `DYNAMIC_BUDGET`, `CAMPAIGN_NAME_SIGN`, `AI_PERSONALITY`.
 - **Action-space** ops -> `aiActionSettings` / `aiAutomation`: `BID_OPTIMIZATION`, `STRUCT_OPTIMIZATION`, `BUDGET_DAYPART`, `BUDGET_DYNAMIC_ACTION`, `BUDGET_REDISTRIBUTE`.
-  - **Schema-only - do not use on SP/SB** (word-list, rejected in batch): `NEGATIVE_TARGET`, `BRAND_TARGET`, `TARGET_PAUSED_ADD`, `TARGET_HARVEST_ACTION`. (`TARGET_HARVEST_ACTION` / `targetHarvest` are valid on the **SD** tool, not here.)
+  - **Target-switch operations (SP/SB):** `TARGET_HARVEST_ACTION`
+    (`aiActionSettings.targetHarvestStatus`, `0`/`1`/`2`) and `TARGET_PAUSED_ADD`
+    (`aiActionSettings.targetPausedAddStatus`, `0`/`1`, **SP groups only**) are accepted, but only as a
+    switch: a call that carries neither the switch nor an `aiAutomation` is rejected (with
+    `aiAutomation` alone it goes through, but only rule modes change and no switch is written), and
+    word-list details can't be set.
+    `TARGET_PAUSED_ADD` with any SB id fails the whole batch.
+  - **Do not use on SP/SB:** `NEGATIVE_TARGET` (Negative Target is AI-only and a batch can't check each
+    group's rule 5 mode - edit those groups one by one with `negativeTargetStatus`) and `BRAND_TARGET`
+    (needs word lists). Both are rejected before anything is written.
+    (`TARGET_HARVEST_ACTION` / `targetHarvest` are also valid on the **SD** tool.)
 
 > **Naming**: the server's canonical codes are camelCase (`budget`, `status`, `targetType`,
 > `acos`, `roas`, `targetHarvest`, `dynamicBudget`, `campaignNameSign`, `aiPersonality`,
@@ -64,12 +74,19 @@ Everything inside `request`; **Flat** operation params go in `batchParams`,
 > `targetPausedAdd`). Deserialization ignores case and underscores, so the UPPER_SNAKE_CASE
 > names above work too. An unrecognized value fails with `Unknown BatchOperationType: x`.
 
-> **⚠️ Word-list-related batch operations are rejected on SP/SB.** `save_sp_sb_ai_managed_group`
-> refuses `TARGET_HARVEST_ACTION`, `NEGATIVE_TARGET`, `BRAND_TARGET` and `TARGET_PAUSED_ADD`
-> before anything is written (they touch word-list / target-optimization settings). Tell the
-> user to change these in the platform. To only turn harvesting on/off, use `targetHarvest`.
+> **⚠️ Only some target-related batch operations are rejected on SP/SB.** `save_sp_sb_ai_managed_group`
+> refuses `NEGATIVE_TARGET` and `BRAND_TARGET` before anything is written (see above). Tell the user
+> to edit negative-target switches group by group, or change brand / competitor settings in the
+> platform. `TARGET_HARVEST_ACTION` and `TARGET_PAUSED_ADD` are accepted as plain switches. The gateway
+> does **not** check rule 4's mode for `TARGET_HARVEST_ACTION`, so read each group's `aiAutomation`
+> first and tell the user if turning harvest on will resume a Rule-mode harvest. To only turn
+> harvesting on/off, use `targetHarvest`.
 > On SD, `NEGATIVE_TARGET`, `BRAND_TARGET` and `TARGET_PAUSED_ADD` are not supported by
 > `edit_sd_ai_managed_group`; `TARGET_HARVEST_ACTION` is accepted there.
+>
+> **The runtime tool description of `save_sp_sb_ai_managed_group` is out of date here**: it says
+> `negativeTarget` takes its switch from `aiActionSettings`, but the gateway rejects batch
+> `NEGATIVE_TARGET`. Follow this file, not the tool description.
 
 > **Never send `templateId` and `operation` together - which one wins depends on the tool.**
 > SD: `templateId` wins and the batch operation is ignored. SP/SB: `operation` wins and the
@@ -81,7 +98,7 @@ Use this map for SD at the top level and for SP/SB inside `batchParams`:
 
 | `operation` | Send only these operation parameters |
 |---|---|
-| `BUDGET` | `budgetType` + `budget` when type is 1/2, or `budgetType` + `budgetRatio` when type is 3 |
+| `BUDGET` | `budgetType` + `budget` when type is 1/2, or `budgetType` + `budgetRatio` when type is 3 (**SP/SB only** - `edit_sd_ai_managed_group` rejects type 3) |
 | `STATUS` | `status` |
 | `TARGET_TYPE` | `optimizeType`; include only its documented companions (`acosStatus`, or `budgetDynamicStatus` + `numType` + `num`) when required by the selected target |
 | `ACOS` | `acosType=1` + `acos`; `acosType=2` + `acosStatus=1`; or `acosType=3` + `acosRatio` |
@@ -110,8 +127,8 @@ The containers differ, but the mutual-exclusion rules do not: never send both
 - **Which groups can share one batch:**
   - **SP + SB can be mixed** for operations both support.
   - **SP-only operations** (`structOptimization`) must **exclude SB**
-    ids - split them out; don't run them against SB. (`targetPausedAdd` is not usable
-    here - it's disabled in SP/SB batch; see the word-list note above.)
+    ids - split them out; don't run them against SB. (`TARGET_PAUSED_ADD` is SP-only too:
+    any SB id fails the whole batch.)
   - **SD is always the other tool** (`edit_sd_ai_managed_group`) - never in the same call.
     A wrong-tool/wrong-type call is rejected (`campaignType must be sponsoredProducts or
     sponsoredBrands`), but split by `campaignType` from metadata first.
@@ -145,11 +162,14 @@ Handling `partial_failure` - **the failed set isn't always enumerated**:
 Never describe a partial success as a full success.
 
 **One known cause of silent per-item failure**: if `ids` contains a group whose `targetType`
-is `4` (the legacy "maximize spending" goal that the UI no longer offers), an
-`AI_PERSONALITY` or budget-increase style operation comes back as **fail for that item** -
-no error, just not applied. Two consequences: read each group's `targetType` before batching
-personality/budget operations and exclude the `targetType=4` ones up front, and when you see
-unexplained `fail` entries, check for this before assuming a transient problem.
+is `4` (**budget utilization priority** - a live, gated variant of Drive growth, **not** a legacy
+goal), an `AI_PERSONALITY` or budget-increase style operation comes back as **fail for that
+item** - no error, just not applied. The reason is the mode itself: it locks the running AI
+personality to `5` and forces budget increase off, so there is nothing for those operations to
+change. Two consequences: read each group's `targetType` before batching personality/budget
+operations and exclude the `targetType=4` ones up front, and when you see unexplained `fail`
+entries, check for this before assuming a transient problem. Say *why* they were excluded -
+"that group runs budget utilization priority" - never "that group uses an old objective".
 
 ## Multiple requested changes
 

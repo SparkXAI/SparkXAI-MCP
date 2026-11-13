@@ -11,7 +11,7 @@ description: >-
   save_sp_sb_ai_managed_group (edit mode). Not for creating a group (use sparkx-create-ai-group)
   or deleting one (use sparkx-delete-ai-group).
 metadata:
-  version: 1.2.5
+  version: 1.2.6
 ---
 
 # Edit AI Managed Group
@@ -111,7 +111,7 @@ real tradeoff; see [`references/coupling-rules.md`](references/coupling-rules.md
 > owns it.
 
 **"target / goal" / "目标"**: 推广目标 `targetType` (1 growth / 2 stability / 3 volume /
-4 legacy) vs 目标 ACOS/ROAS. Also "ACOS 调到 25" (a value) vs "ACOS 降 20%" (a ratio) are
+4 growth with budget utilization priority / 预算优先消耗) vs 目标 ACOS/ROAS. Also "ACOS 调到 25" (a value) vs "ACOS 降 20%" (a ratio) are
 different inputs - confirm which. **And note: "ACOS 优先模式 / ACOS priority" is the
 strict-ACOS switch (`bidPerformanceStrictAcosStatus`, see the bid item above), NOT setting
 a target ACOS value - don't confuse the two.**
@@ -149,14 +149,11 @@ new value.
    unique). Both tools take partial input (SP/SB fills the rest from current config; SD
    applies the non-null fields to the `ids`). Don't resend unchanged fields.
 
-   ⚠️ **One exception: the range blocks inside `aiActionSettings`.** This server only
-   back-fills the word-list nodes (`targetOptimization` / `brandOptimization`) from the
-   current config - `bidOptimization` is built from your input alone, so a field you leave out
-   is simply absent from the payload. A customer editing only the bid range found the
-   **placement ranges reset to Off**. Until that is settled, **send the whole
-   `bidOptimization` block you want to end up with** whenever you touch any part of it: the
-   switches *and* every `tos*` / `pdp*` / `ros*` / `btb*` / `bidRange` value you want kept.
-   Read them off the current config first.
+   ⚠️ **Range blocks inside `aiActionSettings`.** The server back-fills `aiActionSettings` from
+   the group's current config and only repairs the sub-configs you actually touched, so ranges
+   you don't mention (`tos*` / `pdp*` / `ros*` / `btb*` / `bidRange`) go back unchanged. When you
+   change a range or its switch, send that range's complete set of values (both ends, plus
+   `bidRangeType` for `bidRange`), and read the group back afterwards to check the ranges landed.
 4. **Self-validate the front-end-only rules MCP bypasses** (see references):
    - **ACOS / ROAS / Budget type are mutually exclusive** - the `*Type` decides which
      value field to send; sending the wrong companion (or both) fails. See
@@ -184,15 +181,20 @@ new value.
      value bounds yourself (backend may not catch them yet, per the interface spec):
      `budget > 0`, `budgetRatio <= 10000`, dynamic-budget `num > 0` (`numType=1` <= 1000,
      `numType=2` <= 100000), and action-space ranges (placement/B2B `0`-`900`). Don't lean
-     on the backend for these. **`bidRangeType=1` is the one exception - do not bound it at
-     all.** It is a **bid coefficient** (`1.15` = 1.15x the base bid), not a percentage, so the
-     old `0.01`-`100` "percentage" check would reject legal values and wave through illegal
-     ones. Never convert a percentage into it: "-50% to +15%" is `[0.5, 1.15]`, and `[-50, 15]`
-     would store a 0x-15x range. A lower bound below `0` is silently clamped to `0`. See
+     on the backend for these. **`bidRange` is bounded by `bidRangeType`.** Type `1` is a **bid coefficient** (`1.15` = 1.15x
+     the base bid), not a percentage: each end must be `0.01`-`100`. Type `2` is a fixed bid in the
+     marketplace currency: each end must be `> 0`. Out-of-range values are rejected. Never convert a
+     percentage into it: "-50% to +15%" is `[0.5, 1.15]`, and `[-50, 15]` is rejected. See
      [`references/coupling-rules.md`](references/coupling-rules.md).
-   - **Word-list settings are not supported.** Do not send branded, non-branded,
-     competitor, harvest-blacklist, or negative-target-blacklist fields, even if the
-     routed schema exposes them. Tell the user to configure word lists in the platform.
+   - **Word-list settings are not supported; three target switches are.** Do not send branded,
+     non-branded, competitor, harvest-blacklist, or negative-target-blacklist fields (status, list
+     ID, match type, list type), even if the routed schema exposes them. Tell the user to configure
+     word lists in the platform. What you can send inside `aiActionSettings`: `targetHarvestStatus`
+     (`0`=off, `1`=on, `2`=on and also add harvested terms as exact negatives),
+     `negativeTargetStatus` (`0`/`1`) and `targetPausedAddStatus` (`0`/`1`, **SP only**; non-zero on
+     SB is rejected). Out-of-range values are rejected; an omitted switch keeps its current value.
+     Target Harvest (rule 4) and Negative Target (rule 5) are AI-mode only - see "RBA mode
+     restriction" below.
 5. **Confirm before applying - especially for bulk and for running groups.** Show a change
    preview per group: **business meaning + resolved field + old -> new**, and how many
    groups are affected. **For a budget change, spell out the inputs and the effect**: current
@@ -282,9 +284,13 @@ Each item:
    specific dated period** with a `timeType=1` window, where the three are set per schedule -
    that is a single date range, not a weekly recurrence, so it does not add up to an ongoing
    weekend policy.
-2. **Word-list settings are stripped silently.** `aiActionSettings.targetOptimization` and
-   `brandOptimization` are removed server-side on schedules. Don't offer them, and don't
-   claim they were applied.
+2. **Word-list settings are stripped silently; target switches are kept.** `brandOptimization`
+   and the word-list fields of `aiActionSettings.targetOptimization` are removed server-side on
+   schedules - don't offer them, and don't claim they were applied. `targetOptimization` accepts
+   only the three switches `targetHarvestStatus` (`0`/`1`/`2`), `negativeTargetStatus` (`0`/`1`)
+   and `targetPausedAddStatus` (`0`/`1`, SP only; non-zero on an SB group is rejected), plus its
+   intensity fields. **An omitted switch is sent as `0`**, so include the ones that should stay on.
+   Out-of-range values are rejected. Rule mode is not checked on schedules.
 3. **Overlaps are rejected downstream**, surfacing as `Schedule_Date_Overlap`. Before
    writing, read the existing schedules (`entity='aiGroup_schedule'`) and check your new
    window/weekdays against them, so you can tell the user *which* schedule conflicts instead
@@ -389,18 +395,20 @@ NOT "deleted". Passing it back would silently archive the schedule.
 - **SD template edit needs the groups' AI already on.** Groups whose AI is off/cancelled are
   skipped by the server when config fields are sent (counted as failed), even if you also
   send `status=1`. Turn AI on in a separate edit first.
-- **SP/SB template edit rejects Rule-mode templates.** If you don't pass `aiAutomation` and
-  the template has any automation rule with `status=1` (Rule mode - e.g. Budget Daypart
-  rule 13 in system templates 12 and 13), the whole call is rejected before anything is
-  written. The error lists the rules and gives three ways out: (1) create a **new** group
-  from the template (`aiGroupId=0`), where Rule rules are carried over; (2) apply the
-  template to this group in the platform UI; (3) retry with an explicit `aiAutomation`
-  (e.g. the listed rules set to `0` = AI) - the template's automation rules are then ignored
-  entirely while the rest of the template still applies. **Present these options and get
-  the user's choice before retrying**; option 3 changes what the user asked for. A template
-  with only AI rules (`status=0`) applies them by rule type - this can switch some of the
-  group's rules Rule -> AI (rule 17 back to AI needs a valid `numType`/`num`, or the server
-  errors); rules the template doesn't contain stay as they are.
+- **SP/SB template edit rejects templates whose Target Harvest (rule 4) or Negative Target
+  (rule 5) is in Rule mode.** If the template's `aiAutomation` has rule 4 or 5 with `status=1`,
+  the whole call is rejected before anything is written - whether or not you pass `aiAutomation`,
+  and whether or not the matching switch is on - because word lists can't be configured here, so
+  these two action spaces support AI mode only. The error names the rules. Offer: pick a template
+  whose rules 4 / 5 are AI mode, or apply this template in the platform UI, and get the user's
+  choice first. **Other Rule-mode rules in a template (e.g. Budget Daypart rule 13 in system
+  templates 12 and 13) do not block a template edit.** When you don't pass `aiAutomation` they are
+  written as-is, condition/action included, so the group's rule can switch AI -> Rule: name every
+  Rule-mode rule in the preview. If you pass your own `aiAutomation`, the template's automation
+  rules are ignored entirely and only `0` is accepted. A template with only AI rules (`status=0`)
+  applies them by rule type - this can switch some of the group's rules Rule -> AI (rule 17 back
+  to AI needs a valid `numType`/`num`, or the server errors); rules the template doesn't contain
+  stay as they are.
 - **Explicit params beat template values; the template only overrides what it actually
   contains.** Priority is your params > values present in the template > the group's current
   config. Fields the template doesn't carry, automation rules it doesn't contain, and AI
@@ -422,21 +430,16 @@ NOT "deleted". Passing it back would silently archive the schedule.
   on go through the SB compatibility check (an enabled one fails the whole call). Tell the
   user which parts of the template won't carry over (the response summary lists the switches
   turned off). Creating an SB group from such a template turns them off the same way.
-- **Campaign-bound harvest / negative rules (SP/SB)**: a template whose target-harvest
-  (rule 4) or negative-target (rule 5) config is bound to specific campaigns/ad groups
-  (`isSelf=2`, rule enabled) is rejected **only when you don't pass `aiAutomation`** (the
-  template's rules would be inherited, and this tool can't carry the bindings). Passing
-  `aiAutomation` makes the server ignore the template's automation rules entirely, so the
-  call can go through - but that drops the template's rules, which changes what the user
-  asked for. Offer: apply the template in the UI, pick one using "current object" scope, or
-  apply it without the template's automation rules - and get the user's choice first.
+- **Campaign-bound harvest / negative rules (SP/SB)**: there is no separate `isSelf=2` check any
+  more. `isSelf=2` only takes effect while rule 4 / 5 is `status=1`, and a template with either in
+  Rule mode is already rejected (see above).
 - **No template writes.** You cannot create, edit, delete, or "save as" a template through
   MCP. Read + apply only.
 
 Because a template can rewrite several settings at once, read its detail (with
 `isSystemTemplate=1` for a system preset) and show the user what will change **before**
 applying it to an existing group: compare it with the group's current settings, and name any
-Rule-mode automation rules (SP/SB rejects those - see above). **Pass `acos` explicitly**: show
+Rule-mode automation rules (rule 4 / 5 in Rule mode are rejected - see above). **Pass `acos` explicitly**: show
 the group's current target ACOS and the template's value and ask which to keep - a template's
 value is a generic starting point and may not fit the user's margin.
 
@@ -463,12 +466,18 @@ table with the reasons to give, and the apply steps:
   group's matching rule is `status=1`, that action space comes back in **Rule** mode with
   its old conditions. Check the group's `aiAutomation` before enabling a switch, and tell the
   user if it will resume as Rule.
-- **RBA configuration is readable, but not writable.** A rule-mode group's actual conditions,
-  actions, condition items, time periods and hour matrices come back from
-  `get_entity_metadata(entity='aiGroup')` under `aiAutomation.{ruleType}` - so you *can* show
-  the user their current rule setup and explain it accurately. What you cannot do is change
-  it: there is no MCP tool that writes rule conditions or actions. For any RBA config change,
-  point the user to the platform.
+  - **Exception - Target Harvest (rule 4) and Negative Target (rule 5) are AI-only.** Word lists
+    can't be configured here, so turning `targetHarvestStatus` or `negativeTargetStatus` from off
+    to on is **rejected** while that rule is in Rule mode (`status=1`). For a template edit the
+    template's rule wins, and the group's rule is used when the template doesn't carry it. The
+    error reads `Action spaces turned on by this request use Rule-mode automation rules on this
+    group: [...]`. Offer two ways out: set the listed rules to `0` (AI) via `aiAutomation`
+    (`targetHarvestRuleStatus` / `negativeTargetRuleStatus`) in the same request, or change it in the
+    platform. A switch that is already on, and every other action space, is not checked.
+- **RBA configuration is readable, and writable only by inheriting a template.** A rule-mode
+  group's actual conditions, actions, condition items, time periods and hour matrices come back
+  from `get_entity_metadata(entity='aiGroup')` under `aiAutomation.{ruleType}`, so you can show
+  the user their current rule setup and explain it accurately. **You cannot create or edit Rule-mode conditions and actions through MCP.** The one way Rule config reaches a group is applying a platform template with `templateId`: the template's own `aiAutomation` is carried in as-is, Rule-mode rules included, so a template *can* put an action space into Rule mode with its conditions and actions (a template whose rule 4 or 5 is in Rule mode is rejected). You inherit that config, you never author it. For any other RBA change, point the user to the platform.
 - When reporting a rule setup, relay unlabeled leaves verbatim (only confirmed fields carry a
   `...Text` companion) and never reuse a label across rule types - the same raw value means
   different things under different rules.

@@ -16,26 +16,32 @@ won't enforce them, so you must. (Exact field names: `field-reference.md`.)
   mixed-currency set, either convert per store and write per store, or switch them to a
   percentage and say why.
 - **Bid range** (`bidRangeStatus=1`) -> also `bidRangeType` and `bidRange` `[min,max]`
-  (array length exactly 2, **min strictly < max** - equal ends are rejected with
+  (array length exactly 2, both ends numbers, **min strictly < max** - equal ends are rejected with
   `Parameter 'aiActionSettings.bidRange' min must be less than max when bidRangeStatus=1`, so
   "pin the bid to exactly X" cannot be expressed as `[X, X]`; say so rather than widening the
-  range yourself). `bidRangeType=2` (fixed): `min >=` the site's minimum bid.
+  range yourself). Each end is bounded by `bidRangeType`:
+  - `bidRangeType=1` (coefficient): each end `0.01`-`100`.
+  - `bidRangeType=2` (fixed bid, marketplace currency): each end `> 0`; the site's own min/max
+    bid limits are checked downstream.
 
-  ⚠️ **`bidRangeType=1` is a bid COEFFICIENT, not a percentage.** This file used to call it
-  "percentage" and bound it to `0.01 <= min`, `max <= 100`. The platform's own "Optimize base
-  bids" readback settles it: a group sent `bidRange: [-50, 15]` came back as *"If the targeting
-  bid is $1.00, the optimized bid range is expected to be 0.00~15.00"* - the `15` means **15x**
-  the base bid, and the `-50` was stored as `0`.
+  Changing only `bidRangeType` re-checks the existing `bidRange` against the new unit. A one-sided
+  range saved on the platform is kept as-is if you don't touch it, but you cannot send a `null` end.
+
+  ⚠️ **`bidRangeType=1` is a bid COEFFICIENT, not a percentage** (`1.15` = 1.15x the base bid).
+  The platform's own "Optimize base bids" readback settled the unit: a group sent
+  `bidRange: [-50, 15]` came back as *"If the targeting bid is $1.00, the optimized bid range is
+  expected to be 0.00~15.00"* - the `15` means **15x** the base bid. The gateway now rejects
+  values outside `0.01`-`100` with `... is a multiplier of the base bid when bidRangeType=1; each
+  bound must be between 0.01 and 100`, which catches the `-50` case, but a percentage such as `15`
+  still passes the range check and means 15x.
 
   What this means for you:
 
   - **Never convert a percentage into this field.** A user asking for "between -50% and +15%"
-    wants `[0.5, 1.15]`, not `[-50, 15]`. Sending the percentage numbers creates a 0x-15x
-    range, which is not a restriction at all - it is a licence to bid fifteen times the base.
-  - **A negative or sub-zero lower bound is silently clamped to `0`** rather than rejected, so
-    the write succeeds and a read-back echoes what you sent. The stored behaviour is not what
-    the echo shows. If the user's intent only makes sense as a percentage, stop and confirm the
-    unit before writing.
+    wants `[0.5, 1.15]`, not `[-50, 15]`. Confirm the unit whenever a coefficient is above 2: a
+    value like `15` creates a 0x-15x range, which is not a restriction at all.
+  - **The range is not a hard limit on the final bid.** Placement adjustments and the bidding
+    strategy apply on top, so the final bid can fall outside it.
   - **Read the result back in the UI, not from this API.** The read-back repeats the request;
     the "Optimize base bids" panel shows what was actually stored.
   - **BidDaypart and BidAdjustment share this one `bidRange`** - if both are on it applies to
@@ -46,13 +52,16 @@ won't enforce them, so you must. (Exact field names: `field-reference.md`.)
   `pdp*`/`ros*` min/max pairs non-null (don't enable the switch with all null); each pair
   `min >= 0`, `max <= 900`, min <= max.
 
-  ⚠️ **Ranges are not preserved for you.** Only `targetOptimization` and
-  `brandOptimization` are back-filled from the current config; everything in
-  `bidOptimization` comes from your request alone, so an omitted `tos*` / `pdp*` / `ros*` /
-  `bidRange` value reaches the downstream as absent, not as "unchanged". Send the complete
-  `bidOptimization` block whenever you change any part of it, and **read the group back
-  afterwards and check the ranges actually landed** - a success response does not prove they
-  did.
+  ⚠️ **Only the ranges you touch are re-validated; the rest go back unchanged.** On edit, the server
+  fills `aiActionSettings` from the group's current config and repairs only the sub-configs you
+  mention, so a `tos*` / `pdp*` / `ros*` / `btb*` / `bidRange` value you omit is sent back as it
+  was. When you change a range or its switch, send the complete set of values for it, and **read
+  the group back afterwards and check the ranges actually landed** - a success response does not
+  prove they did.
+  On a new group, a range that is switched on while the action switch it depends on is off
+  (`bidRange` needs `bidPerformanceStatus` or `bidDaypartStatus`; the placement range needs
+  `bidAdPlaceStatus`) is still saved, and the response `summary` says it is not in effect - relay
+  that to the user.
 
 ## Performance budget (按表现调预算) and budget reallocation (预算重新分配) are linked
 
@@ -133,12 +142,33 @@ faster when ACOS is badly off target. Field: `bidPerformanceStrictAcosStatus` (`
   hitting ACOS. **Confirm this tradeoff with the user before enabling**, and don't turn it
   on by default for every stability-target group.
 
-## Word-list fields are not supported
+## Target switches and word-list fields
 
-All word-list settings are currently unsupported, including branded, non-branded,
-competitor, negative-target blacklist, and target-harvest blacklist settings. **Do not
-send their status, list ID, match-type, or list-type fields for SP, SB, or SD**, even if
-the routed schema exposes them. Tell the user to configure word lists in the platform.
+**Word-list settings are not supported.** That covers branded, non-branded, competitor,
+negative-target blacklist, and target-harvest blacklist settings. **Do not send their status, list
+ID, match-type, or list-type fields for SP, SB, or SD**, even if the routed schema exposes them.
+Tell the user to configure word lists in the platform.
+
+**Three target action switches are supported** (SP/SB, inside `aiActionSettings`):
+
+| Field | Values | Rule |
+|---|---|---|
+| `targetHarvestStatus` | `0` off, `1` on, `2` on and also add harvested terms as exact negatives | 4 |
+| `negativeTargetStatus` | `0` / `1` | 5 |
+| `targetPausedAddStatus` | `0` / `1`; **SP only** (non-zero on SB is rejected); never send the read-side `2` | 182 |
+
+- Out-of-range values are rejected. Precedence is your value > template > the group's current
+  value. On a normal create an omitted switch is `0`; on a **template** create a switch the template
+  doesn't set falls to the downstream default, which is **on** (send an explicit `0` to keep it
+  off); on edit it is unchanged. ⚠️ **`targetPausedAddStatus` is the exception: it is SP-only.** On an SB group the server forces it to `0` on every create and edit path, so it never lands on - do not tell an SB customer that all three switches came on. Sending only
+  these switches does not replace the default / template action-space config.
+- **Target Harvest (rule 4) and Negative Target (rule 5) support AI mode only**, because word lists
+  can't be configured here. (1) A template whose rule 4 or 5 is in Rule mode (`status=1`) is rejected
+  on create and on edit. (2) On edit, turning `targetHarvestStatus` / `negativeTargetStatus` from off
+  to on is rejected while that rule is in Rule mode on the group; set it to `0` in the same request
+  (`aiAutomation.targetHarvestRuleStatus` / `negativeTargetRuleStatus`), or use the platform.
+  (3) Batch `NEGATIVE_TARGET` is rejected. Switches that are already on, and the other action
+  spaces, are not checked.
 
 ## Disabling an action space doesn't clear its follow-up fields
 

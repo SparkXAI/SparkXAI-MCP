@@ -19,15 +19,17 @@ Synonyms列 lists casual/口语 phrasings so real user requests still match.
 
 ## targetType (SP/SB) - 托管目标 / 基础设置
 
-Two UI groups (扩大销量 / 控制成本) are **headings only** - the value sent is one of
-the three goals below. `4` is a legacy value not shown in the UI; don't offer it.
+Two UI groups (扩大销量 / 控制成本) are **headings only**. `1`-`3` are the three
+regular goals. `4` is **预算优先消耗 / Budget utilization priority** - a live, gated
+variant of `1`, **not** a legacy value and **not** a separate switch. Read the note at the
+end of this file before sending or explaining it.
 
 | code | 中文(UI 选项) | English | 所属大类 | 常见说法 |
 |---|---|---|---|---|
 | `1` | 推动增长 | Drive growth | 扩大销量 / Increase sales | 增长型、还能涨、拉增长 |
 | `2` | 保持订单稳定 | Optimize ROAS | 控制成本 / Drive efficiency | 稳定型、保利润、提 ROAS、降 ACOS、控成本 |
 | `3` | 活动冲量 | Promotion sales boost | 扩大销量 / Increase sales | 冲量、大促冲量、快速起量、积累订单、放量 |
-| `4` | (旧值,UI 无) | Drive growth (Budget utilization priority) | - | - |
+| `4` | 推动增长（预算优先消耗） | Drive growth (Budget utilization priority) | 扩大销量 / Increase sales | 预算优先、预算消耗优先、把预算花完、Auto Pacing |
 
 ## optimizeType (SD) - 优化类型
 
@@ -101,7 +103,7 @@ group reads back as `2` once turned off.
 
 Use these terms when users mention automation templates that can be paired with AI Action
 Space in Rule/RBA mode. Rule-template configuration is readable through
-`get_entity_metadata.aiAutomation`, but not writable through this skill.
+`get_entity_metadata.aiAutomation`. You cannot author or edit rule conditions / actions through this skill, but applying a template carries the template's own Rule-mode rules into the group (rules 4 / 5 in Rule mode are rejected).
 
 | 中文 | English | related action-space field / ruleType |
 |---|---|---|
@@ -179,6 +181,33 @@ settings in the action space")= 展开细项。下表按 UI 分组给出 **UI �
 > 其它场景的同一组码 UI 叫 **精确 / 词组**--码相同,展示措辞按场景不同。
 > 另:未勾选竞品模式并选竞品词库时,AI 收割**无法识别和收割竞品搜索词**。
 
-> **预算消耗优先 / Budget utilization priority(Beta)** 是 UI 上的独立开关(更激进的
-> 加价 / 加词 / 预算分配),不是 targetType 的一部分--如用户提到,按独立设置处理,
-> 不要塞进目标类型。
+> **预算优先消耗 / Budget utilization priority 就是 `targetType=4`**，不是独立开关。
+> 早前本文写的“它是 UI 上的独立开关、不是 targetType 的一部分”是错的，已撤回。
+> 它是「推动增长（1）」的激进变体：开启后 AI 会更积极地加价 / 收割 / 调配预算，
+> 尽量把预算花完；`1` ↔ `4` 互切在页面上不计为目标变更。
+>
+> **准入（页面规则，本工具一条都不校验）：** 灰度能力，需由 CSM 为客户申请权限；
+> **仅 SP**、且目标为**推动增长**的托管组可用。另一条路径是预算管理开启
+> **Auto Pacing**，会让预算组内**所有**启用 AI 的托管组联动进入该模式，单个托管组
+> 无法退出（只能关 Auto Pacing）。区分这两条路径用
+> `get_entity_metadata(entity='aiGroup')` 返回的 **`isAutoPacing`**（`0`/`1`，带
+> `isAutoPacingText`）：为 `1` 就是 Auto Pacing 联动来的，客户在这个托管组里关不掉，
+> 别让他去托管组里找开关。
+>
+> **开启后的连带效果：**
+> - 运行时 AI 人格锁定为 `5`，**但接口与页面返回的仍是存储的原值** -- 读到的
+>   `aiPersonality` 不是实际运行值，永远不要直接报给客户。（非“推动增长”目标不会被强制为 5。）
+> - **按表现调预算**无论 AI 还是规则优化都会被强制关闭且禁止开启。
+> - **分时预算**在 AI 优化方式下停止执行（规则优化仍按客户规则执行）。
+> - **分时调价**在 AI 优化方式下只升不降。
+> - Auto Pacing 生效期间 **ACOS 优先模式暂不参与**，关闭后按原准入条件恢复。
+> - 勾选后页面会给一个更宽松的目标 ACOS 建议区间，客户可在保存前改；保存后系统不再覆盖。
+>
+> **写操作：** 本工具**没有** `budget_utilization_mode` 这类开关（设计草案里有、实现里
+> 没有），只能直传 `targetType=4`，而且网关**不校验**灰度权限 / 广告类型 / 当前是否
+> “推动增长”，上面那些准入条件要自己先确认，别指望报错。另外 `targetType=4` 会锁住
+> 部分行动空间力度，同一请求里改力度会被下游拒绝。
+>
+> **对客口径：** 它提高的是预算利用率，**不保证把预算花完**（流量、库存、广告资格
+> 都会限制），**ACOS 通常会高于正常模式**；更适合新品冲量 / 品牌曝光这类阶段性任务，
+> 不建议长期开启。
