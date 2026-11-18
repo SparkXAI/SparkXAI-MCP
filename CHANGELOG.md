@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- 新增 `sparkx-promo-prep` `1.0.0` 和 `sparkx-promo-monitor` `1.0.0`，用于大促前准备、按角色设置托管组排期、小时节奏检查和确认后的大促中调整。
+
+### Changed
+
+- 将 `sparkx-promo-reset` 更新至 `1.1.0`，补全改动记录恢复、排期识别、过期检查、断点续跑、撤销计划及对客结构化/HTML 报告。
+- 同步 `sparkx-edit-ai-group` 的生效中排期更新规则，供大促流程调用。
+
 ## [1.3.7] - 2026-11-10
 
 ### Added

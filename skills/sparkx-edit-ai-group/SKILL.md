@@ -303,7 +303,7 @@ nonsense. Check before sending:
 
 | # | Rule | Why it matters |
 |---|---|---|
-| 1 | `startDate` ≥ **tomorrow** | The backend accepts past dates; such a schedule is simply already expired and never runs |
+| 1 | `startDate` ≥ **tomorrow** for a **new** schedule. Updating a schedule that is already running (`id` > 0, today inside its window) keeps its original `startDate` | The backend accepts past dates; a new schedule starting in the past is simply already expired and never runs. Moving a running schedule's start to tomorrow would drop today and may overlap another schedule |
 | 2 | `endDate - startDate` ≤ **365 days** | The backend accepts longer ranges; the UI caps at one year |
 | 3 | `acos` ∈ **(0, 1000]** | The backend does not range-check schedule ACOS |
 | 4 | No overlap between schedules (dates **and** weekdays) | The backend does reject this, but with an opaque `Schedule_Date_Overlap` - pre-checking lets you name the conflicting schedule |

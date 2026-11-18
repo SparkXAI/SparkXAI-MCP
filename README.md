@@ -119,6 +119,8 @@ MCP 的 Tool 决定 AI"能拿到什么数据"，Skill 决定 AI"把数据用得�
 | [sparkx-ads-structure-analysis](skills/sparkx-ads-structure-analysis/) | 广告结构分析：按广告类型 / 站点 / 组合 / 工作日 / 小时及 Campaign 体量分层等维度定位结构错配 |
 | [sparkx-product-diagnosis](skills/sparkx-product-diagnosis/) | 商品诊断：ASIN 健康度分层、变体对比、去留优化建议 |
 | [sparkx-search-term-diagnosis](skills/sparkx-search-term-diagnosis/) | 搜索词诊断：按固定规则分类搜索词，并结合店铺门槛输出花费分布、否词候选、扶正候选和精准词碎片 |
+| [sparkx-promo-prep](skills/sparkx-promo-prep/) | 大促前准备：检查库存、预算与投放阻塞，按大促预算制定方案，为不同角色的托管组设置匹配排期，并在确认后调整预算、竞价和广告位 |
+| [sparkx-promo-monitor](skills/sparkx-promo-monitor/) | 大促中盯盘：对比小时投放节奏，识别预算、效率和库存风险，给出小步调整建议并在确认后执行 |
 | [sparkx-promo-reset](skills/sparkx-promo-reset/) | 大促调整复位：找回大促期间的人为修改与大促前配置，可全部复位或按大促后表现分阶段回落，并在执行前预览、执行后回读 |
 
 **安装方式**（任选其一）：

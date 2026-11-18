@@ -1,8 +1,8 @@
 {
   "$schema_note": "Machine-readable manifest of SparkX AI MCP official skills. Version fields must stay in sync with each skill's SKILL.md frontmatter (`metadata.version`).",
   "manifest_version": 1,
-  "updated_at": "2026-11-03",
-  "release": "v1.3.6",
+  "updated_at": "2026-11-18",
+  "release": "v1.3.7",
   "skills": [
     {
       "name": "sparkx-query-ads-performance",
@@ -122,13 +122,31 @@
       "description": "Diagnose search-term spend with fixed, reproducible rules: spend distribution by order tier, brand vs non-brand, negative candidates (incl. pausing zero-order exact keywords), harvest candidates and fragmented exact keywords; thresholds from the store's order value and target ACOS. Read-only."
     },
     {
-      "name": "sparkx-promo-reset",
-      "version": "1.0.6",
+      "name": "sparkx-promo-prep",
+      "version": "1.0.0",
       "required": false,
-      "mcp_tools": ["get_operation_log", "get_ads_perf", "get_entity_metadata", "batch_update_ads", "save_sp_sb_ai_managed_group", "edit_sd_ai_managed_group"],
+      "mcp_tools": ["get_ads_perf", "get_entity_metadata", "get_operation_log", "batch_update_ads", "save_sp_sb_ai_group_schedule", "save_sp_sb_ai_managed_group", "edit_sd_ai_managed_group"],
+      "scopes": ["amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read", "amazon_sa_campaign_edit:write", "amazon_sa_managed_group:write"],
+      "path": "sparkx-promo-prep",
+      "description": "Before a promotion, check readiness (stock vs event demand, portfolio caps and end dates, campaigns already out of budget, managed-group schedules), size the push to the user's event budget, and prepare it: role-matched dated schedules for eligible SP/SB managed groups (Promotion sales boost only for head groups the user confirms; others on Drive growth or kept on Optimize ROAS), budget / bid / top-of-search raises for campaigns outside groups, a product-line summary, preview, change log and read-back."
+    },
+    {
+      "name": "sparkx-promo-monitor",
+      "version": "1.0.0",
+      "required": false,
+      "mcp_tools": ["get_ads_perf", "get_entity_metadata", "get_operation_log", "batch_update_ads", "save_sp_sb_ai_group_schedule", "save_sp_sb_ai_managed_group", "edit_sd_ai_managed_group"],
+      "scopes": ["amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read", "amazon_sa_campaign_edit:write", "amazon_sa_managed_group:write"],
+      "path": "sparkx-promo-monitor",
+      "description": "During a promotion, read today's hourly spend pace, current budget usage and today's changes, classify every campaign (winner running out, not converting, over the limit, ...), and propose small capped moves for the user's goal right now (push, slow down, push ASINs, stay inside a limit), including event-day pause and low-stock questions - with preview, change log and read-back."
+    },
+    {
+      "name": "sparkx-promo-reset",
+      "version": "1.1.0",
+      "required": false,
+      "mcp_tools": ["get_operation_log", "get_ads_perf", "get_entity_metadata", "batch_update_ads", "save_sp_sb_ai_managed_group", "save_sp_sb_ai_group_schedule", "edit_sd_ai_managed_group"],
       "scopes": ["amazon_sa_ads_logs:read", "amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_campaign_edit:write", "amazon_sa_managed_group:write"],
       "path": "sparkx-promo-reset",
-      "description": "After a promotion, recover every human bid, budget, placement and managed-group change and its pre-promo value from the operation log, and restore it - all at once, or by post-promo performance (now, stepped down over days, or left to the customer), as the user chooses - with preview, undo file and read-back."
+      "description": "After a promotion, recover every human bid, budget, placement and managed-group change and its pre-promo value from the operation log, and restore it - all at once, or by post-promo performance (now, stepped down over days, or left to the customer), as the user chooses - or from the customer's own uploaded record of the pre-promo values - with preview, undo file and read-back."
     }
   ]
 }
