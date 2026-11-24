@@ -7,10 +7,13 @@ description: >-
   variants under a parent ASIN, produce a diagnostic card for flagged underperformers (inventory/eligibility/buy-box
   issues, correlated operation-log changes), and give keep/optimize/cut recommendations. Use when
   the user asks "我哪些 ASIN 有问题", "变体谁在拖后腿", "新品该不该继续投", "product diagnosis",
-  "ASIN health check". Not for account-wide structural share analysis (use sparkx-ads-structure-analysis)
-  or periodic WoW/MoM recaps (use sparkx-weekly-ads-report / sparkx-monthly-ads-report).
+  "ASIN health check". Not for diagnosing ONE named product in depth — once you know which ASIN to
+  look at, use sparkx-asin-deep-dive, which this skill hands its shortlist to. Not for account-wide
+  structural share analysis (use sparkx-ads-structure-analysis) or periodic WoW/MoM recaps (use
+  sparkx-weekly-ads-report / sparkx-monthly-ads-report), or an SQP audit of share and conversion
+  against the market (use sparkx-sqp-insight).
 metadata:
-  version: 1.2.4
+  version: 1.2.5
 ---
 
 # Product Diagnosis
@@ -217,8 +220,13 @@ Scope this call per `scope`:
 **d. Stock cover and eligibility** — **two separate pulls, in this order. Don't merge them**: Axis B's stockout check feeds the flagged set, so scoping the stock-cover pull to flagged rows would be circular (a row cannot be flagged until it has been checked, and it cannot be checked until it is flagged).
 
 - **d1 — stock cover, for the whole analysis set** (feeds Axis B, before any stage is assigned): `get_entity_metadata` (`entity: asin`), scoped to the analysis set and fully paginated. **The `select` depends on `granularity`** — the stockout gate needs the figure for the entity being classified, and under `granularity=parentAsin` that entity is the parent:
-  - `granularity=asin` / `variant` — `select: ["asin", "asinDayAvailability30", "asinInventoryStatus"]`
-  - `granularity=parentAsin` — `select: ["parentAsin", "parentAsinDayAvailability30", "parentAsinInventoryStatus"]`, then **deduplicate by `parentAsin`**: rows come back at child/SKU grain, so a parent with four children repeats its own figures four times. Counting those repeats, or averaging them, is not a different number — it is the same number counted several times.
+  - `granularity=asin` / `variant` — `select: ["asin", "asinDayAvailability30", "asinInventoryStatus", "asinFbaQuantity", "asinFbmQuantity"]`
+  - `granularity=parentAsin` — `select: ["parentAsin", "parentAsinDayAvailability30", "parentAsinInventoryStatus", "parentAsinFbaQuantity", "parentAsinFbmQuantity"]`, then **deduplicate by `parentAsin`**: rows come back at child/SKU grain, so a parent with four children repeats its own figures four times. Counting those repeats, or averaging them, is not a different number — it is the same number counted several times.
+
+  **The quantities are not optional.** `asinDayAvailability30` is a projection at the window's
+  sales pace, rounded; `0` can be a few units selling fast. The out-of-stock finding in Step 3
+  keys on the **quantities and the status**, so pulling only the days figure leaves that finding
+  unexecutable.
   Keep `select` narrow either way rather than pulling the whole row for every ASIN in the catalog.
   ⚠️ **Do not compute the parent's available days from its children's.** They use different formulas: a parent is `floor(summedStock / summedDailyRate)` (each child contributes its own daily sales rate to the denominator), a child is `floor(stock x days / units)`. The field reference's own example gives a parent **34** days where its four children read **33 / 33 / 33 / 39** — neither the sum, the average, nor the minimum of the children reproduces it. Query the parent field.
   ⚠️ **`asinDayAvailability30` is per ASIN, but `asinInventoryStatus` is per SKU** — the same ASIN's rows repeat one identical availability figure while their statuses differ (a real ASIN came back `Active`, `Inactive`, `Inactive`). Collapse the availability by taking any row's value, and collapse the status as **`Active` if any SKU is `Active`**: one discontinued SKU does not make the ASIN unavailable. Never average or count the repeated availability rows.
@@ -390,6 +398,49 @@ Apply in this order, first match wins.
 
 **Before any of the above, check stock cover.** Step 2d's **d1** pull supplies it for the **whole analysis set**, not only for flagged rows, and **at the grain being classified** — `asinDayAvailability30` under `granularity=asin`/`variant`, `parentAsinDayAvailability30` under `granularity=parentAsin`. When stock cover is **<= 7 days** (or `0`) and the series fell in its last weeks, the collapse is a **stockout, not a lifecycle event**: keep the stage the pre-collapse weeks support, and attach an independent **`stockout`** flag with the days figure. Do not relabel the product Declining for running out of stock - restocking reverses it, and a target-ACOS cut would be the wrong response. A missing availability field means *unknown*, not zero (Vendor profiles and profiles without SP-API authorization omit the whole group) - say the check could not be run.
 
+**Then cross the stock figure with this period's spend.** Stock cover alone says the product is
+about to run out; it does not say whether money is still going into it. Those are different
+findings and both are computable here - `Spend` is already in hand from Step 2a, the days figure
+from d1 - so neither needs another call:
+
+| Finding | Test | Why it is its own finding |
+|---|---|---|
+| **缺货但广告仍启用** | **sellable units are zero** - `asinFbaQuantity` / `asinFbmQuantity` at `0` with no `Active` SKU - **and** every level that gates delivery is still `enabled`: campaign, **ad group** and product ad | Any click bought here cannot convert, and the configuration will buy one as soon as it serves. The cheapest thing in the whole report to act on - and the claim is about **exposure**, not about money already lost |
+| **库存告急仍在加码** | stock cover `<= 7` days **and** `Spend` rose versus the preceding equal-length period | Spend is being pushed into an entrance that cannot hold. The higher the tier, the more it matters - **明星 Star x 库存告急 x 花费上涨** belongs at the top of the list |
+
+**Two questions hide in this finding, and only one of them is answerable. Keep them apart.**
+
+- **"Is it empty now, and still configured to spend?"** — answerable, and the actionable one.
+  Emptiness comes from `asinFbaQuantity` / `asinFbmQuantity` at `0` with no `Active` SKU (collapse
+  SKU rows: `Active` if **any** SKU is Active), **not** from `asinDayAvailability30`, which is a
+  rounded projection at the window's sales pace and reads `0` for a handful of units selling fast.
+  "Configured to spend" needs **every** gate checked — campaign, **ad group** and product ad — and
+  an enabled campaign over a paused ad group delivers nothing. That pair justifies pausing on its
+  own: an enabled ad on an empty shelf will buy a click the moment it serves.
+- **"Is it spending right now?"** — **a different claim, and the period total does not support it.**
+  `Spend` over the window is history; it is equally consistent with delivery that stopped a
+  fortnight ago. Only same-period evidence lets you write "still spending" — **and it has to be at
+  this ASIN's own grain**. For SP that is `factEntity: productAd` with `timeGranularity: daily`;
+  a shared campaign's daily spend may belong entirely to its other products. For SB and SD there
+  is no product grain at all, so the most that can be said is that **the carrying campaign** spent,
+  labelled as the campaign's figure. Name the days either way.
+  Without it, write **"out of stock, ads still enabled — verify current delivery"** and leave it
+  there. The recommendation does not change; the sentence does.
+- **"Was the spend already wasted?"** — **not answerable here, and do not claim it.** Nothing
+  returns the date stock reached zero: `get_entity_metadata` gives today's snapshot and no history.
+  So a period `Spend` total cannot be attributed to the out-of-stock days — thirty days of spend
+  reads identically whether the product emptied on day 2 or day 28. Daily spend narrows it but
+  still cannot supply the missing date.
+
+Report the first and label the second. Daily spend on the carrying campaigns is **supporting
+evidence, never a precondition**: when spend is still landing on the most recent days and the
+shelf is empty today, say so; when it tailed off, say that instead. Give the date the stock
+snapshot was taken, because the analysis window is already behind it.
+
+Report the days figure, the sellable units, the spend, and the spend change together, so the
+reader can see the shape of it. A product with low stock and **falling** spend is already being
+handled - say so and move on, rather than listing it as a problem.
+
 **Computing the two gates**, on the weekly `TotalSalesAmount` series from Step 2f:
 
 1. **MA3 smoothing** — trailing 3-week mean, keeping only complete windows, so a 12-week series
@@ -519,7 +570,7 @@ For the anchored parent's child ASINs (from Step 2a/b, filtered to that `parent_
 
 For each flagged entity (ASIN or parent ASIN — see the parent-mode adjustments to 2c/2d/2e above; don't drop back to child-only fields under `granularity=parentAsin`), assemble:
 - **Is it even still being advertised?** (from 2e's `productAd` resolution and the `campaign` lookup it needs) — **check this first.** `campaignState` and `productAdState` of the entities carrying this ASIN: if every campaign holding it is `paused`/`archived`, or its product ads are, the spend and sales going to zero is not a life stage, a stockout or a Buy Box problem — **the ads were turned off**, and everything below is beside the point. In a real run this was the whole explanation for the only genuinely Declining ASIN: its single campaign was paused. Report the campaign names and states, and say whether *all* or only *some* of the carrying entities are off — partial pausing is a reallocation, full pausing is a decision someone already made.
-- **Inventory/eligibility status** (Step 2d): out-of-stock (`asinInventoryStatus`/`parentAsinInventoryStatus`), lost ad-type eligibility, or deleted (the d3 probe above, **not** a `select`) — these can fully explain a sales collapse on their own and should be surfaced before the advertising-side explanations.
+- **Inventory/eligibility status** (Step 2d): out-of-stock (`asinInventoryStatus`/`parentAsinInventoryStatus`), lost ad-type eligibility, or deleted (the d3 probe above, **not** a `select`) — these can fully explain a sales collapse on their own and should be surfaced before the advertising-side explanations. **When stock is short, put the sellable count, the delivery gates and the period spend side by side** (Step 3's cross-check): 「可售 0 件 · 活动/广告组/商品广告均为启用 · 窗口内花费 $412」 is a different instruction from 「可售 0 件 · 广告已暂停 · 花费 $0」. Label the spend as the window's history, not as current delivery - the card is where the reader decides what to do, and that decision rests on the stock count and the enabled states, not on the days figure.
 - **Buy Box / returns signal** (Step 2a): a `BuyBoxPercentage` drop or elevated `CustomerReturns` alongside declining sales is a strong non-advertising explanation — flag it as such rather than assuming the cause is bid/budget-related.
 - **Correlated operation-log changes** (Step 2e): bid/budget/status changes on the campaigns/adGroups containing this ASIN's product ads in the same window — **not** changes on the ASIN itself (per Step 2e, `get_operation_log` can't be scoped to a single `productAd`/ASIN, only to `campaign`/`adGroup`). Label this explicitly in the diagnostic card (e.g. "非 ASIN 专属——该 campaign/adGroup 下的操作记录") so it isn't read as ASIN-specific evidence. **Correlation, not causation** — same discipline as the report skills: state what changed and when, don't claim it caused the decline unless the timing and magnitude clearly line up, and weigh that correlation more cautiously here given the change wasn't even necessarily on this specific product ad.
 
@@ -529,7 +580,19 @@ If none of the above turns up anything, say so plainly ("no inventory/eligibilit
 
 Derive one verdict per flagged ASIN (and optionally per healthy ASIN if the user wants a full-catalog verdict, not just the problems). **The verdict reads both axes, not one** — the portfolio tier says how much is at stake, the lifecycle stage says which way the product is going, and the same stage deserves a different answer at each tier:
 - **保 (Keep)**: Star or Core at the Growth or Mature stage **with no recent-deterioration flag** — no action needed, or note it as a candidate for the *other* skill (`sparkx-ads-structure-analysis`) if there's a structural budget-reallocation angle. A **New** product at any tier also defaults to Keep unless a non-lifecycle diagnostic flag such as stockout or recent deterioration needs investigation; do not turn that flag into a Cut verdict on this window alone.
-- **优 (Optimize)**: every entity in **Step 3's flagged set** where Step 5 found a fixable driver — no other reading of "underperforming" applies here. A **`stockout`** flag means the fixable driver is restocking, and the ad-side answer is to hold, not to cut. **Star x Declining goes first in the list** — it is the largest amount of money moving the wrong way, and it is the case the old single-label scheme could not express at all (e.g. restock, buy-box recovery, a managed-group setting) — action + evidence. Bid / budget advice follows "Shared Rules" (group levers for managed campaigns, no numbers). For traffic-side problems, suggest running `sparkx-search-term-diagnosis` (if installed) scoped to this product.
+- **优 (Optimize)**: every entity in **Step 3's flagged set** where Step 5 found a fixable driver — no other reading of "underperforming" applies here. A **`stockout`** flag means the fixable driver is restocking. **Say which of the two decisions you
+mean** - they point opposite ways and one sentence covering both reads as "carry on spending":
+
+- **The catalogue decision is hold.** Do not cut a product for running out of stock; restocking
+  reverses it, and this window's numbers are not evidence about the product.
+- **The advertising decision keys on confirmed stock, not on the days figure.** When the sellable
+  quantity is `0` with no `Active` SKU, pause the spend - clicks cannot convert, and this is
+  independent of whether the product is worth keeping. When cover is low but units remain, cap the
+  spend rather than growing it, and name the restock date if the customer has given one. **Do not
+  pause on `asinDayAvailability30` alone**: it is a rounded projection, and `0` there is a reason
+  to check the quantity, not a reason to act.
+
+Carrying both decisions as one "hold" is how a stocked-out ASIN keeps spending for another month. **Star x Declining goes first in the list** — it is the largest amount of money moving the wrong way, and it is the case the old single-label scheme could not express at all (e.g. restock, buy-box recovery, a managed-group setting) — action + evidence. Bid / budget advice follows "Shared Rules" (group levers for managed campaigns, no numbers). For traffic-side problems, suggest running `sparkx-search-term-diagnosis` (if installed) scoped to this product. When a flagged product needs the full picture rather than one angle — why its traffic moved, how its advertising is structured, which variant should carry the budget, what mechanism moved its ACOS — hand it to `sparkx-asin-deep-dive`: **this skill's job ends at naming the shortlist.**
 - **撤 (Cut)**: zero orders with spend >= `T` in **both** this and the prior period, and no fixable driver found; or **Long-tail x Declining** with negligible volume. **Never cut on a Declining stage that the year-over-year check could not confirm against seasonality**, and never cut a **New** product on this window alone — say what is missing instead. Action + evidence.
 
 **Every recommendation must have**: action + target ASIN + evidence (data), same requirement as the other skills in this family.
@@ -612,7 +675,7 @@ answer".
 
 ### {ASIN}
 - 分类：{投放分层}；生命阶段 {stage}；近期状态 {稳定/销售额下降N%/广告转化下降N%}{；可能受大促后回落影响}
-- 库存/资格状态：{...}
+- 库存/资格状态：{...}{；库存 {N} 天 · 本期花费 {amount} · 环比 {±N%}}
 - Buy Box / 退货信号：{...}
 - 关联操作记录（非 ASIN 专属，campaign/adGroup 层面）：{...，标注为关联而非确定因果}
 

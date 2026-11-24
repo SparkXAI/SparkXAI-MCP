@@ -1,0 +1,23 @@
+{
+ "title": "SQP Audit",
+ "store": "{store}",
+ "period": "4 weeks · Oct 18 - Nov 14, 2026",
+ "language": "en",
+ "headline": "{store} wins 2.1% of purchases across 480 searches, with about 900 more orders within reach.",
+ "subline": "Its share of clicks runs above its share of impressions; the gap opens after the click, where conversion is 0.82x the market.",
+ "takeaways": {
+  "funnel": "Share rises from impressions to clicks, then eases at purchase. The next gain is conversion.",
+  "leaks": "Ten searches hold about a third of the opportunity; most of it is after the click.",
+  "portfolio": "A few searches already convert above market with a low share - ready for more traffic once ad cost agrees.",
+  "concentration": "Sales lean on the top 10 searches more than the market does; the next 20 are open ground.",
+  "ads": "Several searches return ad ROAS near the store average yet convert below the market - a gap only market data shows.",
+  "products": "One product carries most of the below-market searches; check which searches drive it before changing the page.",
+  "gaps": "Large relevant searches where the store has under 1% of impressions are head terms - the most expensive clicks.",
+  "protect": "On searches where the store wins 20%+ of purchases, keep exact coverage."
+ },
+ "actions": [
+  {"action": "Fix the page on the top three below-market searches before adding spend", "why": "Conversion 0.7x the market on 600 store clicks", "owner": "Listing", "impact": "~120 orders", "when": "This month", "where": "Product B0EXAMPLE1 (synthetic)", "measure": "Conversion vs market from 0.70x toward 0.90x after 2 SQP weeks"},
+  {"action": "Run plan mode for the category to size raises and cuts to the budget", "why": "Two searches convert above market with under 10% share", "owner": "Ads", "impact": "room on ~4,000 market purchases", "when": "This week", "where": "Category: Vitamin Example", "measure": "Purchase share on those searches after 2 SQP weeks"}
+ ],
+ "limits": ["Synthetic example: every number and id here is made up for illustration."]
+}

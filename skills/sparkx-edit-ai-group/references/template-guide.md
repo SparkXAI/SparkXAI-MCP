@@ -199,8 +199,10 @@ Example (Chinese user):
    Point out anything that differs from the preview.
 8. **If the call rejects the template**, relay the error and offer the alternatives: set it up
    manually, or apply the template in the platform. On create, check by name whether the group
-   was made before retrying - create is not idempotent. **Rule-mode rejection on an SP/SB create or edit** (the template's rule 4 Target Harvest or
-   rule 5 Negative Target has `status=1`): word lists can't be configured here, so these two rules
-   are AI-only. Relay the error and offer a template whose rules 4 / 5 are AI mode, or applying it
-   in the platform, and wait for the user's choice. Rule-mode rules other than 4 / 5 (for example
-   rule 13 in the two B2B templates) are not rejected.
+   was made before retrying - create is not idempotent. **Campaign-binding rejection on an SP/SB create or edit** (the template's rule 4 Target Harvest
+   or rule 5 Negative Target uses `isSelf=2` - specific campaigns / ad groups - with `status=1`):
+   this tool can't carry those bindings. Relay the error and offer a template whose rules 4 / 5 use
+   the current campaign, applying it in the platform, or passing that one rule as `0` in
+   `aiAutomation` - which skips just that rule, while the template's other rules still apply (the
+   check runs on the merged result) - and wait for the user's choice.
+   Rule-mode rules themselves (for example rule 13 in the two B2B templates) are not rejected.

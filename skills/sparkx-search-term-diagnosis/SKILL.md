@@ -10,9 +10,9 @@ description: >-
   "search term analysis", "negative keyword candidates", "harvest keywords". Not for
   trend recaps (sparkx-weekly-ads-report / sparkx-monthly-ads-report), campaign-type /
   marketplace structure (sparkx-ads-structure-analysis) or ASIN health
-  (sparkx-product-diagnosis).
+  (sparkx-product-diagnosis). For market-level SQP diagnosis or plans use sparkx-sqp-insight.
 metadata:
-  version: 1.0.4
+  version: 1.1.0
 ---
 
 # Search Term Diagnosis (搜索词流量结构诊断)
@@ -66,6 +66,10 @@ Examples are in Chinese because most customers are. Answer in the user's languag
    converted in the immediately preceding equal-length period is a diagnostic case, not a
    direct pause. A young or low-click exact keyword is insufficient evidence, not a
    consolidation candidate.
+9. **A 30-day zero is a question, not a verdict.** Before proposing a negative, verify the term
+   over 60 / 90 days, and check whether you already run it as a keyword where it spent - if you
+   do, the instrument is a pause or a lower bid, not a negative. Both steps in
+   `references/classification.md`.
 
 ## Workflow
 
@@ -147,11 +151,19 @@ Lead with the scope line, then five short parts:
      carrying the same normalized text;
    - **negative candidates** - count, spend, top 10, each with its action (negative exact for
      keywords, negative product targeting for ASINs) and a label when the managed group
-     already has automatic negative targeting on. Subtract current negative coverage first:
+     already has automatic negative targeting on. Only rows the 60 / 90-day check confirmed are
+     listed as actions; terms that converted over the longer window go to keep / lower bid, and terms
+     whose source ad group did not resolve are listed as source unresolved. Subtract current
+     negative coverage first:
      fully covered terms are **already handled**, partially covered terms list only the
      uncovered source campaigns/ad groups, and only uncovered destinations remain actionable;
-   - **zero-order terms you also target as exact keywords** - not proposed as negatives;
-     say where the spend came from and leave it to the customer.
+   - **zero-order terms you already run as keywords** - an enabled keyword with the same text,
+     at any match type, in an ad group the spend came from: not proposed as a negative; name the
+     keyword and review its own performance and history before suggesting any bid or status change.
+     A broad or phrase keyword can convert on other queries, so this term's zero orders alone do
+     not justify pausing or lowering the whole keyword. A paused keyword with the same text does
+     not count - the term stays a negative candidate (noting the paused keyword) unless current
+     negatives cover every source or a source ad group has no enabled entrance left.
 
    Brand terms, the store's own ASINs and whitelisted roots are held back and counted at the
    end.

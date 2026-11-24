@@ -8,10 +8,15 @@ Amazon. None of them describes what you already run; for that use the ordinary `
 All five require **exactly one authorized `profileId`**. Four of them ignore pagination
 entirely; `asset` is the exception and pages normally.
 
+**Unknown filter keys are rejected.** `pageAsins`, `asset` and `sdAudience` accept only the
+filters listed in their sections below; anything else fails with an error naming the
+supported keys, instead of being silently ignored. `brandEntity` and `store` accept **no
+filters at all**: send them without `filters`.
+
 | Entity | Feeds | Pagination | Mandatory filter |
 |---|---|---|---|
-| `brandEntity` | SB campaign `brandEntityId` | none | - |
-| `store` | SB creative landing page | none | - |
+| `brandEntity` | SB campaign `brandEntityId` | none | - (accepts no filters) |
+| `store` | SB creative landing page | none | - (accepts no filters) |
 | `pageAsins` | SB `storeSpotlight` subpage ASINs | none | **`pageUrl`** |
 | `asset` | SB / SD creative images and videos | normal | - |
 | `sdAudience` | SD audience targeting (tactic `T00030`) | none | - |
@@ -39,6 +44,9 @@ Lists the brands registered to the profile. Three fields per row: `brandEntityId
 only source. Match the brand by `brandRegistryName` when the user names one; if several match
 or none does, ask rather than picking.
 
+This entity accepts no filters. Any non-empty `filters` fails with `brandEntity does not
+accept filters; remove the filters parameter.`; filter the rows yourself instead.
+
 ## `store`
 
 Lists the profile's brand stores and their pages, **one row per page**, not per store:
@@ -52,6 +60,8 @@ A store with five pages is five rows that share `storeId` and `storeName`.
   so if the store the user named is not in the list, instead of concluding it does not exist.
 - Every response carries the hint `subpage ASINs are not included here` - that is the normal
   response, not a warning about this particular call.
+- This entity accepts no filters. Any non-empty `filters` fails with `store does not accept
+  filters; remove the filters parameter.`; filter the rows yourself instead.
 
 ## `pageAsins`
 
@@ -86,7 +96,8 @@ the same `amazonAssetId` appears once per version - carrying `amazonAssetId`, `v
   they do for campaigns, because the downstream is a database query rather than a live Amazon
   call.
 - Optional filters: `keyword` (asset name) and `status` (`ACTIVE` / `ARCHIVED`) take a single
-  value each; `assetSubType` and `fileType` accept several.
+  value each; `assetSubType` and `fileType` accept several. No other filter key is accepted;
+  an unknown one (for example `assetType`) is rejected.
 
 ## `sdAudience`
 

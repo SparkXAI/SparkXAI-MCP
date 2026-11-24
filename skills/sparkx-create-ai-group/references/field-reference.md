@@ -77,8 +77,8 @@ Struct (**SP only**): `structPauseProductStatus`, `structPauseCampaignStatus`.
 Budget: **`budgetDaypartStatus`**, **`budgetDynamicStatus`**,
 **`budgetRedistributeStatus`**, `budgetNum`, `budgetNumType`.
 
-Target (**only the three action switches are writable via MCP; word-list settings are
-platform-only**):
+Target (**the three action switches and the word-list references are writable; only
+`*ListType` is not**):
 
 - Writable in `aiActionSettings`: `targetHarvestStatus` (`0`=off, `1`=on, `2`=on and also add
   harvested terms as exact negatives), `negativeTargetStatus` (`0`/`1`), `targetPausedAddStatus`
@@ -87,18 +87,21 @@ platform-only**):
   template in template mode; your value wins over the template. **Template create caveat:** the
   zero-fill applies to a normal create only. On a template create, a switch you omit that the
   template doesn't set is left to the downstream default, which is **on** - send an explicit `0`
-  for any switch the user wants off. ⚠️ **`targetPausedAddStatus` is the exception: it is SP-only.** On an SB group the server forces it to `0` on every create and edit path, so it never lands on - do not tell an SB customer that all three switches came on. Target Harvest (rule 4) and
-  Negative Target (rule 5) are AI-mode only - see [`coupling-rules.md`](coupling-rules.md).
-- Not writable: `targetHarvestBlackListStatus`, `targetHarvestBlackList` (IDs),
-  `targetHarvestListType`, `targetHarvestMatchType`, `negativeTargetBlackListStatus`,
-  `negativeTargetBlackList` (IDs), `negativeTargetListType`, `negativeTargetMatchType`. These names
-  may still appear in some schemas and read back from `get_entity_metadata`; create defaults them
-  closed. Change them in the platform UI and never send them as write inputs.
+  for any switch the user wants off. ⚠️ **`targetPausedAddStatus` is the exception: it is SP-only.** On an SB group the server forces it to `0` on every create and edit path, so it never lands on - do not tell an SB customer that all three switches came on. Turning a switch on resumes the
+  group's existing mode for that rule - see [`coupling-rules.md`](coupling-rules.md).
+- Also writable (word-list references): `targetHarvestBlackListStatus` /
+  `targetHarvestBlackList` / `targetHarvestMatchType` and `negativeTargetBlackListStatus` /
+  `negativeTargetBlackList` / `negativeTargetMatchType`. The `*BlackList` fields take **1-10
+  `keywordListId` values** from `get_keyword_list` (non-rule-based, linked to this profile), the
+  list **replaces** the current one, and a switch set to `1` needs its `MatchType`
+  (`1`=exact, `2`=phrase) in the same request.
+- **Still not writable: `targetHarvestListType` / `negativeTargetListType`.** They read back from
+  `get_entity_metadata` but have no write input; create defaults them closed.
 
-The whole `brandOptimization` module - including `brandedStatus`, `brandedList`,
-`competitorStatus`, `competitorList` - and the word-list fields above are **currently
-unsupported** (read-only, platform UI only). Do not send any of these status, list ID,
-match-type, or list-type fields; the tool hard-rejects them.
+`brandOptimization` is writable too: `brandedStatus` / `brandedList` / `brandedMatchType` and
+`competitorStatus` / `competitorList` / `competitorMatchType`, same `keywordListId` rules as above.
+**`competitorStatus=1` requires `brandedStatus=1`.** Earlier guidance calling this module
+unsupported and read-only is out of date.
 
 ### `aiAutomation` (flattened mode fields) - EXACT names
 
@@ -120,8 +123,8 @@ to one automation rule number:
 | `aiAutomation` field | Rule | Paired `aiActionSettings` switch |
 |---|---|---|
 | `bidDaypartStatus` | 2 - bid dayparting | `bidDaypartStatus` |
-| `targetHarvestRuleStatus` | 4 - target harvest (AI-only: send `0` or omit) | `targetHarvestStatus` |
-| `negativeTargetRuleStatus` | 5 - negative target (AI-only: send `0` or omit) | `negativeTargetStatus` |
+| `targetHarvestRuleStatus` | 4 - target harvest | `targetHarvestStatus` |
+| `negativeTargetRuleStatus` | 5 - negative target | `negativeTargetStatus` |
 | `budgetDaypartRuleStatus` | 13 - budget dayparting | `budgetDaypartStatus` |
 | `budgetPerformanceRuleStatus` | 17 - budget by performance | `budgetDynamicStatus` |
 | `placementAdjustmentRuleStatus` | 19 - placement adjustment | `bidAdPlaceStatus` |

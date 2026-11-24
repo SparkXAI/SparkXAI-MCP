@@ -77,25 +77,28 @@ Struct (**SP only**): `structPauseProductStatus`, `structPauseCampaignStatus`.
 Budget: **`budgetDaypartStatus`**, **`budgetDynamicStatus`**,
 **`budgetRedistributeStatus`**, `budgetNum`, `budgetNumType`.
 
-Target (**only the three action switches are writable via MCP; word-list settings are
-platform-only**):
+Target (**the three action switches and the word-list references are writable; only
+`*ListType` is not**):
 
 - Writable in `aiActionSettings`: `targetHarvestStatus` (`0`=off, `1`=on, `2`=on and also add
   harvested terms as exact negatives), `negativeTargetStatus` (`0`/`1`), `targetPausedAddStatus`
   (`0`/`1`; **SP only**, non-zero on SB is rejected; the read-side value `2` is never sent).
   Out-of-range values are rejected. An omitted switch keeps the group's current value (template
-  mode: your value, then the template, then the group). Turning `targetHarvestStatus` /
-  `negativeTargetStatus` from off to on is rejected while rule 4 / 5 is in Rule mode on the
-  group - see [`coupling-rules.md`](coupling-rules.md).
-- Not writable: `targetHarvestBlackListStatus`, `targetHarvestBlackList` (IDs),
-  `targetHarvestListType`, `targetHarvestMatchType`, `negativeTargetBlackListStatus`,
-  `negativeTargetBlackList` (IDs), `negativeTargetListType`, `negativeTargetMatchType`. They read
-  back from `get_entity_metadata`, are kept unchanged on edit, and must be changed in the platform UI.
+  mode: your value, then the template, then the group). Turning a switch on resumes the group's
+  existing mode for that rule - see [`coupling-rules.md`](coupling-rules.md).
+- Also writable (word-list references): `targetHarvestBlackListStatus` /
+  `targetHarvestBlackList` / `targetHarvestMatchType` and `negativeTargetBlackListStatus` /
+  `negativeTargetBlackList` / `negativeTargetMatchType`. The `*BlackList` fields take **1-10
+  `keywordListId` values** from `get_keyword_list` (non-rule-based, linked to this profile), the
+  list **replaces** the current one (`[]` empties it and needs the switch off in the same request),
+  and a switch set to `1` needs its `MatchType` (`1`=exact, `2`=phrase) in the same request.
+  Omitted fields keep the group's current value.
 
-Word-list fields may appear in some schemas, including `brandedStatus`, `brandedList`,
-`competitorStatus`, `competitorList`, `negativeTargetBlackListStatus`, and
-`targetHarvestBlackListStatus`. They are **currently unsupported**. Do not send any
-word-list status, list ID, match-type, or list-type field.
+`brandOptimization` is writable too: `brandedStatus`, `brandedList`, `brandedMatchType`,
+`competitorStatus`, `competitorList`, `competitorMatchType` - same `keywordListId` rules, and
+`competitorStatus=1` requires `brandedStatus=1`. **The only word-list fields that remain
+read-only are `targetHarvestListType` and `negativeTargetListType`** - they read back from
+`get_entity_metadata` but have no write input.
 
 ### `aiAutomation` (flattened mode fields) - EXACT names
 
@@ -111,8 +114,8 @@ it must never set `1` to switch **AI -> RBA**, and it cannot write RBA condition
 | `aiAutomation` field | Rule | Paired `aiActionSettings` switch |
 |---|---|---|
 | `bidDaypartStatus` | 2 - bid dayparting | `bidDaypartStatus` |
-| `targetHarvestRuleStatus` | 4 - target harvest (AI-only: send `0`, or omit to keep) | `targetHarvestStatus` |
-| `negativeTargetRuleStatus` | 5 - negative target (AI-only: send `0`, or omit to keep) | `negativeTargetStatus` |
+| `targetHarvestRuleStatus` | 4 - target harvest | `targetHarvestStatus` |
+| `negativeTargetRuleStatus` | 5 - negative target | `negativeTargetStatus` |
 | `budgetDaypartRuleStatus` | 13 - budget dayparting | `budgetDaypartStatus` |
 | `budgetPerformanceRuleStatus` | 17 - budget by performance | `budgetDynamicStatus` |
 | `placementAdjustmentRuleStatus` | 19 - placement adjustment | `bidAdPlaceStatus` |

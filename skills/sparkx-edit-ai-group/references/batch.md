@@ -62,9 +62,15 @@ Everything inside `request`; **Flat** operation params go in `batchParams`,
     `aiAutomation` alone it goes through, but only rule modes change and no switch is written), and
     word-list details can't be set.
     `TARGET_PAUSED_ADD` with any SB id fails the whole batch.
-  - **Do not use on SP/SB:** `NEGATIVE_TARGET` (Negative Target is AI-only and a batch can't check each
-    group's rule 5 mode - edit those groups one by one with `negativeTargetStatus`) and `BRAND_TARGET`
-    (needs word lists). Both are rejected before anything is written.
+  - **Word-list operations (SP/SB):** `NEGATIVE_TARGET` (`negativeTargetStatus`) and `BRAND_TARGET`
+    (`brandedStatus` / `brandedList` / `brandedMatchType` + the `competitor*` trio) are now accepted -
+    earlier guidance that both are rejected before anything is written is out of date. Lists are
+    `keywordListId` references from `get_keyword_list`, 1-10 per field, and **replace** the current
+    list rather than merging. In a batch the same-request rules are strict: a switch set to `1`
+    needs **its list and its `MatchType`** in the same request, `[]` needs the matching switch set
+    to `0` in the same request, and `competitorStatus=1` needs `brandedStatus=1`. List ids are
+    validated **once per request**, not per group. `TARGET_HARVEST_ACTION`'s exclusion fields apply
+    to SP/SB groups only - passing just `targetHarvestStatus` also works for SD groups.
     (`TARGET_HARVEST_ACTION` / `targetHarvest` are also valid on the **SD** tool.)
 
 > **Naming**: the server's canonical codes are camelCase (`budget`, `status`, `targetType`,
@@ -74,13 +80,13 @@ Everything inside `request`; **Flat** operation params go in `batchParams`,
 > `targetPausedAdd`). Deserialization ignores case and underscores, so the UPPER_SNAKE_CASE
 > names above work too. An unrecognized value fails with `Unknown BatchOperationType: x`.
 
-> **⚠️ Only some target-related batch operations are rejected on SP/SB.** `save_sp_sb_ai_managed_group`
-> refuses `NEGATIVE_TARGET` and `BRAND_TARGET` before anything is written (see above). Tell the user
-> to edit negative-target switches group by group, or change brand / competitor settings in the
-> platform. `TARGET_HARVEST_ACTION` and `TARGET_PAUSED_ADD` are accepted as plain switches. The gateway
-> does **not** check rule 4's mode for `TARGET_HARVEST_ACTION`, so read each group's `aiAutomation`
-> first and tell the user if turning harvest on will resume a Rule-mode harvest. To only turn
-> harvesting on/off, use `targetHarvest`.
+> **⚠️ No target-related batch operation is blocked on SP/SB any more.** `NEGATIVE_TARGET`,
+> `BRAND_TARGET`, `TARGET_HARVEST_ACTION` and `TARGET_PAUSED_ADD` are all accepted; only the
+> per-field rules above apply. **But the gateway does not check rule 4's or rule 5's mode in batch**,
+> so a batch can turn harvesting or negation on for a group whose rule is in Rule mode - the check
+> that a single-group edit performs is absent here. Read each group's `aiAutomation` first and tell
+> the user which groups will resume a Rule-mode behaviour. To only turn harvesting on/off, use
+> `targetHarvest`.
 > On SD, `NEGATIVE_TARGET`, `BRAND_TARGET` and `TARGET_PAUSED_ADD` are not supported by
 > `edit_sd_ai_managed_group`; `TARGET_HARVEST_ACTION` is accepted there.
 >

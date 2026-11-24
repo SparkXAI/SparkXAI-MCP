@@ -2,7 +2,27 @@
 
 本文件记录 SparkX AI MCP Skills 与配套文档的版本变化。
 
-## [Unreleased]
+## [1.4.0] - 2026-11-24
+
+### Added
+
+- 新增五个 Skill，均为 `1.0.0`：
+  - `sparkx-query-market-data` —— 查询账户之外的市场与同行数据：通过 `get_market_search_perf` 查 SQP / ABA 搜索词需求、我方份额与 ABA Top3，通过 `get_peer_benchmark` 查品牌同行基准（P25 / P50 / P75）。**需要两个新 scope `sqp:read` 与 `benchmark:read`，各自还有对应的菜单权限** —— 在这两个 scope 之前签发的 token 两个都没有，必须重新授权。
+  - `sparkx-category-scorecard` —— 把每个类目与市场和同行比，给出类目打法、同行目标区间和预算计划。只读；执行交给 `sparkx-edit-ads`，确认后才改。
+  - `sparkx-sqp-insight` —— SQP 市场诊断，外加针对单个类目的增长或提效计划。诊断只读；计划模式只把确认过的行交给编辑类 Skill 写入。
+  - `sparkx-asin-deep-dive` —— 单个 ASIN 深挖：流量与广告结构、变体、库存和 ACOS 机制归因；优先用平台 SQP / ABA，更大范围的对比用卖家精灵。
+  - `sparkx-manage-keyword-list` —— 词库的增删改查，Campaign 与托管组按 id 引用。
+
+### Changed
+
+- `sparkx-edit-ads` `1.2.0` -> `1.3.0`：可把词库展开成线上 Campaign 的关键词和否定词（`fromKeywordList`），同步更新路由数量与两阶段确认清单。
+- `sparkx-create-campaign` `1.1.0` -> `1.2.0`：可从词库创建 Campaign 和广告组（`createFromKeywordList`）。
+- `sparkx-search-term-diagnosis` `1.0.4` -> `1.1.0`：否词候选在成为动作前要先过 60 / 90 天长窗口验证，并核对它花过钱的广告组里是否已有同名在投关键词 —— 有在投关键词时应当暂停或降 bid，而不是加否词。
+- `sparkx-create-ai-group` 与 `sparkx-edit-ai-group` `1.2.6` -> `1.2.7`：模板的自动化规则改为按规则编号合并，不再整段替换；`isSelf=2` 校验作用于合并结果；排期的 `aiAutomation` 显式传非零 status 会被拒绝。
+- `sparkx-query-entity-metadata` `1.4.11` -> `1.4.12`、`sparkx-delete-ai-group` `1.0.11` -> `1.0.12`、`sparkx-monthly-ads-report` `1.2.3` -> `1.2.4`、`sparkx-product-diagnosis` `1.2.4` -> `1.2.5`、`sparkx-promo-prep` `1.0.0` -> `1.0.1`。
+- `sparkx-query-ads-performance`、`sparkx-query-operation-log`、`sparkx-weekly-ads-report`、`sparkx-ads-structure-analysis`、`sparkx-promo-monitor`、`sparkx-promo-reset` 未变。
+
+## [1.3.7.1] - 2026-11-18
 
 ### Added
 

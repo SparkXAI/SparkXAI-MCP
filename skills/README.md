@@ -3,20 +3,27 @@
 配合 SparkX AI MCP 使用的官方 Skills，分两类：
 
 - **必装（8 个）**：基础查询、托管组管理与广告编辑能力，请务必安装。
-- **可选（8 个）**：面向具体场景的进阶玩法（分析报告、商品诊断、搜索词诊断、大促前准备 / 大促中盯盘 / 大促调整复位等），按需安装。
+- **可选（13 个）**：2 个专项工具 Skill，以及报告、商品诊断、搜索词、市场数据和大促等分析 Skill，按需安装。
 
 ## 必装 Skills
 
 | Skill | 版本 | 对应 MCP Tool | 所需 Scope | 用途 |
 |-------|------|--------------|-----------|------|
 | [sparkx-query-ads-performance](sparkx-query-ads-performance/) | 1.4.11 | `get_ads_perf` | `amazon_sa_performance_data:read` | 查询广告效果指标：花费、ACOS、ROAS、趋势、排名、同环比，小时级（AMS）与关键词×广告位，以及 Vendor ASIN 指标口径（shipped/ordered、distributorView/sellingProgram） |
-| [sparkx-query-entity-metadata](sparkx-query-entity-metadata/) | 1.4.11 | `get_entity_metadata` | `amazon_sa_ads_configuration:read` | 查询实体配置与投放状态、广告活动预算使用率（剩余预算 / 预算状态 / 超预算时长）、SB 与 SD 创建类实体、品类和品牌定向 ID，以及托管组排期、Campaign 已启用规则类型与托管组规则模式配置 |
+| [sparkx-query-entity-metadata](sparkx-query-entity-metadata/) | 1.4.12 | `get_entity_metadata` | `amazon_sa_ads_configuration:read` | 查询实体配置与投放状态、广告活动预算使用率（剩余预算 / 预算状态 / 超预算时长）、SB 与 SD 创建类实体、品类和品牌定向 ID，以及托管组排期、Campaign 已启用规则类型与托管组规则模式配置 |
 | [sparkx-query-operation-log](sparkx-query-operation-log/) | 1.3.9 | `get_operation_log` | `amazon_sa_ads_logs:read` | 查询操作日志：人工与 AI 的调价、调预算、启停记录（含时间戳时区规则） |
-| [sparkx-create-ai-group](sparkx-create-ai-group/) | 1.2.6 | `create_sd_ai_managed_group` / `save_sp_sb_ai_managed_group` / `save_sp_sb_ai_group_schedule` / `get_ai_group_template` / `get_sp_sb_ai_personality_recommendation` | `amazon_sa_managed_group:write` | 创建 SP、SB 或 SD AI 托管组，可按投放用途推荐并套用平台模板，并可继续设置 SP/SB 排期 |
-| [sparkx-edit-ai-group](sparkx-edit-ai-group/) | 1.2.6 | `edit_sd_ai_managed_group` / `save_sp_sb_ai_managed_group` / `save_sp_sb_ai_group_schedule` / `get_ai_group_template` / `get_sp_sb_ai_personality_recommendation` | `amazon_sa_managed_group:write` | 编辑单个或批量 AI 托管组，可按投放用途推荐并套用模板，维护 SP/SB 排期 |
-| [sparkx-delete-ai-group](sparkx-delete-ai-group/) | 1.0.11 | `delete_ai_managed_group` | `amazon_sa_managed_group_delete:write` | 删除 AI 托管组并释放或迁移 Campaign |
-| [sparkx-edit-ads](sparkx-edit-ads/) | 1.2.0 | `batch_update_ads` | `amazon_sa_campaign_edit:write` | 批量编辑活动预算 / 状态 / 竞价 / 广告组合归属、组合预算与日期、活动名称 / 结束日期、广告组状态 / 名称 / 默认竞价、关键词、投放、推广商品和否定项（共 29 条路由，其中 13 条可能需两阶段确认） |
-| [sparkx-create-campaign](sparkx-create-campaign/) | 1.1.0 | `create_sp_sb_campaign` / `create_sd_campaign` / `create_sp_ad_group` / `create_sb_ad_group` / `create_sd_ad_group` / `create_portfolio` | `amazon_sa_campaign_create:write` | 批量创建 SP / SB / SD 广告活动，向现有活动新增广告组，创建广告组合 |
+| [sparkx-create-ai-group](sparkx-create-ai-group/) | 1.2.7 | `create_sd_ai_managed_group` / `save_sp_sb_ai_managed_group` / `save_sp_sb_ai_group_schedule` / `get_ai_group_template` / `get_sp_sb_ai_personality_recommendation` | `amazon_sa_managed_group:write` | 创建 SP、SB 或 SD AI 托管组，可按投放用途推荐并套用平台模板，并可继续设置 SP/SB 排期 |
+| [sparkx-edit-ai-group](sparkx-edit-ai-group/) | 1.2.7 | `edit_sd_ai_managed_group` / `save_sp_sb_ai_managed_group` / `save_sp_sb_ai_group_schedule` / `get_ai_group_template` / `get_sp_sb_ai_personality_recommendation` | `amazon_sa_managed_group:write` | 编辑单个或批量 AI 托管组，可按投放用途推荐并套用模板，维护 SP/SB 排期 |
+| [sparkx-delete-ai-group](sparkx-delete-ai-group/) | 1.0.12 | `delete_ai_managed_group` | `amazon_sa_managed_group_delete:write` | 删除 AI 托管组并释放或迁移 Campaign |
+| [sparkx-edit-ads](sparkx-edit-ads/) | 1.3.0 | `batch_update_ads` | `amazon_sa_campaign_edit:write` | 批量编辑活动预算 / 状态 / 竞价 / 广告组合归属、组合预算与日期、活动名称 / 结束日期、广告组状态 / 名称 / 默认竞价、关键词、投放、推广商品和否定项，支持从词库添加（共 31 条路由，其中 15 条可能需两阶段确认） |
+| [sparkx-create-campaign](sparkx-create-campaign/) | 1.2.0 | `create_sp_sb_campaign` / `create_sd_campaign` / `create_sp_ad_group` / `create_sb_ad_group` / `create_sd_ad_group` / `create_portfolio` | `amazon_sa_campaign_create:write` | 批量创建 SP / SB / SD 广告活动，向现有活动新增广告组，创建广告组合 |
+
+## 可选工具 Skills
+
+| Skill | 版本 | 对应 MCP Tool | 所需 Scope | 用途 |
+|-------|------|---------------|------------|------|
+| [sparkx-manage-keyword-list](sparkx-manage-keyword-list/) | 1.0.0 | `get_keyword_list` / `create_keyword_list` / `update_keyword_list` / `delete_keyword_list` | `amazon_sa_keywords_list:write` | 管理词库：搜索、创建、编辑、共享和删除；活动、广告组、托管组按 ID 引用 |
+| [sparkx-query-market-data](sparkx-query-market-data/) | 1.0.0 | `get_market_search_perf` / `get_peer_benchmark` | `sqp:read`（SQP / ABA）+ `benchmark:read`（同行基准）—— **两个独立 scope**，各自还有对应的菜单权限 | 查询 SQP / ABA 周数据和品牌同行周、月基准；每次查询一个店铺 |
 
 ## 可选 Skills
 
@@ -25,11 +32,14 @@
 | Skill | 版本 | 用途 |
 |-------|------|------|
 | [sparkx-weekly-ads-report](sparkx-weekly-ads-report/) | 1.1.6 | 广告周报：KPI 环比卡片、7 天趋势、异常摘要、Top 变化榜、下周行动建议 |
-| [sparkx-monthly-ads-report](sparkx-monthly-ads-report/) | 1.2.3 | 广告月报：全月 KPI（环比 + 同比）、结构拆解、商品与关键词分析、下月建议 |
+| [sparkx-monthly-ads-report](sparkx-monthly-ads-report/) | 1.2.4 | 广告月报：全月 KPI（环比 + 同比）、结构拆解、商品与关键词分析、下月建议 |
 | [sparkx-ads-structure-analysis](sparkx-ads-structure-analysis/) | 1.1.7 | 广告结构分析：按广告类型 / 站点 / 组合 / 工作日 / 小时维度拆解花费与效率，定位结构错配 |
-| [sparkx-product-diagnosis](sparkx-product-diagnosis/) | 1.2.4 | 商品诊断：投放分层 + 独立的生命阶段（SP 投放时长 + 12 周总销售额趋势）、变体对比、问题商品诊断卡、去留优化建议 |
-| [sparkx-search-term-diagnosis](sparkx-search-term-diagnosis/) | 1.0.4 | 搜索词诊断：按出单、品牌 / 非品牌、关键词 / ASIN 给搜索词分类，给出花费分布、否词候选、扶正候选和投放碎片，门槛用店铺客单价和目标 ACOS 推导 |
-| [sparkx-promo-prep](sparkx-promo-prep/) | 1.0.0 | 大促前准备：检查库存够不够撑过大促、广告组合上限、平时就花光预算的活动和托管组排期；按客户给的大促预算定加码力度，给符合条件的 SP/SB 托管组建与角色匹配的排期（只有客户确认的主推组用“活动冲量”，其他组用“推动增长”或保持“订单稳定”），给托管组外的活动加预算、出价和顶部溢价，附产品线汇总、预览和改动记录 |
+| [sparkx-product-diagnosis](sparkx-product-diagnosis/) | 1.2.5 | 商品诊断：投放分层 + 独立的生命阶段（SP 投放时长 + 12 周总销售额趋势）、变体对比、问题商品诊断卡、去留优化建议 |
+| [sparkx-asin-deep-dive](sparkx-asin-deep-dive/) | 1.0.0 | **需与 `sparkx-query-market-data` 一起安装**（`sqp:read` + `benchmark:read`）；两个权限分别生效：缺 `sqp:read` 时 SQP / ABA 模块走替代路径，缺 `benchmark:read` 时只少同行背景，SQP / ABA 照常可用。 单 ASIN 深钻：流量与广告结构、子体、库存和 ACOS 机制；先用平台 SQP / ABA 和可用的竞品推荐数据，品牌同行基准只作背景，卖家精灵用于更广的比较 |
+| [sparkx-search-term-diagnosis](sparkx-search-term-diagnosis/) | 1.1.0 | 搜索词诊断：按出单、品牌 / 非品牌、关键词 / ASIN 给搜索词分类，给出花费分布、否词候选、扶正候选和投放碎片，门槛用店铺客单价和目标 ACOS 推导 |
+| [sparkx-sqp-insight](sparkx-sqp-insight/) | 1.0.0 | SQP 市场诊断和单类目增长或提效计划；诊断只读，计划仅经编辑 Skill 写入客户确认的行。需要 `sparkx-query-market-data` 和 Python 3 |
+| [sparkx-category-scorecard](sparkx-category-scorecard/) | 1.0.0 | 对照 SQP 和品牌同行基准检查每个类目，给出类目打法、同行目标区间和预算计划；只读，确认后交给 edit-ads 执行。需要 `sparkx-query-market-data` 和 Python 3 |
+| [sparkx-promo-prep](sparkx-promo-prep/) | 1.0.1 | 大促前准备：检查库存够不够撑过大促、广告组合上限、平时就花光预算的活动和托管组排期；按客户给的大促预算定加码力度，给符合条件的 SP/SB 托管组建与角色匹配的排期（只有客户确认的主推组用“活动冲量”，其他组用“推动增长”或保持“订单稳定”），给托管组外的活动加预算、出价和顶部溢价，附产品线汇总、预览和改动记录 |
 | [sparkx-promo-monitor](sparkx-promo-monitor/) | 1.0.0 | 大促中盯盘：大促当天按小时对比平时的花费节奏和预算消耗，找出快花完预算的好活动、花钱不出单、超出上限、库存紧张和今天被暂停的对象，按客户当下的目标给出小步调整；也回答“这几个定向现在能停吗”“库存下周才到还能加预算吗” |
 | [sparkx-promo-reset](sparkx-promo-reset/) | 1.1.0 | 大促调整复位：从操作日志找出大促期间人为改过的出价、预算、广告位溢价和托管组设置及其大促前的值，按客户选择全部直接复位，或按大促后表现给出立即复位 / 分天回落 / 由客户决定的建议；也可以按客户上传的原值记录复位，确认后执行并回读 |
 
@@ -64,11 +74,16 @@ skills/
 ├── sparkx-delete-ai-group/           # 必装
 ├── sparkx-edit-ads/                  # 必装
 ├── sparkx-create-campaign/           # 必装
+├── sparkx-manage-keyword-list/       # optional
+├── sparkx-query-market-data/         # optional
 ├── sparkx-weekly-ads-report/         # 可选
 ├── sparkx-monthly-ads-report/        # 可选
 ├── sparkx-ads-structure-analysis/    # 可选
 ├── sparkx-product-diagnosis/         # 可选
+├── sparkx-asin-deep-dive/            # 可选
 ├── sparkx-search-term-diagnosis/     # 可选
+├── sparkx-sqp-insight/               # 可选
+├── sparkx-category-scorecard/        # 可选
 ├── sparkx-promo-prep/                # 可选
 ├── sparkx-promo-monitor/             # 可选
 └── sparkx-promo-reset/               # 可选

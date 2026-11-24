@@ -13,7 +13,7 @@ description: >-
   It is not for editing existing objects (use sparkx-edit-ads), for AI managed groups (use sparkx-create-ai-group), or
   for reading data (use sparkx-query-ads-performance / sparkx-query-entity-metadata).
 metadata:
-  version: 1.1.0
+  version: 1.2.0
 ---
 
 # Create campaigns, ad groups and portfolios
@@ -283,20 +283,38 @@ prefix. A portfolio belonging to another shop is rejected the same way.
 `get_entity_metadata` as a **string**; this request field is a **number**. Parse the digits
 and send `"portfolioId": 123456789012345`, not `"123456789012345"`.
 
-## The console can do three things this tool cannot
+## Adding words from a keyword list (从词库添加)
+
+The console's "Add from keyword list" (从词库添加) tab has an equivalent on
+`create_sp_sb_campaign`, `create_sp_ad_group` and `create_sb_ad_group`: each ad group accepts
+`keywordLists` and `negativeKeywordLists` (only when keyword list features are enabled on the
+server; otherwise the call is rejected and you send the words explicitly).
+
+- `keywordLists`: `keywordListIds` (1-10), `matchTypes` (`exact` / `phrase` / `broad`), `bid`
+  (required) and optional `state`. `negativeKeywordLists`: `keywordListIds` and `matchTypes`
+  (`negativeExact` / `negativePhrase`) only - no bid, no state.
+- Get the IDs from `get_keyword_list` with `profileIds=[profileId]`. At most 10 distinct keyword
+  lists (词库) per call.
+- The server copies the lists' current words into `keywords` / `negativeKeywords` before any
+  other check, so the normal rules apply: keyword lists fit a `keyword` ad group, an SP auto
+  campaign takes only `negativeKeywordLists`, and every expanded keyword must pass the bid rules
+  and the 1000-per-list / 5000-total limits. Over a limit the call is rejected, not truncated.
+- A word that repeats one of your explicit (keywordText, matchType) pairs, compared
+  case-insensitively, is skipped; words over 80 characters or containing `/` are skipped too.
+- It is a one-time copy and there is no preview step. To show the user the words first, read
+  them with `get_keyword_list` (`keywordListId`, `include=['keywords']`). After the write,
+  `data.keywordListExpansion` reports per ad group how many entries were added and skipped.
+
+## The console can do two things this tool cannot
 
 The user may be looking at the creation page while talking to you. These parts of it have no
 equivalent here - say so and point at the console rather than approximating:
 
-1. **从词库添加 / Add from keyword list.** The negatives panels have an "Enter list" tab and
-   an "Add from keyword list" tab. Only the first has an equivalent: send the words in
-   `negativeKeywords`. **Keyword lists (词库) are not supported by MCP at all** - you cannot
-   reference one, and you cannot enumerate its contents to paste them in.
-2. **自动定向 → 设置默认出价 / Automatic targeting → Set default bid.** The console lets an
+1. **自动定向 → 设置默认出价 / Automatic targeting → Set default bid.** The console lets an
    auto campaign run on one default bid instead of per-group bids. This tool always requires
    all four groups in `targetBid`; there is no "just use the default" mode. If the user wants
    a single bid, send the same value four times and tell them that is what you did.
-3. **Adding ad groups to a campaign whose type is turned off here.** Each ad type has its own
+2. **Adding ad groups to a campaign whose type is turned off here.** Each ad type has its own
    ad-group tool (`create_sp_ad_group` / `create_sb_ad_group` / `create_sd_ad_group`) and they
    are not interchangeable - `create_sp_ad_group` rejects a campaign that is not
    `sponsoredProducts`. If the tool for that type is not in your list, use the console.

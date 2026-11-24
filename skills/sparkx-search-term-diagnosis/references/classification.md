@@ -84,7 +84,8 @@ history and do not promote it to a direct pause.
 
 - brand terms, own ASINs, terms containing a whitelisted root → **held back**, counted at the
   end ("品牌词 / 自家 ASIN / 白名单拦截 N 条");
-- terms whose text equals an enabled exact keyword → group V3c.
+- terms whose text equals a keyword you already run in a source ad group, at **any** match
+  type → group V3c.
 
 Action: ASIN entry → negative product targeting; keyword entry → negative exact. Each row
 also carries the campaign type, campaign and ad group the spend came from (call 10), which
@@ -94,11 +95,51 @@ Before the row is actionable, subtract current coverage from calls 14-15 at each
 destination. Fully covered rows become **already handled** and leave the action list. Partially
 covered rows retain only uncovered destinations and explicitly list both sets. Match the exact
 negative action being proposed: a different match type does not prove exact-negative coverage.
+The reference script requires this per-destination coverage input; missing or incomplete coverage
+keeps `actionable` false rather than treating an unchecked destination as uncovered.
 
-**V3c - zero-order terms you also target as exact keywords.** The customer chose to target
-these, so they are not proposed as negatives. Show where the zero-order spend came from (the
-exact keyword itself, which V3a already covers when it crossed `T`, or other campaigns'
-broad / phrase / auto); negating the term in those other campaigns is the customer's call.
+**Then verify over longer windows - 30 days finds candidates, it does not settle them.** Re-pull
+the surviving candidates at 90 days, and at 60 when you need the middle step (call 17). Decide on
+the longest window that has rows:
+
+| Longer window | Action |
+|---|---|
+| Orders, ACOS at or under target | **Keep, do not negate.** The 30-day zero is a quiet spell - this is the most common way a working term gets killed |
+| Orders, ACOS over target | **Lower the bid instead.** Orders prove real demand; a negative throws it away |
+| No orders, spend at or above `T` x 3 | **Negative candidate confirmed** |
+| No activity before the last 30 days (the longer-window spend and clicks equal the 30-day ones) - checked before the two "no orders" rows | **Too new to judge** - observe. The longer window adds nothing yet, so the same 30 days cannot confirm a negative |
+
+| No orders, spend under `T` x 3, with activity before the last 30 days | **Not confirmed** - observe; not actionable |
+
+**A missing row is not zero conversion** - the long-window pull has no order filter, so a missing
+candidate means the query went wrong; re-pull it. Say which window each decision rests on.
+
+The reference script applies this table before any list is built (`long_window`): only rows whose
+verdict is **confirmed**, whose source ad groups resolved, and that are not already handled come out
+`actionable`; keep / lower-bid rows leave the negative list with their verdict, and without call 17
+nothing is actionable. A term with no resolved source ad group is listed as **source unresolved**,
+never as a negative, until call 10 and the ad-group id mapping give its sources.
+
+**V3c - terms you already target as keywords.** Check each candidate against the keywords in
+every ad group its spend came from (call 10 sources, call 18 keywords, joined on internal
+`adGroupId`), at **any** match type, not exact only - never against the account-wide exact list:
+
+- an **enabled** keyword there: a negative could silence a keyword the customer chose to run.
+  Name it and inspect that keyword's own performance and history before suggesting any change.
+  A broad or phrase keyword can convert through other search queries; this term's zero orders
+  alone do not justify pausing or lowering the whole keyword. For an exact keyword, apply V3a's
+  own-spend and prior-period guard before proposing a pause;
+- a **paused** keyword there (and no enabled one): only that one entrance is shut - the term can still
+  come in through the ad group's other enabled keywords and targets. It is **not** handled by
+  itself: the row stays a negative candidate, noting the paused keyword, and leaves the action list
+  only when current negatives cover every source destination (calls 14-15) or a source ad group
+  has no enabled entrance left (no enabled keyword or target, or the ad group / campaign is paused
+  - call 18);
+- no keyword anywhere it spent: the term came from automatic, product or category targeting -
+  only then is a negative the right instrument.
+
+A zero-order enabled exact keyword with its own spend above `T` is already V3a. Negating the term
+in the *other* campaigns that also spent on it stays the customer's call.
 
 Then the managed-group label (data-retrieval calls 10-12) on V3b rows: "托管组已开自动否定"
 when every campaign the term spent in is in a group with automatic negative targeting on.
@@ -143,8 +184,10 @@ sample - continue observing**, not fold back. Never substitute campaign age for 
 ## Reference script
 
 Inputs are the saved query results; output is the file the answer and export are built from.
-Managed-group labels, campaign/ad-group destinations and negative coverage are added afterwards
-from calls 10-15. `exact_evidence` comes from call 16 and is keyed by Amazon keyword id.
+Managed-group labels are added afterwards. Source ad groups (call 10), keyword state (call 18),
+long-window results (call 17), and current negative coverage (calls 14-15) must be supplied before
+using `actionable` in the answer or export. `exact_evidence` comes from call 16 and is keyed by
+Amazon keyword id.
 
 ```python
 import re
@@ -179,12 +222,31 @@ def has_term(q, terms):
             return True
     return False
 
+def norm_text(s):
+    return ' '.join(str(s or '').casefold().split())
+
 def diagnose(total, ordering, zero_high, sources, exact_texts, exact_ids, exact_perf,
              brand, whitelist, own_asins, target_acos=None, store_total=None,
-             prior_exact_perf=None, exact_evidence=None, days=30, mature=True):
+             prior_exact_perf=None, exact_evidence=None, days=30, mature=True,
+             source_groups=None, adgroup_keywords=None, adgroup_live=None, long_window=None,
+             negative_coverage=None):
     """All row lists already passed through norm_rows; total from sum_total.
     exact_texts, own_asins: lower-cased sets; exact_ids: set of str(amazonKeywordId) (call 7).
+    exact_texts is used for harvest de-dup (V4) only - V3c is decided per source ad group below.
     sources: {lower-cased term: set of match types}.
+    source_groups: {norm_text(term): set of internal adGroupId} - call 10 sources, Amazon ad group ids
+        mapped to internal ids via entity=adGroup.
+    adgroup_keywords: {(internal adGroupId, norm_text(keywordText)): set of keywordState} - call 18,
+        any match type, enabled and paused. Required: V3c is never decided without it.
+    adgroup_live: {internal adGroupId: bool} - the ad group still has an enabled entrance (an enabled
+        keyword or target, ad group and campaign enabled); None = not read.
+    long_window: {norm_text(term): {'Spend', 'Sales', 'Conversions', 'Clicks', 'days'}} - call 17, the
+        longest window that was pulled (90, or 60). A negative is never actionable without it.
+    negative_coverage: {(norm_text(term), internal adGroupId): bool} - calls 14-15, expanded to
+        every source ad group. True = an enabled negative covers the proposed exact keyword or
+        product-target action; False = checked and uncovered. Include campaign-level negatives
+        for every ad group they cover. Missing keys mean not checked, never uncovered.
+    Every zero-high row has `actionable`; it is True only after the long-window and coverage gates.
     exact_perf rows: targetId, targetText, targetState, Spend, Sales, Conversions (call 8)."""
     if not total['Conversions'] or not total['Sales']:
         raise ValueError('no orders or no sales in the period - cannot derive thresholds')
@@ -204,19 +266,75 @@ def diagnose(total, ordering, zero_high, sources, exact_texts, exact_ids, exact_
             continue                                   # zero-small: measured, not listed
         tier = ('core' if n * scale >= 3 else 'potential') if n > 0 else 'zero-high'
         rows.append(dict(query=q, spend=x['Spend'], sales=x['Sales'], orders=n, tier=tier,
-                         entry='ASIN' if is_asin(q) else 'keyword',
+                         clicks=x.get('Clicks'), entry='ASIN' if is_asin(q) else 'keyword',
                          brand=(not is_asin(q)) and has_term(q, brand)))
 
+    if adgroup_keywords is None:
+        raise ValueError('V3c needs call 18 keywords keyed by source ad group (adgroup_keywords)')
     for r in rows:
         q = r['query'].lower()
         r['v3'] = None
         if r['tier'] == 'zero-high':
+            r['actionable'] = False
             if r['brand'] or q in own_asins or has_term(q, whitelist):
                 r['v3'] = 'held'
-            elif q in exact_texts:
-                r['v3'] = 'V3c'
+                continue
+            nq = norm_text(q)
+            src = sorted((source_groups or {}).get(nq, set()), key=str)
+            states = {g: adgroup_keywords.get((g, nq), set()) for g in src}
+            enabled_in = [g for g in src if 'enabled' in states[g]]
+            paused_in = [g for g in src if states[g] and 'enabled' not in states[g]]
+            if enabled_in:
+                r['v3'], r['keyword_ad_groups'] = 'V3c - review keyword performance', enabled_in
+                continue
+            if not src:
+                # call 10 / the id mapping gave no source ad group: same-group keywords and current negatives
+                # cannot be checked, so the row is not a negative yet - resolve the source first
+                r['v3'], r['source_unresolved'], r['actionable'] = 'source unresolved', True, False
+                continue
+            r['v3'] = 'negative product target' if r['entry'] == 'ASIN' else 'negative exact'
+            if paused_in:
+                r['paused_keyword_ad_groups'] = paused_in             # one entrance shut; not handled by itself
+
+            # 30 days finds candidates, the longer window (call 17) settles them
+            lw = None if long_window is None else long_window.get(nq)
+            if long_window is None:
+                verdict = 'not verified - pull call 17'
+            elif lw is None:
+                verdict = 'missing from the long-window pull - re-pull (never zero conversion)'
+            elif (lw.get('Conversions') or 0) > 0:
+                acos = lw['Spend'] / lw['Sales'] if lw.get('Sales') else float('inf')
+                verdict = 'keep' if acos <= tacos else 'lower bid'
+                r['v3'] = 'keep - converted over the longer window' if verdict == 'keep' else 'lower bid instead'
+            elif abs((lw.get('Spend') or 0) - r['spend']) < 0.01 and (lw.get('Clicks') or 0) == (r.get('clicks') or 0):
+                verdict = 'too new to judge'       # nothing before the 30 days: the same data cannot confirm itself
+            elif (lw.get('Spend') or 0) >= 3 * T:
+                verdict = 'confirmed'
             else:
-                r['v3'] = 'negative product target' if r['entry'] == 'ASIN' else 'negative exact'
+                verdict = 'not confirmed - no orders, spend under T x 3'
+            r['long_window_verdict'] = verdict
+            r['long_window_days'] = (lw or {}).get('days')
+
+            # A checked, uncovered source can receive a negative. Unknown coverage blocks the
+            # whole row until calls 14-15 have been completed for every source destination.
+            unknown = [g for g in src if negative_coverage is None or (nq, g) not in negative_coverage]
+            covered = [g for g in src if negative_coverage is not None
+                       and negative_coverage.get((nq, g)) is True]
+            closed = [g for g in src if adgroup_live is not None and adgroup_live.get(g) is False]
+            uncovered = [g for g in src if g not in unknown and g not in covered and g not in closed]
+            r['covered_source_groups'] = covered
+            r['closed_source_groups'] = closed
+            r['uncovered_source_groups'] = uncovered
+            r['coverage_unknown_source_groups'] = unknown
+            if unknown:
+                r['coverage'] = 'not verified'
+            elif not uncovered:
+                r['coverage'] = 'already handled'
+            elif covered or closed:
+                r['coverage'] = 'partially covered'
+            else:
+                r['coverage'] = 'not covered'
+            r['actionable'] = verdict == 'confirmed' and not unknown and bool(uncovered)
 
     th = 4 if mature else 2
     open_types = {'LOOSE-MATCH', 'CLOSE-MATCH', 'broad', 'phrase'}

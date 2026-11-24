@@ -1,8 +1,8 @@
 {
   "$schema_note": "Machine-readable manifest of SparkX AI MCP official skills. Version fields must stay in sync with each skill's SKILL.md frontmatter (`metadata.version`).",
   "manifest_version": 1,
-  "updated_at": "2026-11-18",
-  "release": "v1.3.7",
+  "updated_at": "2026-11-13",
+  "release": "v1.3.6",
   "skills": [
     {
       "name": "sparkx-query-ads-performance",
@@ -15,7 +15,7 @@
     },
     {
       "name": "sparkx-query-entity-metadata",
-      "version": "1.4.11",
+      "version": "1.4.12",
       "required": true,
       "mcp_tools": ["get_entity_metadata"],
       "scopes": ["amazon_sa_ads_configuration:read"],
@@ -33,7 +33,7 @@
     },
     {
       "name": "sparkx-create-ai-group",
-      "version": "1.2.6",
+      "version": "1.2.7",
       "required": true,
       "mcp_tools": ["create_sd_ai_managed_group", "save_sp_sb_ai_managed_group", "save_sp_sb_ai_group_schedule", "get_ai_group_template", "get_sp_sb_ai_personality_recommendation"],
       "scopes": ["amazon_sa_managed_group:write"],
@@ -42,7 +42,7 @@
     },
     {
       "name": "sparkx-edit-ai-group",
-      "version": "1.2.6",
+      "version": "1.2.7",
       "required": true,
       "mcp_tools": ["edit_sd_ai_managed_group", "save_sp_sb_ai_managed_group", "save_sp_sb_ai_group_schedule", "get_ai_group_template", "get_sp_sb_ai_personality_recommendation"],
       "scopes": ["amazon_sa_managed_group:write"],
@@ -51,7 +51,7 @@
     },
     {
       "name": "sparkx-delete-ai-group",
-      "version": "1.0.11",
+      "version": "1.0.12",
       "required": true,
       "mcp_tools": ["delete_ai_managed_group"],
       "scopes": ["amazon_sa_managed_group_delete:write"],
@@ -60,21 +60,39 @@
     },
     {
       "name": "sparkx-edit-ads",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "required": true,
       "mcp_tools": ["batch_update_ads"],
       "scopes": ["amazon_sa_campaign_edit:write"],
       "path": "sparkx-edit-ads",
-      "description": "Edit live ad entities in bulk via batch_update_ads: campaign budget / state / bidding / portfolio membership, portfolio budgets and dates, ad group state, keywords, targets, promoted products and negatives, plus campaign name/end date and ad group name and default bid. 29 routes, 13 that may require two-phase confirmation."
+      "description": "Edit live ad entities in bulk via batch_update_ads: campaign budget / state / bidding / portfolio membership, portfolio budgets and dates, ad group state, keywords, targets, promoted products and negatives, including expansion from keyword lists. 31 routes, 15 that may require two-phase confirmation."
     },
     {
       "name": "sparkx-create-campaign",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "required": true,
       "mcp_tools": ["create_sp_sb_campaign", "create_sd_campaign", "create_sp_ad_group", "create_sb_ad_group", "create_sd_ad_group", "create_portfolio"],
       "scopes": ["amazon_sa_campaign_create:write"],
       "path": "sparkx-create-campaign",
       "description": "Create new SP, SB and SD campaigns in bulk, add ad groups to existing campaigns of any type, and create portfolios - with promoted products, targeting, negatives and SB/SD creatives. New-campaign creation also supports placement adjustments and an optional AMC audience. Which ad types are enabled is server configuration."
+    },
+    {
+      "name": "sparkx-manage-keyword-list",
+      "version": "1.0.0",
+      "required": false,
+      "mcp_tools": ["get_keyword_list", "create_keyword_list", "update_keyword_list", "delete_keyword_list"],
+      "scopes": ["amazon_sa_keywords_list:write"],
+      "path": "sparkx-manage-keyword-list",
+      "description": "Manage keyword lists (corpus): search and inspect lists, create one with keywords and linked products, add or remove keywords or products, change visibility, and delete with two-phase confirmation. Lists are referenced by id from campaigns, ad groups and AI managed groups; the match type is chosen there, not on the list."
+    },
+    {
+      "name": "sparkx-query-market-data",
+      "version": "1.0.0",
+      "required": false,
+      "mcp_tools": ["get_market_search_perf", "get_peer_benchmark"],
+      "scopes": ["sqp:read", "benchmark:read"],
+      "path": "sparkx-query-market-data",
+      "description": "Query Amazon market and peer data outside the account: SQP / ABA search-term demand, share and top-3 ASINs via get_market_search_perf, and Sponsored Ads brand peer benchmarks (P25 / P50 / P75 by brand, category, ad product and goal) via get_peer_benchmark. Weekly search data; benchmarks weekly or monthly. One store per call, never joined to ad data."
     },
     {
       "name": "sparkx-weekly-ads-report",
@@ -87,7 +105,7 @@
     },
     {
       "name": "sparkx-monthly-ads-report",
-      "version": "1.2.3",
+      "version": "1.2.4",
       "required": false,
       "mcp_tools": ["get_ads_perf", "get_entity_metadata", "get_operation_log"],
       "scopes": ["amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read"],
@@ -105,7 +123,7 @@
     },
     {
       "name": "sparkx-product-diagnosis",
-      "version": "1.2.4",
+      "version": "1.2.5",
       "required": false,
       "mcp_tools": ["get_ads_perf", "get_entity_metadata", "get_operation_log"],
       "scopes": ["amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read"],
@@ -113,17 +131,44 @@
       "description": "Diagnose ASIN-level health: portfolio tiering plus a separate lifecycle stage from SP advertising age and total-sales trend, variant comparison, diagnostic cards for underperformers, keep/optimize/cut recommendations."
     },
     {
-      "name": "sparkx-search-term-diagnosis",
-      "version": "1.0.4",
+      "name": "sparkx-asin-deep-dive",
+      "version": "1.0.0",
       "required": false,
-      "mcp_tools": ["get_ads_perf", "get_entity_metadata"],
-      "scopes": ["amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read"],
+      "mcp_tools": ["get_ads_perf", "get_entity_metadata", "get_operation_log", "get_market_search_perf", "get_peer_benchmark"],
+      "scopes": ["amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read", "sqp:read", "benchmark:read"],
+      "path": "sparkx-asin-deep-dive",
+      "description": "Deep-dive one ASIN or parent ASIN: traffic and ad structure, variants, stock and ACOS mechanism. Use platform SQP / ABA and available competitorProduct data first; brand peer benchmarks are context only. SellerSprite can add organic rank and broader category or competitor comparisons."
+    },
+    {
+      "name": "sparkx-search-term-diagnosis",
+      "version": "1.1.0",
+      "required": false,
+      "mcp_tools": ["get_ads_perf", "get_entity_metadata", "get_operation_log"],
+      "scopes": ["amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read"],
       "path": "sparkx-search-term-diagnosis",
       "description": "Diagnose search-term spend with fixed, reproducible rules: spend distribution by order tier, brand vs non-brand, negative candidates (incl. pausing zero-order exact keywords), harvest candidates and fragmented exact keywords; thresholds from the store's order value and target ACOS. Read-only."
     },
     {
-      "name": "sparkx-promo-prep",
+      "name": "sparkx-sqp-insight",
       "version": "1.0.0",
+      "required": false,
+      "mcp_tools": ["get_market_search_perf", "get_peer_benchmark", "get_ads_perf", "get_entity_metadata", "get_operation_log", "batch_update_ads", "create_sp_sb_campaign", "save_sp_sb_ai_managed_group", "edit_sd_ai_managed_group"],
+      "scopes": ["sqp:read", "benchmark:read", "amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read", "amazon_sa_campaign_edit:write", "amazon_sa_campaign_create:write", "amazon_sa_managed_group:write"],
+      "path": "sparkx-sqp-insight",
+      "description": "Read Amazon SQP against the market in two modes. Diagnose (read-only): SQP audit, why store / category / brand sales or share dropped, KPI story for a client, fix-first, verify a change, branded vs generic searches, one-page HTML report. Plan (one category): sizes bid raises and cuts, new exact keywords, top of search, budgets and paused tests to the user's goal, budget and ACOS goal, plus listing / price tasks; writes only confirmed rows through the edit skills. Needs Python 3 (pandas for the audit calculation)."
+    },
+    {
+      "name": "sparkx-category-scorecard",
+      "version": "1.0.0",
+      "required": false,
+      "mcp_tools": ["get_market_search_perf", "get_peer_benchmark", "get_ads_perf", "get_entity_metadata", "get_operation_log"],
+      "scopes": ["sqp:read", "benchmark:read", "amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read"],
+      "path": "sparkx-category-scorecard",
+      "description": "Check every category against the market (SQP conversion) and peers (brand benchmark): a play per category, fair peer goals as a P25-P75 range, and a campaign budget plan (raise / lower / not placed) sized to the confirmed budget with a TACOS check. Read-only; the change list goes to the edit-ads skill after confirmation. Needs Python 3."
+    },
+    {
+      "name": "sparkx-promo-prep",
+      "version": "1.0.1",
       "required": false,
       "mcp_tools": ["get_ads_perf", "get_entity_metadata", "get_operation_log", "batch_update_ads", "save_sp_sb_ai_group_schedule", "save_sp_sb_ai_managed_group", "edit_sd_ai_managed_group"],
       "scopes": ["amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read", "amazon_sa_campaign_edit:write", "amazon_sa_managed_group:write"],

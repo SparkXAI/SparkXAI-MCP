@@ -14,7 +14,7 @@ description: >-
   预算使用率, 当前预算使用率, 剩余预算, 预算还剩多少, 超预算, 预算状态, 预算内时长,
   最近超预算时间, 预算跑满
 metadata:
-  version: 1.4.11
+  version: 1.4.12
 ---
 
 # Query Entity Metadata Skill
@@ -274,13 +274,57 @@ has no internal-id equivalent. That is a restriction specific to it, not the gen
 `negativeKeyword`, `negativeTarget`, `productAd`, `portfolio`, `placement`. `aiGroup`,
 `aiGroup_schedule`, `asin`, `automationRule` and the five suggestion entities (`amcAudience`,
 `keywordGroup`, `suggestedKeyword`, `suggestedTarget`, `suggestedBid`) come from other
-providers and **do not share these validations**: `aiGroup`, for instance, silently takes only the first `orderBy` rule and
-treats any direction other than `ASC` as descending, with no whitelist check at all. Do not
-assume an error will catch a bad sort there.
+providers and **do not share these validations** - each has its own, so check the entity's own
+section rather than assuming either way. `aiGroup`, for example, now **rejects** a bad sort
+instead of absorbing it: more than one `orderBy` rule (`aiGroup supports exactly one orderBy
+rule`), a field outside its sortable list, or a direction that is neither `ASC` nor `DESC` are
+all errors. Earlier guidance here said it silently took the first rule and treated anything but
+`ASC` as descending - that is no longer true.
 
 The AdsList service used to fail silently on several of these. **It now rejects them**, so a
 request that would once have quietly returned the wrong rows returns an error instead. Build
 requests to these rules rather than discovering them at runtime.
+
+⚠️ **Unknown filter keys are now rejected on every entity, not just AdsList** - and this is the
+failure that used to be worst, because an ignored filter returned a full unfiltered page that
+looked like a successful answer. `asin`, `asset`, `sdAudience`, `automationRule` and `pageAsins`
+each have a key whitelist; `pageAsins` and the suggestion entities also reject keys they do not
+document. A misspelled key (`asins` for `asin`) is an error now, never a silent full scan.
+
+**On `entity=asin` the *shape* of the value is checked too.** These used to be skipped and are
+now `invalid_params`:
+
+| Field | Rejected shapes |
+|---|---|
+| `asin` / `parentAsin` / `sku` / `asinInventoryStatus` | numbers, `notin`, `like`, `{"in": <not an array>}` |
+| `asinBrand` | bare arrays and `{"in": ...}` |
+| `asinTitle` | a bare string |
+| `asinIsDelete` | strings and booleans |
+| the three eligibility-status fields | arrays |
+| `productLineParentName` | any other object or array |
+| range fields (`asinBsr`, `asinPrice`, inventory, availability days) | a scalar, or an empty object - including an availability window that would otherwise be ignored |
+
+**Empty arrays and `null` values behave differently per entity** - there is no rule that covers
+all of them:
+
+| Entity | Empty array | `null` value |
+|---|---|---|
+| `asin` | rejected | counts as "not passed" |
+| AdsList entities | rejected | **not** dropped - the field becomes an `eq` comparison against `null`, which is not the same as omitting it. Pass a real value or leave the field out |
+| `aiGroup` | rejected (`must contain at least one non-null value`) | **rejected** (`cannot be null`), and a list containing `null` is rejected too |
+| `asset`, `sdAudience` | **accepted and ignored** - `assetSubType: []` comes back unfiltered | counts as "not passed" |
+
+So on `asset` and `sdAudience` a malformed filter can still pass silently; check the row count
+against what you expected there rather than assuming an error would have caught it. `productLineParentId` / `productLineChildId` now accept a plain array of integers
+as a synonym for `in`, while `{"in": ["abc"]}` is a parameter error rather than a raw number
+parse failure.
+
+Two consequences for how you work. A rejected filter means the field name or the value shape is
+wrong - re-read the field table rather than dropping the filter and reporting the unfiltered
+rows as an answer. And when a filter returns every row, **check the filter against the result
+before concluding anything**: a correct condition can legitimately match everything (every
+campaign really is `enabled`), while on `asset` and `sdAudience` it may instead mean the filter
+was ignored. The row count alone does not tell you which.
 
 **1. Paging and `total` (this one applies to every paginated entity).** `meta.total` is the
 exact number of matching rows - use it directly, **do not page through results to count

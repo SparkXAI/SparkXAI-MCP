@@ -5,14 +5,15 @@ description: >-
   `batch_update_ads` - campaign daily budget / state / bidding strategy, keyword and target
   status and bids, promoted products (product ads), negative keywords and negative product
   targets, campaign portfolio membership, campaign name and end date, portfolio budgets/dates,
-  and ad group state, name and default bid. 29
-  entity+action routes; 13 of them can run a two-phase platform confirmation. Use when the user wants to change / pause / enable / archive / raise / lower
+  and ad group state, name and default bid, plus adding keywords or negative keywords from a
+  keyword list. 31
+  entity+action routes; 15 of them can run a two-phase platform confirmation. Use when the user wants to change / pause / enable / archive / raise / lower
   / add / copy something on the ads themselves - 改预算 / 暂停广告 / 调价 / 加词 / 加否定词 /
   投放商品 / 复制否定词. Not for AI managed groups (托管组) - creating, editing or deleting
   those uses sparkx-create-ai-group / sparkx-edit-ai-group / sparkx-delete-ai-group. Not for
   reading data (use sparkx-query-ads-performance / sparkx-query-entity-metadata).
 metadata:
-  version: 1.2.0
+  version: 1.3.0
 ---
 
 # Edit Ads
@@ -22,11 +23,41 @@ Use the exact camelCase `budget.type` and `bid.type` values from the tool schema
 (for example, `setTo` or `increasePercent`), without spaces. Percent modes use
 `amount: 10` for 10%, not `0.1`. Legacy space-separated inputs are accepted for
 compatibility; use camelCase when constructing new requests.
-`entity` + `action` select one of **29 registered routes**; an unregistered pair is refused.
+`entity` + `action` select one of **31 registered routes**; an unregistered pair is refused.
 
 Read [`references/platform-notes.md`](references/platform-notes.md) once first - scope,
 the response envelope, the full `errorType` list, rate limits, and how to tell
 "it failed" from **"we do not know whether it applied"**.
+
+## Adding words from a keyword list
+
+Two routes copy a keyword list onto live ads: `keyword` + `createFromKeywordList` and
+`negativeKeyword` + `createFromKeywordList`. `request.fromKeywordList` is **required by these
+two and rejected by every other action** - a stray `fromKeywordList` fails the call rather than
+being ignored.
+
+| | `keyword` | `negativeKeyword` |
+|---|---|---|
+| Targets | `request.data[{adGroupId, profileId, campaignType}]`, SP / SB **manual keyword-targeting** ad groups | `request.target[{id, profileId, campaignType}]` with `businessType` = `campaign` (**SP campaigns only**) or `adgroup` (SP / SB) |
+| `fromKeywordList` | `{keywordListIds, matchTypes, bid, state}` | `{keywordListIds, matchTypes}` |
+
+- **It copies once.** Later edits to the keyword list do **not** flow through to what was
+  created - these are ordinary keywords afterwards, not a live link. Say so when a user expects
+  the ads to follow the list.
+- **It adds; it never replaces.** Existing keywords on the target are untouched.
+- 1-10 lists, **exactly one profile, at most 200 targets**, at most 2,000 keywords in batches
+  of 200. **Each keyword x matchType x target is one write** - two match types over a 300-word
+  list on 3 ad groups is 1,800 writes. Estimate before calling.
+- Keywords are trimmed and de-duplicated case-insensitively; those **over 80 characters or
+  containing `/` are silently skipped** - report how many were skipped, do not call it done.
+- **Both routes always require the two-phase confirmation**, and Phase 2 is **rejected if the
+  keyword lists changed between preview and confirm** - re-preview rather than retrying.
+- **Batches are not atomic.** A failed batch does not stop the others and successful batches
+  are not rolled back, so a partial result is normal: report what landed and what did not.
+- Negative keywords **suppress matching traffic immediately**. Confirm the list contents with
+  the user before applying one to a campaign.
+
+Manage the lists themselves with the `sparkx-manage-keyword-list` skill.
 
 ## These writes touch live spend
 

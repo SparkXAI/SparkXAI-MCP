@@ -14,11 +14,13 @@ see `sparkx-query-entity-metadata`).
 **Template-based creation is supported**: pass `templateId` (>0) and the template's config
 becomes the baseline, with any field you send explicitly overriding it. Read templates first
 with `get_ai_group_template`; for a system preset also pass `isSystemTemplate=1`. Archived
-templates (`status=2`) are rejected. **The one exception to "AI mode only"**: if you don't
-pass `aiAutomation`, the template's automation rules are carried over as-is, including
-Rule-mode rules (`status=1`) with their condition/action - tell the user in the preview.
-One hard restriction: a template whose rule 4 (Target Harvest) or rule 5 (Negative Target) is in
-Rule mode (`status=1`) is rejected - those two action spaces are AI-only here. See the main SKILL.md section "Creating
+templates (`status=2`) are rejected. **The one exception to "AI mode only"**: the template's
+automation rules are carried over as-is, including Rule-mode rules (`status=1`) with their
+condition/action, for every ruleType your `aiAutomation` does not name - tell the user in the
+preview.
+One hard restriction: a template whose rule 4 (Target Harvest)
+or rule 5 (Negative Target) is bound to specific campaigns / ad groups (`isSelf=2` with `status=1`)
+is rejected unless `aiAutomation` sets that rule to `0`. See the main SKILL.md section "Creating
 from a template", and [`template-guide.md`](template-guide.md) for recommending one by
 campaign purpose.
 

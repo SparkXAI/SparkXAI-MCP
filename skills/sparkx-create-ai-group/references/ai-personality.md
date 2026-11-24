@@ -68,9 +68,12 @@ to. The node column only tells you which switch they modify.
 | `negativeTargetAiPersonality` | `targetOptimization` | supported |
 | `targetPausedAddAiPersonality` | `targetOptimization` | **not supported** |
 
-**Value: an integer `1`-`5`** (`1` = conservative, `2` = moderately conservative, `3` = balanced,
-`4` = moderately aggressive, `5` = aggressive - the labels the read side returns; the tool
-description's "very conservative … very aggressive" wording is wrong, same scale either way).
+**Value: an integer `1`-`5`.** ⚠️ **Action-space intensity and group-level `aiPersonality` use two
+different label sets** - same numbers, different words. These 12 fields use the
+**intensity** set: `1` = very conservative / 非常保守, `2` = conservative / 保守, `3` = balanced /
+平衡, `4` = aggressive / 激进, `5` = very aggressive / 非常激进. The group-level `aiPersonality`
+reads back one notch milder at both ends (`1` = conservative / 保守 … `5` = aggressive / 激进) -
+see `field-reference.md`. Never carry a label from one to the other.
 **`null` is
 rejected** (`invalid_params`), and **clearing a single action space is not supported at all** -
 to leave one alone, omit the field. Anything else is rejected too, and the error lists **every**
@@ -210,10 +213,11 @@ schedule's `aiPersonality`** rather than keeping its previous value - the opposi
 group's edit semantics. Send the full set you want on that schedule, or read it back first and
 re-send what should stay.
 
-**4. Some nodes are stripped.** `brandOptimization` and the word-list fields of
-`targetOptimization` are not configurable here and are dropped if sent - **except** the
-`targetOptimization` personality fields and its three action switches (`targetHarvestStatus`,
-`negativeTargetStatus`, `targetPausedAddStatus`), which are kept.
+**4. Some nodes are stripped.** `brandOptimization` is not configurable on schedules and is
+dropped if sent. In `targetOptimization`, the personality fields, the three action switches
+(`targetHarvestStatus`, `negativeTargetStatus`, `targetPausedAddStatus`) and the six exclusion
+keyword list fields (`*BlackListStatus`, `*BlackList`, `*MatchType` for target harvest and
+negative target) are kept; any other field is dropped.
 
 ## Asking the platform what to set: `get_sp_sb_ai_personality_recommendation`
 

@@ -1,6 +1,6 @@
 # Enum i18n Reference — `get_operation_log`
 
-Display labels for enum values in operation log fields. Present the translated `operationType` returned by the tool verbatim. Use the original API codes from `field-reference.md` for request filters; display labels are not filter values.
+Display labels for enum values in operation log fields. Each row returns the raw `operationType` and its display label `operationTypeText`; present `operationTypeText` verbatim. Use the original API codes from `field-reference.md` for request filters; display labels are not filter values.
 
 ### changeBy (changedBy)
 

@@ -46,6 +46,8 @@ that points at the field you thought you sent.
 | 27 | `adGroup` + `updateBid` | `request.data` | **SP / SD only**, one campaignType per batch | always |
 | 28 | `campaign` + `updateName` | `request.data` | SP / SB / SD, one campaignType per batch | - |
 | 29 | `campaign` + `updateDates` | `request.data` | SP / SB / SD, one campaignType per batch | - |
+| 30 | `keyword` + `createFromKeywordList` | `request.data` + `request.fromKeywordList` | **SP / SB manual keyword ad groups** | always |
+| 31 | `negativeKeyword` + `createFromKeywordList` | `request.target` + `request.fromKeywordList` | `businessType=campaign` **SP only**; `adgroup` SP / SB | always |
 
 `request.profileIds` is required on **every** route.
 

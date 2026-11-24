@@ -9,7 +9,7 @@ description: >-
   or "get my ads ready for Black Friday". Use sparkx-promo-monitor during the event and
   sparkx-promo-reset afterwards; use the edit skills for ordinary changes unrelated to a promo.
 metadata:
-  version: 1.0.0
+  version: 1.0.1
 ---
 
 # Promo Prep (大促前准备)

@@ -58,8 +58,8 @@ letting the error teach you.
 > Create mode is **AI mode only** for your `aiAutomation` parameter (a `1` is rejected). So
 > at create time, only enable capabilities that support **AI** for the group's ad type.
 > Rule-only or unsupported ones don't belong in a create call. The one exception is SP/SB
-> template create without `aiAutomation`: the template's rules, Rule mode included, are
-> carried over as-is.
+> template create: the template's own rules, Rule mode included, are carried over as-is for
+> every ruleType your `aiAutomation` does not name.
 
 ## Platform support != what the write tool exposes
 
@@ -76,13 +76,12 @@ the edit Skill). Although the SD create schema still contains `budgetDynamicStat
 fields here. The SD tools do **not** expose
 the full `aiActionSettings`/`aiAutomation` action space (bid daypart / placement /
 struct pause / etc.). Those fields exist **only on the SP/SB tool**
-(`save_sp_sb_ai_managed_group`). **Exception - the SP/SB word-list settings are not writable via MCP:** on
+(`save_sp_sb_ai_managed_group`). **The SP/SB word-list settings are writable** (they were not before): on
 `save_sp_sb_ai_managed_group` the word-list fields of `targetOptimization` (harvest / negative
-blacklists, list and match types) and the whole `brandOptimization` module (branded / competitor)
-are removed from the write path - the SP/SB tool hard-rejects them; create defaults them closed and
-they are managed in the platform UI (read-only via MCP). **The three action switches
-`targetHarvestStatus`, `negativeTargetStatus` and `targetPausedAddStatus` (SP only) are writable**;
-rules 4 and 5 are AI mode only. **This does not affect SD:** the SD tools' own `targetHarvestStatus`
+blacklists, match types) and the whole `brandOptimization` module (branded / competitor) take
+`keywordListId` references from `get_keyword_list`; create defaults them closed. **The three action
+switches `targetHarvestStatus`, `negativeTargetStatus` and `targetPausedAddStatus` (SP only) are
+writable too**, and rules 4 and 5 now follow the same mode rules as every other action space. **This does not affect SD:** the SD tools' own `targetHarvestStatus`
 (`0`/`1`/`2`) remains writable.
 
 **SD supports only two of these action spaces** - `预算重新分配` (budgetRedistribute)
@@ -99,7 +98,7 @@ space exposed by MCP. Example: Help Center lists **Placement Rules / 广告位�
 SP/SB automation, while managed-group **广告位调价** remains SP-only here and SB templates
 must be filtered out when pairing a rule with this action space.
 
-**Per-ad-type support - UI/platform level, NOT MCP write support** (for SP/SB the word-list details of 添加否定定向 / 定向收割 and branded / competitor are read-only via MCP per the exception above, while the 添加否定定向 / 定向收割 / 定向暂停 on/off switches are writable; SD's 定向收割 `targetHarvestStatus` and 预算重新分配 are writable):
+**Per-ad-type support - UI/platform level, not a statement about MCP write support** (on SP/SB both the on/off switches and the word-list references of 添加否定定向 / 定向收割 and branded / competitor are writable, see above; SD's 定向收割 `targetHarvestStatus` and 预算重新分配 are writable):
 - **SP - all 12 (AI):** every row below.
 - **SB - 7:** 分时调价 *(Rule only)*, 按表现调价, 分时预算, 按表现调预算, 预算重新分配,
   添加否定定向, 定向收割.

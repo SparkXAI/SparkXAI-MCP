@@ -56,9 +56,11 @@ no-ops, and the error arrives *instead of* any part of your write being applied:
   rejected; those are inherited from the parent group.
 - **An SP/SB template whose harvest/negative rules are bound to specific campaigns/ad
   groups** (`isSelf=2` with `status=1`) -> rejected, because this tool can't carry those
-  bindings: always on template create; on template edit only when `aiAutomation` is not
-  passed (with `aiAutomation` the template's rules are ignored - confirm that change with
-  the user first).
+  bindings: on template create and template edit, unless you pass that rule as `0` in
+  `aiAutomation`, which skips it and leaves the template's other rules in place - confirm
+  that change with the user first.
+- **An explicit non-zero `status` on a rule in a schedule's `aiAutomation`** -> rejected before
+  the write; schedules can only set AI mode (a missing / `null` status is not rejected).
 - **A group whose `campaignType` can't be determined on delete** -> rejected rather than
   guessed.
 

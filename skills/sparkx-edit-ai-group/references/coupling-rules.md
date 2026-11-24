@@ -144,10 +144,28 @@ faster when ACOS is badly off target. Field: `bidPerformanceStrictAcosStatus` (`
 
 ## Target switches and word-list fields
 
-**Word-list settings are not supported.** That covers branded, non-branded, competitor,
-negative-target blacklist, and target-harvest blacklist settings. **Do not send their status, list
-ID, match-type, or list-type fields for SP, SB, or SD**, even if the routed schema exposes them.
-Tell the user to configure word lists in the platform.
+**Word-list settings are now writable** (they were not before - any guidance saying "configure
+word lists in the platform" is out of date). You reference an existing keyword list by its
+`keywordListId`; you never type keywords here. Get the IDs from `get_keyword_list`, and create or
+edit the lists themselves with the `manage-keyword-list` skill.
+
+| Field | Node | Values |
+|---|---|---|
+| `brandedStatus` / `brandedList` / `brandedMatchType` | `brandOptimization` | `0`/`1`; 1-10 IDs; `1`=exact `2`=phrase |
+| `competitorStatus` / `competitorList` / `competitorMatchType` | `brandOptimization` | same; **`competitorStatus=1` requires `brandedStatus=1`** |
+| `targetHarvestBlackListStatus` / `targetHarvestBlackList` / `targetHarvestMatchType` | `targetOptimization` | keywords that are never harvested |
+| `negativeTargetBlackListStatus` / `negativeTargetBlackList` / `negativeTargetMatchType` | `targetOptimization` | keywords that are never negated |
+
+Four rules the server enforces:
+
+- **A list replaces the current one**, it is not merged. `[]` empties it and requires turning the
+  matching switch off in the same request. Read the group first and resend the IDs you want kept.
+- **Turning a switch to `1` requires its `MatchType` in the same request** - omitting it fails with
+  `aiActionSettings.<x>MatchType is required when <x>Status=1`.
+- **1-10 list IDs**, each non-rule-based and linked to this `profileId`. Rule-based lists are not
+  accepted here.
+- The UI calls the match types **等于 / 包含** in this context (`1`/`2`), while targeting and harvest
+  call the same codes **精确 / 词组**. Same codes, different wording per screen.
 
 **Three target action switches are supported** (SP/SB, inside `aiActionSettings`):
 
@@ -162,13 +180,21 @@ Tell the user to configure word lists in the platform.
   doesn't set falls to the downstream default, which is **on** (send an explicit `0` to keep it
   off); on edit it is unchanged. ⚠️ **`targetPausedAddStatus` is the exception: it is SP-only.** On an SB group the server forces it to `0` on every create and edit path, so it never lands on - do not tell an SB customer that all three switches came on. Sending only
   these switches does not replace the default / template action-space config.
-- **Target Harvest (rule 4) and Negative Target (rule 5) support AI mode only**, because word lists
-  can't be configured here. (1) A template whose rule 4 or 5 is in Rule mode (`status=1`) is rejected
-  on create and on edit. (2) On edit, turning `targetHarvestStatus` / `negativeTargetStatus` from off
-  to on is rejected while that rule is in Rule mode on the group; set it to `0` in the same request
-  (`aiAutomation.targetHarvestRuleStatus` / `negativeTargetRuleStatus`), or use the platform.
-  (3) Batch `NEGATIVE_TARGET` is rejected. Switches that are already on, and the other action
-  spaces, are not checked.
+- **Target Harvest (rule 4) and Negative Target (rule 5) follow the same mode rules as every
+  other action space** - the old "these two are AI mode only" restriction is gone. Turning
+  `targetHarvestStatus` / `negativeTargetStatus` on **resumes the group's existing mode**: if that
+  rule is `status=1` on the group it comes back in **Rule** mode with its old conditions. Tell the
+  user, and set `aiAutomation.targetHarvestRuleStatus` / `negativeTargetRuleStatus` to `0` in the
+  same request if they want AI.
+- **One template case is still rejected:** a template whose rule 4 / 5 is bound to **specific
+  campaigns or ad groups** (`isSelf=2` with `status=1`), on template create and template edit.
+  The tool cannot carry those bindings - the template
+  is shared tenant-wide and its campaigns may be outside the authorized shops, and the downstream
+  does not check the bindings on save. The check runs on the **merged** rules (template rules
+  overridden rule by rule by the `aiAutomation` you pass), so there are three ways out: apply the
+  template in the platform, pick a template whose rules 4 / 5 apply to the current campaign, or
+  pass that one rule as `0` (`targetHarvestRuleStatus` / `negativeTargetRuleStatus`) - which skips
+  it while **the template's other rules still apply**. Get the user's choice first.
 
 ## Disabling an action space doesn't clear its follow-up fields
 
