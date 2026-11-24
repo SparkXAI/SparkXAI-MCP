@@ -109,6 +109,8 @@ MCP 的 Tool 决定 AI"能拿到什么数据"，Skill 决定 AI"把数据用得�
 | [sparkx-delete-ai-group](skills/sparkx-delete-ai-group/) | `delete_ai_managed_group` | 删除托管组，并释放或迁移其中的 Campaign |
 | [sparkx-edit-ads](skills/sparkx-edit-ads/) | `batch_update_ads` | 编辑线上 Campaign 设置、关键词和 Target 竞价/状态、推广商品及否定投放；受保护操作需要明确的两阶段确认 |
 | [sparkx-create-campaign](skills/sparkx-create-campaign/) | `create_sp_sb_campaign` / `create_sd_campaign` / `create_sp_ad_group` / `create_sb_ad_group` / `create_sd_ad_group` / `create_portfolio` | 创建 SP、SB 或 SD Campaign，包括广告组、推广商品、自动/关键词/商品投放、否定投放、广告位和可选 AMC 受众设置；向已有任意类型 Campaign 新增广告组；创建广告组合 |
+| [sparkx-query-market-data](skills/sparkx-query-market-data/) | `get_market_search_perf` / `get_peer_benchmark` | 查询账户之外的市场与同行数据：SQP / ABA 搜索词需求、我方份额、ABA Top3，以及品牌同行基准（P25 / P50 / P75）。需要 `sqp:read` 和 `benchmark:read` 两项权限 |
+| [sparkx-manage-keyword-list](skills/sparkx-manage-keyword-list/) | `get_keyword_list` / `create_keyword_list` / `update_keyword_list` / `delete_keyword_list` | 词库的增删改查，Campaign、广告组和托管组按 id 引用 |
 
 **可选（6 个）**——进阶分析与运营场景，装完必装 Skills 后按需添加：
 
@@ -119,6 +121,9 @@ MCP 的 Tool 决定 AI"能拿到什么数据"，Skill 决定 AI"把数据用得�
 | [sparkx-ads-structure-analysis](skills/sparkx-ads-structure-analysis/) | 广告结构分析：按广告类型 / 站点 / 组合 / 工作日 / 小时及 Campaign 体量分层等维度定位结构错配 |
 | [sparkx-product-diagnosis](skills/sparkx-product-diagnosis/) | 商品诊断：ASIN 健康度分层、变体对比、去留优化建议 |
 | [sparkx-search-term-diagnosis](skills/sparkx-search-term-diagnosis/) | 搜索词诊断：按固定规则分类搜索词，并结合店铺门槛输出花费分布、否词候选、扶正候选和精准词碎片 |
+| [sparkx-asin-deep-dive](skills/sparkx-asin-deep-dive/) | ASIN 深度诊断：针对单个 ASIN 或父 ASIN，看流量从哪来、有多集中，广告怎么搭的，哪个变体该拿预算，库存会不会拖停投放，以及 ACOS 被什么机制推高——每个数字都标明支撑它的证据级别 |
+| [sparkx-category-scorecard](skills/sparkx-category-scorecard/) | 类目记分卡：把每个类目和市场、同类品牌比一遍，给出类目打法、来自同行的目标区间，以及在你确认的预算范围内的预算计划 |
+| [sparkx-sqp-insight](skills/sparkx-sqp-insight/) | SQP 洞察：诊断在市场里赢了多少、订单在哪一步流失，并把大盘变动和本店变动分开；计划模式针对单个类目产出增长或提效计划 |
 | [sparkx-promo-prep](skills/sparkx-promo-prep/) | 大促前准备：检查库存、预算与投放阻塞，按大促预算制定方案，为不同角色的托管组设置匹配排期，并在确认后调整预算、竞价和广告位 |
 | [sparkx-promo-monitor](skills/sparkx-promo-monitor/) | 大促中盯盘：对比小时投放节奏，识别预算、效率和库存风险，给出小步调整建议并在确认后执行 |
 | [sparkx-promo-reset](skills/sparkx-promo-reset/) | 大促调整复位：找回大促期间的人为修改与大促前配置，可全部复位或按大促后表现分阶段回落，并在执行前预览、执行后回读 |
