@@ -131,15 +131,23 @@ def main(argv=None):
     fd = lambda d: d.strftime("%b ") + str(d.day)
     min_oob_min = a.min_oob_hours * 60 * a.window_days
 
-    tot14 = a.total_spend_14d or sum(fnum(g(c, "Spend")) or 0 for c in camps)
+    # Two different totals, which must not share a variable:
+    #   win_spend  - ad spend over the --campaigns window (--spend-days). Base for the +x% budget
+    #                and for the --min-lower-share size gate.
+    #   acct_14d   - the account's ad spend over 14 days, the denominator TACOS needs.
+    # They coincide only when the campaigns pull is itself 14 days.
+    win_spend = a.total_spend_14d or sum(fnum(g(c, "Spend")) or 0 for c in camps)
+    acct_14d = a.ad_spend_all_14d
+    if acct_14d is None and a.spend_days == 14:
+        acct_14d = win_spend
     pct = 0.0 if a.budget.strip().lower() == "same" else float(a.budget.replace("%", "")) / 100
     # Weekly figures come from the SPEND window, which is --spend-days and not always 14.
     # Dividing by 2 silently assumed 14 and halved every weekly number on a 7-day pull.
     per_week = lambda v: (v or 0) * 7.0 / a.spend_days
-    extra_allowed = per_week(pct * tot14)  # a week
+    extra_allowed = per_week(pct * win_spend)  # a week
     # C3: the smaller of the absolute floor and a share of the window's spend, so the gate scales
     # with the account. 0 on either side turns that side off; both 0 means no size gate at all.
-    _gates = [x for x in (a.min_lower_spend, a.min_lower_share * tot14) if x > 0]
+    _gates = [x for x in (a.min_lower_spend, a.min_lower_share * win_spend) if x > 0]
     min_lower = min(_gates) if _gates else 0.0
 
     raises, lowers, flags, kept_sb, ai_managed, not_checked, held = [], [], [], [], [], [], []
@@ -265,8 +273,14 @@ def main(argv=None):
     ready_lowers = [r for r in lowers if not r["hold"]]
 
     tacos = None
-    if a.total_sales_14d:
-        spend_all = (a.ad_spend_all_14d or tot14) + a.dsp_spend_14d
+    tacos_skipped = None
+    if a.total_sales_14d and acct_14d is None:
+        # A non-14-day campaigns window with no 14-day account figure: any TACOS here would divide
+        # a shorter window of spend by 14 days of sales. Say why instead of printing a wrong number.
+        tacos_skipped = (f"TACOS not shown: --campaigns covers {a.spend_days:g} days, and no 14-day "
+                         "account ad spend was given. Pass --ad-spend-all-14d to get it.")
+    if a.total_sales_14d and acct_14d is not None:
+        spend_all = acct_14d + a.dsp_spend_14d
         tacos = {"now": round(spend_all / a.total_sales_14d * 100, 2), "goal": a.tacos_goal, "dsp_included": a.dsp_spend_14d > 0}
         if a.tacos_goal:
             ex = sum(r["extra_per_week"] for r in ready_raises) or 1
@@ -292,7 +306,7 @@ def main(argv=None):
     if tacos and a.tacos_goal:
         placed = [r for r in ready_raises if r["fits_budget"]]
         cut_sales = sum(r["sales_at_risk_per_week"] for r in ready_lowers)
-        base_spend = (a.ad_spend_all_14d or tot14) + a.dsp_spend_14d
+        base_spend = acct_14d + a.dsp_spend_14d
         proj = lambda ex, sl: (base_spend + (ex - savings) * 2) / (a.total_sales_14d + (sl - cut_sales) * 2) * 100
         after = proj(used, sum(r["sales_per_week"] for r in placed))
         cuts_only = proj(0, 0)
@@ -322,7 +336,7 @@ def main(argv=None):
         add = (used - savings) * 2
         add_sales = (sum(r["sales_per_week"] for r in ready_raises if r["fits_budget"])
                      - sum(r["sales_at_risk_per_week"] for r in ready_lowers)) * 2
-        tacos["after"] = round(((a.ad_spend_all_14d or tot14) + a.dsp_spend_14d + add)
+        tacos["after"] = round((acct_14d + a.dsp_spend_14d + add)
                                / (a.total_sales_14d + add_sales) * 100, 2)
     plan = {"acos_goal": G, "budget_mode": a.budget, "window_days": a.window_days,
             "spend_days": a.spend_days,
@@ -337,7 +351,8 @@ def main(argv=None):
             "flag_campaigns": len(flags), "sb_kept_banner": len(kept_sb), "ai_managed_campaigns": len(ai_managed),
             "too_small_campaigns": len(too_small), "too_small_spend": round(sum(r["spend_14d"] for r in too_small)),
             "min_lower_used": round(min_lower), "min_lower_share": a.min_lower_share,
-            "total_spend_window": round(tot14),
+            "total_spend_window": round(win_spend),
+            "account_spend_14d": round(acct_14d) if acct_14d is not None else None,
             "ai_managed_spend": round(sum(r["spend_14d"] for r in ai_managed)),
             "total_campaigns": len(camps),
             "candidate_campaigns": len(camps) - len(ai_managed) - len(not_checked),
@@ -348,6 +363,8 @@ def main(argv=None):
     plan["under_floor"] = sum(1 for e in ents.values() if fnum(e.get("dailyBudget")) and fnum(e.get("dailyBudget")) < a.budget_floor)
     if tacos:
         plan["tacos"] = tacos
+    if tacos_skipped:
+        plan["tacos_skipped"] = tacos_skipped
     if ev:
         plan["event"] = {"name": ev["name"], "start": ev["start"].isoformat(), "end": ev["end"].isoformat(),
                          "plan_only": ev["plan_only"], "in_progress": ev["in_progress"], "moves_from": fd(ev["reset"])}

@@ -50,6 +50,7 @@ L = {
   "tm_plan_only_before": "plan only; before {start} via sparkx-promo-prep",
   "goal_Both (listing first)": "Both (listing first)", "goal_Grow": "Grow", "goal_Improve efficiency": "Improve efficiency", "do_first": "Do this first", "opportunity": "Opportunity", "challenge": "Challenge",
   "money": "Where the money goes (budget {mode}, ACOS goal {goal:g}%)",
+  "tacos_skipped": "TACOS is not shown: the campaigns window is {days:g} days and no 14-day account ad spend was given, so the two sides would not be on the same footing. Pass --ad-spend-all-14d to get it.",
   "plan_only": "**{name} ({start} to {end}): plan only.** No budget lowering and no writes from this skill until {from_}; promotion budgets go to {skill}.",
   "tacos": "**TACOS check:** (ad spend{dsp}) / all store sales = {now}% now, about {after}% after the ready moves{goal}{nodsp}.",
   "tacos_goal": " (goal {goal:g}%", "tacos_capped": "; extra capped at {v} a week)", "tacos_plain": ")",
@@ -135,6 +136,7 @@ L = {
   "tm_plan_only_before": "只出计划；{start} 之前交给 sparkx-promo-prep",
   "goal_Both (listing first)": "两者兼顾（先做 listing）", "goal_Grow": "增长", "goal_Improve efficiency": "提效", "do_first": "先做这三件事", "opportunity": "机会", "challenge": "挑战",
   "money": "钱该怎么走（预算 {mode}，ACOS 目标 {goal:g}%）",
+  "tacos_skipped": "不输出 TACOS：活动花费窗口是 {days:g} 天，而没有给出 14 天的账户广告花费，两边口径对不上。需要的话传 --ad-spend-all-14d。",
   "plan_only": "**{name}（{start} 至 {end}）：只出计划。** {from_} 之前本 Skill 不降预算、不写入；大促预算归 {skill}。",
   "tacos": "**TACOS 检查：**（广告花费{dsp}）/ 店铺总销售额 = 当前 {now}%，执行可确认的动作后约 {after}%{goal}{nodsp}。",
   "tacos_goal": "（目标 {goal:g}%", "tacos_capped": "；每周增量上限 {v}）", "tacos_plain": "）",
@@ -220,6 +222,7 @@ L = {
   "tm_plan_only_before": "計画のみ。{start} までは sparkx-promo-prep へ",
   "goal_Both (listing first)": "両立（商品ページを優先）", "goal_Grow": "拡大", "goal_Improve efficiency": "効率改善", "do_first": "まず着手する3件", "opportunity": "機会", "challenge": "課題",
   "money": "予算の配分先（予算 {mode}、ACOS目標 {goal:g}%）",
+  "tacos_skipped": "TACOSは表示しません：キャンペーンの集計期間が {days:g} 日で、14日間のアカウント広告費が渡されていないため、基準が揃いません。必要な場合は --ad-spend-all-14d を指定してください。",
   "plan_only": "**{name}（{start}～{end}）：計画のみ。** {from_} まで本Skillは予算の引き下げも書き込みも行いません。セール期間の予算は {skill} が担当します。",
   "tacos": "**TACOSチェック：**（広告費{dsp}）/ ストア総売上 = 現在 {now}%、実行可能な変更後は約 {after}%{goal}{nodsp}。",
   "tacos_goal": "（目標 {goal:g}%", "tacos_capped": "、週あたり増額上限 {v}）", "tacos_plain": "）",
@@ -421,6 +424,8 @@ def money_plan_md(br):
     if ev.get("plan_only"):
         md.append(T["plan_only"].format(name=ev["name"], start=ev["start"], end=ev["end"], from_=ev["moves_from"],
                                         skill="sparkx-promo-monitor" if ev["in_progress"] else "sparkx-promo-prep") + NL)
+    if p.get("tacos_skipped"):
+        md.append(T["tacos_skipped"].format(days=SD) + NL)
     if p.get("tacos"):
         t = p["tacos"]
         goal = ""
