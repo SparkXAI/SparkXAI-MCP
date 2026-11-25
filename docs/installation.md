@@ -287,6 +287,8 @@ Skills 在本仓库 [`skills/`](../skills/) 目录，分两类：
 
 > **致 AI Agent：** 安装或更新前，读取 [`skills/manifest.json`](../skills/manifest.json)，并与本地同名 Skill 的 `SKILL.md` `metadata.version` 比较。本地版本更低时，列出需要更新的 Skill 并提醒用户；正常查询期间不要重复检查。
 
+从仓库检出或 ZIP 安装时，**递归复制整个 Skill 目录**，不要只下载 `SKILL.md`。安装后对照源目录验证所有文件，包括 `references/` 和确实随该 Skill 发布的 `scripts/`。新版无脚本的这两个 Skill 必须分别包含 `sparkx-sqp-insight/references/data-sources.md` 和 `sparkx-category-scorecard/references/data-contract.md`。升级时整目录替换，不把旧脚本或说明留在生效目录；缺文件就报安装不完整并重新安装。MCP 连通不代表 Skill 已装完整。
+
 **必装（8 个）**——覆盖基础查询、托管组管理、SP Campaign 创建和广告实体编辑：
 
 - `sparkx-query-ads-performance` — 广告效果查询

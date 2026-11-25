@@ -8,8 +8,8 @@ description: >-
   One authorized store per call. This skill evaluates supplied terms; it cannot discover
   unnamed market terms. For the store's own ad metrics use sparkx-query-ads-performance;
   for campaign settings use sparkx-query-entity-metadata.
-  For an SQP audit, market-change explanation or one-category plan use sparkx-sqp-insight;
-  for a cross-category budget scorecard use sparkx-category-scorecard.
+  For targeted SQP diagnosis use sparkx-sqp-insight;
+  for performance and peer ranges in a specified category use sparkx-category-scorecard.
 metadata:
   version: 1.0.1
 ---

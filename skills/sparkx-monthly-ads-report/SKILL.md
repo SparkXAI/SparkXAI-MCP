@@ -7,8 +7,8 @@ description: >-
   performance (Top keywords; search-term negatives / harvesting go to sparkx-search-term-diagnosis),
   an issues list with attribution, and next-month structural recommendations. Use when the user says "出个月报",
   "月度复盘", "这个月表现如何", "monthly report". Not for weekly recaps (use sparkx-weekly-ads-report) or
-  quarterly/QBR-level strategic review (use quarterly-ads-report, not yet built), or splitting
-  next month's budget by category against the market and peers (use sparkx-category-scorecard).
+  quarterly/QBR-level strategic review (use quarterly-ads-report, not yet built).
+  For a specified category's performance and peer comparison use sparkx-category-scorecard.
 metadata:
   version: 1.2.4
 ---

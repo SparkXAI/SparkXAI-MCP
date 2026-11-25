@@ -10,7 +10,7 @@ description: >-
   "search term analysis", "negative keyword candidates", "harvest keywords". Not for
   trend recaps (sparkx-weekly-ads-report / sparkx-monthly-ads-report), campaign-type /
   marketplace structure (sparkx-ads-structure-analysis) or ASIN health
-  (sparkx-product-diagnosis). For market-level SQP diagnosis or plans use sparkx-sqp-insight.
+  (sparkx-product-diagnosis). For targeted market-level SQP diagnosis use sparkx-sqp-insight.
 metadata:
   version: 1.1.0
 ---

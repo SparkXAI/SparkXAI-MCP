@@ -150,21 +150,21 @@
     },
     {
       "name": "sparkx-sqp-insight",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "required": false,
-      "mcp_tools": ["get_market_search_perf", "get_peer_benchmark", "get_ads_perf", "get_entity_metadata", "get_operation_log", "batch_update_ads", "create_sp_sb_campaign", "save_sp_sb_ai_managed_group", "edit_sd_ai_managed_group"],
-      "scopes": ["sqp:read", "benchmark:read", "amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read", "amazon_sa_campaign_edit:write", "amazon_sa_campaign_create:write", "amazon_sa_managed_group:write"],
+      "mcp_tools": ["get_market_search_perf", "get_ads_perf", "get_entity_metadata", "get_operation_log"],
+      "scopes": ["sqp:read", "amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read"],
       "path": "sparkx-sqp-insight",
-      "description": "Read Amazon SQP against the market in two modes. Diagnose (read-only): SQP audit, why store / category / brand sales or share dropped, KPI story for a client, fix-first, verify a change, branded vs generic searches, one-page HTML report. Plan (one category): sizes bid raises and cuts, new exact keywords, top of search, budgets and paused tests to the user's goal, budget and ACOS goal, plus listing / price tasks; writes only confirmed rows through the edit skills. Needs Python 3 (pandas for the audit calculation)."
+      "description": "Read-only SQP and weekly ABA diagnosis for selected terms or ASINs, with optional ad performance and change history as context. Uses MCP only; no execution plan."
     },
     {
       "name": "sparkx-category-scorecard",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "required": false,
-      "mcp_tools": ["get_market_search_perf", "get_peer_benchmark", "get_ads_perf", "get_entity_metadata", "get_operation_log"],
-      "scopes": ["sqp:read", "benchmark:read", "amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read"],
+      "mcp_tools": ["get_peer_benchmark", "get_ads_perf", "get_entity_metadata", "get_operation_log"],
+      "scopes": ["benchmark:read", "amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read"],
       "path": "sparkx-category-scorecard",
-      "description": "Check every category against the market (SQP conversion) and peers (brand benchmark): a play per category, fair peer goals as a P25-P75 range, and a campaign budget plan (raise / lower / not placed) sized to the confirmed budget with a TACOS check. Read-only; the change list goes to the edit-ads skill after confirmation. Needs Python 3."
+      "description": "Read-only performance and matched brand peer ranges for one specified category or confirmed ASIN scope. Uses MCP only; no whole-store scoring or budget allocation."
     },
     {
       "name": "sparkx-promo-prep",

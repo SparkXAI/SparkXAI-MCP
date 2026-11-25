@@ -80,6 +80,7 @@ SparkX AI MCP 支持 OAuth 和 MCP Token 两种授权方式。
 1. 添加 MCP Server（`https://mcp.sparkx.cn/mcp`，Streamable HTTP）。先检查客户端支持的授权方式，说明 OAuth 与 MCP Token 的适用场景，并让用户确认后再配置。若选择 OAuth，必须遵循 MCP Authorization 规范，在发送任何 OAuth 请求前校验 discovery 元数据、请求端点和全部必填字段，不得省略或猜测协议参数。
 2. 调用 `get_user_authorized_context` 验证，返回店铺列表即为成功。
 3. 读取 `skills/manifest.json`，将已安装 Skill 的本地 `SKILL.md` frontmatter 中的 `metadata.version` 与 manifest 中同名 Skill 的版本比较。本地版本较低时列出并提醒用户更新；版本相同、未安装或无法读取时不要误报。
+   安装或更新 Skill 时，递归复制并核对整个目录及其所有子文件。仅有版本匹配的 SKILL.md，不代表安装完整。
 4. 直接安装 8 个必装 Skills：3 个查询 Skills，以及 `sparkx-create-ai-group`、`sparkx-edit-ai-group`、`sparkx-delete-ai-group`、`sparkx-edit-ads`、`sparkx-create-campaign`，无需再次询问用户。
 5. 介绍 6 个可选 Skills（广告周报、广告月报、广告结构分析、商品诊断、搜索词诊断、大促调整复位），仅安装用户确认需要的项目。
 
@@ -122,8 +123,8 @@ MCP 的 Tool 决定 AI"能拿到什么数据"，Skill 决定 AI"把数据用得�
 | [sparkx-product-diagnosis](skills/sparkx-product-diagnosis/) | 商品诊断：ASIN 健康度分层、变体对比、去留优化建议 |
 | [sparkx-search-term-diagnosis](skills/sparkx-search-term-diagnosis/) | 搜索词诊断：按固定规则分类搜索词，并结合店铺门槛输出花费分布、否词候选、扶正候选和精准词碎片 |
 | [sparkx-asin-deep-dive](skills/sparkx-asin-deep-dive/) | ASIN 深度诊断：针对单个 ASIN 或父 ASIN，看流量从哪来、有多集中，广告怎么搭的，哪个变体该拿预算，库存会不会拖停投放，以及 ACOS 被什么机制推高——每个数字都标明支撑它的证据级别 |
-| [sparkx-category-scorecard](skills/sparkx-category-scorecard/) | 类目记分卡：把每个类目和市场、同类品牌比一遍，给出类目打法、来自同行的目标区间，以及在你确认的预算范围内的预算计划 |
-| [sparkx-sqp-insight](skills/sparkx-sqp-insight/) | SQP 洞察：诊断在市场里赢了多少、订单在哪一步流失，并把大盘变动和本店变动分开；计划模式针对单个类目产出增长或提效计划 |
+| [sparkx-category-scorecard](skills/sparkx-category-scorecard/) | 检查指定类目或已确认 ASIN 的广告表现与匹配的品牌同行区间；仅用 MCP，只读 |
+| [sparkx-sqp-insight](skills/sparkx-sqp-insight/) | 定向诊断搜索词或 ASIN 的 SQP、ABA 和市场差异；仅用 MCP，只读 |
 | [sparkx-promo-prep](skills/sparkx-promo-prep/) | 大促前准备：检查库存、预算与投放阻塞，按大促预算制定方案，为不同角色的托管组设置匹配排期，并在确认后调整预算、竞价和广告位 |
 | [sparkx-promo-monitor](skills/sparkx-promo-monitor/) | 大促中盯盘：对比小时投放节奏，识别预算、效率和库存风险，给出小步调整建议并在确认后执行 |
 | [sparkx-promo-reset](skills/sparkx-promo-reset/) | 大促调整复位：找回大促期间的人为修改与大促前配置，可全部复位或按大促后表现分阶段回落，并在执行前预览、执行后回读 |
