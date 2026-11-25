@@ -96,7 +96,12 @@ def main(argv=None):
                     help="a campaign is big enough to act on at this share of the window's total ad spend (default 1%%)")
     ap.add_argument("--stock", help="{asin or parent: days of stock}"); ap.add_argument("--campaign-asins", help="{campaign id: [asins]}")
     ap.add_argument("--daily", help="[{campaign.campaignId_, date, Spend}] 30 days")
-    ap.add_argument("--total-spend-14d", type=float, help="base for the +x%% budget (default: sum of --campaigns)")
+    ap.add_argument("--total-spend-window", type=float,
+                    help="total ad spend over the --campaigns window (--spend-days). Base for the +x%% budget "
+                         "and the --min-lower-share gate. Default: sum of --campaigns")
+    ap.add_argument("--total-spend-14d", type=float,
+                    help="the account's ad spend over 14 days. Only valid when --spend-days is 14, where it is "
+                         "also the window total; otherwise pass --total-spend-window and/or --ad-spend-all-14d")
     ap.add_argument("--total-sales-14d", type=float, help="all store sales, 14 days (TotalSalesAmount) - for TACOS")
     ap.add_argument("--ad-spend-all-14d", type=float); ap.add_argument("--dsp-spend-14d", type=float, default=0.0)
     ap.add_argument("--tacos-goal", type=float)
@@ -135,9 +140,21 @@ def main(argv=None):
     #   win_spend  - ad spend over the --campaigns window (--spend-days). Base for the +x% budget
     #                and for the --min-lower-share size gate.
     #   acct_14d   - the account's ad spend over 14 days, the denominator TACOS needs.
-    # They coincide only when the campaigns pull is itself 14 days.
-    win_spend = a.total_spend_14d or sum(fnum(g(c, "Spend")) or 0 for c in camps)
+    # They coincide only when the campaigns pull is itself 14 days. --total-spend-14d is a 14-day
+    # figure by name, so accepting it as the window total on a shorter window would silently
+    # inflate every weekly number: reject that combination instead of guessing.
+    if a.total_spend_14d is not None and a.spend_days != 14 and a.total_spend_window is None:
+        raise SystemExit(
+            f"--total-spend-14d is a 14-day total but --spend-days is {a.spend_days:g}. Pass "
+            "--total-spend-window for the window total (and --ad-spend-all-14d for TACOS).")
+    win_spend = a.total_spend_window
+    if win_spend is None and a.spend_days == 14:
+        win_spend = a.total_spend_14d
+    if win_spend is None:
+        win_spend = sum(fnum(g(c, "Spend")) or 0 for c in camps)
     acct_14d = a.ad_spend_all_14d
+    if acct_14d is None:
+        acct_14d = a.total_spend_14d          # 14-day by name, whatever the campaigns window is
     if acct_14d is None and a.spend_days == 14:
         acct_14d = win_spend
     pct = 0.0 if a.budget.strip().lower() == "same" else float(a.budget.replace("%", "")) / 100
@@ -274,6 +291,15 @@ def main(argv=None):
 
     tacos = None
     tacos_skipped = None
+    # A goal the run cannot verify must not leave raises marked ready. Keep the rows for preview,
+    # hold them, and say why - approving a raise against an unchecked TACOS goal is the risk here.
+    tacos_unverified = bool(a.tacos_goal) and (acct_14d is None or not a.total_sales_14d)
+    if tacos_unverified:
+        why = ("no 14-day account ad spend" if acct_14d is None else "no --total-sales-14d")
+        for r in raises:
+            r["hold"].append(f"TACOS goal {a.tacos_goal:g}% cannot be checked ({why}): "
+                             "held for preview, not ready to run")
+        ready_raises = [r for r in raises if not r["hold"]]
     if a.total_sales_14d and acct_14d is None:
         # A non-14-day campaigns window with no 14-day account figure: any TACOS here would divide
         # a shorter window of spend by 14 days of sales. Say why instead of printing a wrong number.
@@ -365,6 +391,10 @@ def main(argv=None):
         plan["tacos"] = tacos
     if tacos_skipped:
         plan["tacos_skipped"] = tacos_skipped
+    if tacos_unverified:
+        plan["tacos_unverified"] = (f"A TACOS goal of {a.tacos_goal:g}% was set but could not be checked, so every "
+                                    "raise is held for preview. Pass --ad-spend-all-14d and --total-sales-14d "
+                                    "to make them ready.")
     if ev:
         plan["event"] = {"name": ev["name"], "start": ev["start"].isoformat(), "end": ev["end"].isoformat(),
                          "plan_only": ev["plan_only"], "in_progress": ev["in_progress"], "moves_from": fd(ev["reset"])}

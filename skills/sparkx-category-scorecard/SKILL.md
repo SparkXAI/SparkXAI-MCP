@@ -119,11 +119,21 @@ python3 scripts/category_scorecard.py --peer peer_leaf.json --peer peer_parents.
   --ad-type-share camp14.json --acos-goal 25 --event "<name>|<start>|<end>" --today <date> --out out/
 python3 scripts/budget_room.py --campaigns camp14.json --entities campaign_meta.json --ai-groups ai_groups.json \
   --recent-changes oplog.json --stock stock_days.json --campaign-asins campaign_asins.json \
-  --acos-goal 25 --budget "+10%" --window-days 14 \
-  [--daily daily30.json] [--total-sales-14d N --tacos-goal T] --event "<name>|<start>|<end>" --today <date> --out out/
+  --acos-goal 25 --budget "+10%" --window-days 14 --spend-days 14 \
+  [--daily daily30.json] [--ad-spend-all-14d N --total-sales-14d N --tacos-goal T] \
+  --event "<name>|<start>|<end>" --today <date> --out out/
 python3 scripts/render_scorecard.py --in out/category_scorecard.json --budget-room out/budget_room.json   --lang en|zh|ja \
   --summary summary.json --store "<store>" --period "<windows>" --out out/
 ```
+
+**Two windows, two flags.** `--window-days` is the budget-usage window; `--spend-days` is the window the
+`--campaigns` spend covers (14 by the data contract). Weekly figures and the `+x%` base come from `--spend-days`,
+so on any window other than 14 days override the base with `--total-spend-window` - `--total-spend-14d` is a
+14-day figure and is rejected there rather than silently inflating every weekly number. TACOS needs a 14-day
+account total: pass `--ad-spend-all-14d` whenever `--spend-days` is not 14, or TACOS is left out instead of being
+computed across mismatched windows. **A `--tacos-goal` that cannot be checked holds every raise** - the rows stay
+in `change_list.csv` for preview with `ready = no`, because a raise approved against an unchecked goal is the one
+mistake this plan must not make.
 
 Vendor or no SQP: skip `market_by_category.py` and run the scorecard without `--market` (`--account vendor` for Vendor
 profiles). Every category then says "no market data" and the play rests on peers and ACOS.
