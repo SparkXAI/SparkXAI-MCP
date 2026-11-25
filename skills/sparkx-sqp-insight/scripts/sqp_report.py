@@ -149,6 +149,9 @@ UI = {
   "aba_own_unverified": " - no own-ASIN list was passed, so none has been checked against your own catalogue",
   "aba_none": "No ABA in this pull. ABA is attached to weekly marketSearchQuery rows only; marketAsinQuery rows and aggregated rows never carry it.",
   "aba_cov": "ABA covers {r} of {t} weekly market rows ({q} searches, {w} weeks).",
+  "aba_gap": "ABA came back on {r} of {t} weekly market rows ({q} of {qt} searches). The rest have no ABA for those weeks: missing, not zero, and not low demand.",
+  "aba_not_requested": "No ABA in this run: no weekly marketSearchQuery rows were pulled, so there was nothing for ABA to attach to.",
+  "aba_empty": "The weekly marketSearchQuery call was made and returned no rows at all, so nothing can be said about demand here - empty is not zero. Check the weeks, the terms, and whether the tenant is onboarded for SQP / ABA.",
   "aba_band_t": "By ABA rank band", "aba_asin_t": "Most-clicked ASINs on these searches",
   "h_aba_asin": "ASIN", "h_aba_nq": "Searches", "h_aba_cs": "Top click share", "h_aba_own": "Yours?",
   "aba_own_yes": "yours", "aba_own_no": "not yours", "aba_own_unknown": "unverified",
@@ -165,6 +168,9 @@ UI = {
   "aba_own_unverified": "——本次没有传入自家 ASIN 清单，所以没有任何一个与自家商品做过比对",
   "aba_none": "本次取数没有 ABA。ABA 只挂在周粒度的 marketSearchQuery 行上；marketAsinQuery 行和按周合并的行都不带。",
   "aba_cov": "ABA 覆盖 {t} 行周度市场数据中的 {r} 行（{q} 个搜索词，{w} 周）。",
+  "aba_gap": "{t} 行周度市场数据里有 {r} 行带 ABA（{qt} 个搜索词里有 {q} 个）。其余的在那些周没有 ABA：是缺失，不是 0，也不等于需求低。",
+  "aba_not_requested": "本次没有 ABA：没有拉取周粒度的 marketSearchQuery 行，ABA 无处附着。",
+  "aba_empty": "周粒度 marketSearchQuery 已经发起，但一行都没返回，因此无法对这些搜索词的需求下任何结论——空不等于 0。需核对所查周次、词表，以及该租户是否已接入 SQP / ABA。",
   "aba_band_t": "按 ABA 排名区间", "aba_asin_t": "这些词上点击最多的 ASIN",
   "h_aba_asin": "ASIN", "h_aba_nq": "出现词数", "h_aba_cs": "最高点击份额", "h_aba_own": "是自家吗",
   "aba_own_yes": "自家", "aba_own_no": "非自家", "aba_own_unknown": "未核实",
@@ -261,6 +267,9 @@ UI = {
   "aba_own_unverified": "（自社ASINリストが渡されていないため、自社商品との照合は行われていません）",
   "aba_none": "今回の取得にABAはありません。ABAは週次のmarketSearchQuery行にのみ付与されます。",
   "aba_cov": "ABAは週次市場データ {t} 行のうち {r} 行（{q} クエリ、{w} 週）をカバー。",
+  "aba_gap": "週次市場データ {t} 行のうち {r} 行にABAが付与（{qt} クエリ中 {q} 件）。残りは当該週のABAなし：欠損であり0ではなく、需要が低いという意味でもありません。",
+  "aba_not_requested": "今回ABAはありません：週次のmarketSearchQuery行を取得していないため、ABAが付与される対象がありませんでした。",
+  "aba_empty": "週次marketSearchQueryは実行されましたが行が1件も返りませんでした。需要について何も言えません（空は0ではありません）。対象週・クエリ、テナントのSQP / ABA対応状況を確認してください。",
   "aba_band_t": "ABA順位帯別", "aba_asin_t": "これらのクエリで最もクリックされたASIN",
   "h_aba_asin": "ASIN", "h_aba_nq": "出現クエリ数", "h_aba_cs": "最高クリックシェア", "h_aba_own": "自社商品か",
   "aba_own_yes": "自社", "aba_own_no": "自社以外", "aba_own_unknown": "未確認",
@@ -913,9 +922,7 @@ def render_body(s, n, brand, lang, open_lang="en", ads=None, baseline=None, prod
                   pct_raw(b["purchase_share"])] for b in aba.get("bands") or []]
         if brows:
             ab += section(T["aba_band_t"], table(head, brows, nums=(1, 2, 3, 4, 5, 6, 7)),
-                          aba.get("coverage_note") or T["aba_cov"].format(
-                              r=aba.get("rows_with_aba", 0), t=aba.get("rows_total", 0),
-                              q=aba.get("queries_with_aba", 0), w=len(aba.get("weeks") or [])))
+                          aba_state_line(aba, T))
         tr = aba.get("rank_trend") or {}
         cc = aba.get("concentration") or {}
         bits = []
@@ -936,8 +943,8 @@ def render_body(s, n, brand, lang, open_lang="en", ads=None, baseline=None, prod
                                                  arows, nums=(1, 2)), note)
         if bits:
             ab = f'<p class="section-sub">{esc(" ".join(bits))}</p>' + ab
-    elif aba.get("status") in ("NOT_RETURNED", "NOT_REQUESTED"):
-        ab = f'<p class="section-sub">{esc(T["aba_none"])}</p>'
+    elif aba.get("status") in ("NOT_RETURNED", "NOT_REQUESTED", "EMPTY_RESULT"):
+        ab = f'<p class="section-sub">{esc(aba_state_line(aba, T))}</p>'
     if ab:
         sx += hero(T["aba_eyebrow"], T["aba_h"]) + ab
 
@@ -1058,8 +1065,11 @@ MD_L = {
         "aba_conc": "Median top-3 click share {v}% - {n} of {q} searches are more than half owned by three listings.",
         "aba_own": "ABA top-3 ASINs seen: {n}. They are the most-clicked listings on the search, not automatically competitors{own}.",
         "aba_own_unverified": " - no own-ASIN list was passed, so none of them has been checked against your own catalogue",
-        "aba_none": "No ABA columns in this pull. ABA is attached to weekly marketSearchQuery rows only; marketAsinQuery rows and aggregated rows never carry it.",
+        "aba_none": "No ABA in this pull. ABA is attached to weekly marketSearchQuery rows only; marketAsinQuery rows and aggregated rows never carry it.",
         "aba_cov": "ABA covers {r} of {t} weekly market rows ({q} searches, {w} weeks).",
+        "aba_gap": "ABA came back on {r} of {t} weekly market rows ({q} of {qt} searches). The rest have no ABA for those weeks: missing, not zero, and not low demand.",
+        "aba_not_requested": "No ABA in this run: no weekly marketSearchQuery rows were pulled, so there was nothing for ABA to attach to.",
+        "aba_empty": "The weekly marketSearchQuery call was made and returned no rows at all, so nothing can be said about demand here - empty is not zero. Check the weeks, the terms, and whether the tenant is onboarded for SQP / ABA.",
         "limits": "What this report cannot see",
         "src": "Computed by sqp_calc.py; every figure matches sqp_summary.json."},
  "zh": {"period": "周期", "store": "店铺", "verdict": "结论", "position": "店铺在市场的位置",
@@ -1083,8 +1093,11 @@ MD_L = {
         "aba_conc": "Top3 点击份额中位数 {v}%——{q} 个词里有 {n} 个被三个listing占去一半以上。",
         "aba_own": "ABA Top3 里共出现 {n} 个 ASIN。它们只是该词上点击最多的listing，不自动等于竞品{own}。",
         "aba_own_unverified": "——本次没有传入自家 ASIN 清单，所以没有任何一个与自家商品做过比对",
-        "aba_none": "本次取数没有 ABA 列。ABA 只挂在周粒度的 marketSearchQuery 行上；marketAsinQuery 行和按周合并的行都不带。",
+        "aba_none": "本次取数没有 ABA。ABA 只挂在周粒度的 marketSearchQuery 行上；marketAsinQuery 行和按周合并的行都不带。",
         "aba_cov": "ABA 覆盖 {t} 行周度市场数据中的 {r} 行（{q} 个搜索词，{w} 周）。",
+        "aba_gap": "{t} 行周度市场数据里有 {r} 行带 ABA（{qt} 个搜索词里有 {q} 个）。其余的在那些周没有 ABA：是缺失，不是 0，也不等于需求低。",
+        "aba_not_requested": "本次没有 ABA：没有拉取周粒度的 marketSearchQuery 行，ABA 无处附着。",
+        "aba_empty": "周粒度 marketSearchQuery 已经发起，但一行都没返回，因此无法对这些搜索词的需求下任何结论——空不等于 0。需核对所查周次、词表，以及该租户是否已接入 SQP / ABA。",
         "limits": "这份报告看不到什么",
         "src": "由 sqp_calc.py 计算；所有数字与 sqp_summary.json 一致。"},
  "ja": {"period": "期間", "store": "ストア", "verdict": "結論", "position": "市場における自社の位置",
@@ -1108,8 +1121,11 @@ MD_L = {
         "aba_conc": "上位3商品のクリックシェア中央値 {v}% —— {q} クエリ中 {n} 件は3商品で半分以上を占有。",
         "aba_own": "ABA上位3に登場したASINは {n} 件。これらは当該クエリで最もクリックされた商品であり、自動的に競合とは限りません{own}。",
         "aba_own_unverified": "（自社ASINリストが渡されていないため、自社商品との照合は行われていません）",
-        "aba_none": "今回の取得にABA列はありません。ABAは週次のmarketSearchQuery行にのみ付与され、marketAsinQuery行や集計行には含まれません。",
+        "aba_none": "今回の取得にABAはありません。ABAは週次のmarketSearchQuery行にのみ付与されます。",
         "aba_cov": "ABAは週次市場データ {t} 行のうち {r} 行（{q} クエリ、{w} 週）をカバーしています。",
+        "aba_gap": "週次市場データ {t} 行のうち {r} 行にABAが付与（{qt} クエリ中 {q} 件）。残りは当該週のABAなし：欠損であり0ではなく、需要が低いという意味でもありません。",
+        "aba_not_requested": "今回ABAはありません：週次のmarketSearchQuery行を取得していないため、ABAが付与される対象がありませんでした。",
+        "aba_empty": "週次marketSearchQueryは実行されましたが行が1件も返りませんでした。需要について何も言えません（空は0ではありません）。対象週・クエリ、テナントのSQP / ABA対応状況を確認してください。",
         "limits": "本レポートで分からないこと",
         "src": "sqp_calc.py による算出。全ての数値は sqp_summary.json と一致します。"},
 }
@@ -1117,6 +1133,24 @@ MD_L = {
 
 def _cell(v):
     return str(v).replace("|", "\\|")
+
+
+def aba_state_line(aba, M):
+    """The sentence describing ABA coverage, in the report language. sqp_calc hands over
+    numbers only; phrasing lives here so markdown and HTML always say the same thing."""
+    st = aba.get("status")
+    if st == "NOT_REQUESTED":
+        return M["aba_not_requested"]
+    if st == "EMPTY_RESULT":
+        return M["aba_empty"]
+    if st == "NOT_RETURNED":
+        return M["aba_none"]
+    gap = aba.get("coverage_gap")
+    if gap:
+        return M["aba_gap"].format(r=gap["rows_with_aba"], t=gap["rows_total"],
+                                   q=gap["queries_with_aba"], qt=gap["queries_total"])
+    return M["aba_cov"].format(r=aba.get("rows_with_aba", 0), t=aba.get("rows_total", 0),
+                               q=aba.get("queries_with_aba", 0), w=len(aba.get("weeks") or []))
 
 
 def render_md(s, n, lang="en"):
@@ -1179,9 +1213,7 @@ def render_md(s, n, lang="en"):
 
     aba = s.get("aba") or {}
     if aba.get("status") == "INCLUDED":
-        o += ["## " + M["aba"], "",
-              M["aba_cov"].format(r=aba.get("rows_with_aba", 0), t=aba.get("rows_total", 0),
-                                  q=aba.get("queries_with_aba", 0), w=len(aba.get("weeks") or [])), ""]
+        o += ["## " + M["aba"], "", aba_state_line(aba, M), ""]
         if aba.get("bands"):
             o += ["| %s | %s | %s | %s | %s | %s | %s | %s |" % (
                       M["aba_band"], M["aba_q"], M["aba_mcvr"], M["aba_impr"], M["aba_clk"],
@@ -1208,8 +1240,8 @@ def render_md(s, n, lang="en"):
         if ta.get("rows"):
             o += [M["aba_own"].format(n=len(ta["rows"]),
                                       own="" if ta.get("own_asin_list_given") else M["aba_own_unverified"]), ""]
-    elif aba.get("status") == "NOT_RETURNED":
-        o += ["## " + M["aba"], "", M["aba_none"], ""]
+    elif aba.get("status") in ("NOT_RETURNED", "NOT_REQUESTED", "EMPTY_RESULT"):
+        o += ["## " + M["aba"], "", aba_state_line(aba, M), ""]
 
     acts = nn.get("actions") or []
     if acts:

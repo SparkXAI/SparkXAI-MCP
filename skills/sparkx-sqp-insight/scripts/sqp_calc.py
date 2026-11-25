@@ -377,9 +377,17 @@ def aba_section(df, own_asins=None, aba_status=None):
                  "aggregate=true rows never carry it. Pull factEntity=marketSearchQuery with "
                  "aggregate=false to get it.")
     if df is None or not len(df):
-        # No weekly market rows at all: the second pull was never made. Say that, do not go silent.
+        # Zero weekly market rows. An abaStatus on the response proves the call WAS made and came
+        # back empty - a different thing from never asking, and the answer must not conflate them.
+        if aba_status:
+            return {"status": "EMPTY_RESULT", "rows_with_aba": 0, "rows_total": 0,
+                    "aba_status": aba_status,
+                    "why": f"The weekly marketSearchQuery call was made (abaStatus={aba_status}) and "
+                           "returned no rows at all. Nothing can be said about demand on these "
+                           "searches: empty is not zero. Check the weeks, the terms and whether the "
+                           "tenant is onboarded for SQP / ABA."}
         return {"status": "NOT_REQUESTED", "rows_with_aba": 0, "rows_total": 0,
-                "aba_status": aba_status,
+                "aba_status": None,
                 "why": "No weekly marketSearchQuery rows in this run, so there was nothing ABA "
                        "could be attached to. " + WHY_SHAPE}
     rows_total = int(len(df))
@@ -398,10 +406,12 @@ def aba_section(df, own_asins=None, aba_status=None):
            "queries_total": int(df["query"].nunique()),
            "queries_with_aba": int(d["query"].nunique()),
            "weeks": sorted(x for x in d["week_end"].dropna().unique())}
+    # Only the numbers travel. The sentence is the report's to write, in the report's language -
+    # an English note here would override the localised template and leak into a zh / ja page.
     if out["partial"]:
-        out["coverage_note"] = (f"ABA came back on {out['rows_with_aba']} of {rows_total} weekly market rows "
-                                f"({out['queries_with_aba']} of {out['queries_total']} searches). The rest have "
-                                "no ABA for those weeks; they are not zero and must not be read as low demand.")
+        out["coverage_gap"] = {"rows_with_aba": out["rows_with_aba"], "rows_total": rows_total,
+                               "queries_with_aba": out["queries_with_aba"],
+                               "queries_total": out["queries_total"]}
 
     # ---- rank bands: market demand tier vs what the store got there
     bands = []

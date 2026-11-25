@@ -133,7 +133,10 @@ def main(argv=None):
 
     tot14 = a.total_spend_14d or sum(fnum(g(c, "Spend")) or 0 for c in camps)
     pct = 0.0 if a.budget.strip().lower() == "same" else float(a.budget.replace("%", "")) / 100
-    extra_allowed = pct * tot14 / 2  # a week
+    # Weekly figures come from the SPEND window, which is --spend-days and not always 14.
+    # Dividing by 2 silently assumed 14 and halved every weekly number on a 7-day pull.
+    per_week = lambda v: (v or 0) * 7.0 / a.spend_days
+    extra_allowed = per_week(pct * tot14)  # a week
     # C3: the smaller of the absolute floor and a share of the window's spend, so the gate scales
     # with the account. 0 on either side turns that side off; both 0 means no size gate at all.
     _gates = [x for x in (a.min_lower_spend, a.min_lower_share * tot14) if x > 0]
@@ -175,7 +178,7 @@ def main(argv=None):
         # every product the campaign advertises needs a stock figure: one unknown product could be the one running out
         row["stock_days"] = min(known.values()) if known and not row["stock_unknown_asins"] else None
         row["stock_days_known_min"] = min((v for v in known.values() if v is not None), default=None)
-        weekly = spend / 2
+        weekly = per_week(spend)
         roas = sales / spend if spend else 0
         if acos is not None and acos <= G - 3 and capped and old:
             lift = 0.2 if hrs < 6 else (0.35 if hrs < 12 else 0.5)
@@ -329,7 +332,7 @@ def main(argv=None):
             "raise_extra_per_week": round(sum(r["extra_per_week"] for r in raises if not r["hold"])),
             "raise_sales_per_week": round(sum(r["sales_per_week"] for r in raises if not r["hold"])),
             "lower_campaigns": len(lowers), "lower_ready": len(ready_lowers),
-            "lower_spend_now_per_week": round(sum(r["spend_14d"] for r in lowers) / 2),
+            "lower_spend_now_per_week": round(per_week(sum(r["spend_14d"] for r in lowers))),
             "lower_sales_at_risk_per_week": round(sum(r["sales_at_risk_per_week"] for r in ready_lowers)),
             "flag_campaigns": len(flags), "sb_kept_banner": len(kept_sb), "ai_managed_campaigns": len(ai_managed),
             "too_small_campaigns": len(too_small), "too_small_spend": round(sum(r["spend_14d"] for r in too_small)),
