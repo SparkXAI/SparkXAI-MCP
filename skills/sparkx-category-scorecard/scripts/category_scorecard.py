@@ -325,48 +325,79 @@ def main(argv=None):
             eff_ok, basis = None, None
         card["ad_cost_basis"] = basis; card["ad_cost_ok"] = eff_ok
 
-        # play
+        # play. note_codes mirrors notes so a report can phrase each one in the user's language.
+        note_codes = []
         if usable_conv is None and eff_ok is None:
             play = "No read"; notes.append("no market data and no peer row")
+            note_codes.append({"code": "no_data_no_peer"})
         elif usable_conv is None:
             play = "Scale" if eff_ok else "Fix ad cost"
-            notes.append(f"market data not accessible ({a.market_unavailable}): judged on peers and ACOS" if a.market_unavailable
-                         else "Vendor or no SQP: judged on peers and ACOS" if a.account == "vendor" or not market
-                         else "based on ads only (market data missing or not usable)")
+            if a.market_unavailable:
+                notes.append(f"market data not accessible ({a.market_unavailable}): judged on peers and ACOS")
+                note_codes.append({"code": "market_unavailable", "reason": a.market_unavailable})
+            elif a.account == "vendor" or not market:
+                notes.append("Vendor or no SQP: judged on peers and ACOS")
+                note_codes.append({"code": "vendor_no_sqp"})
+            else:
+                notes.append("based on ads only (market data missing or not usable)")
+                note_codes.append({"code": "ads_only"})
         elif eff_ok is None:
-            play = "Scale" if usable_conv >= a.conv_line else "Fix listing"; notes.append("based on market data only (no peer row)")
+            play = "Scale" if usable_conv >= a.conv_line else "Fix listing"
+            notes.append("based on market data only (no peer row)")
+            note_codes.append({"code": "market_only"})
         else:
             play = ("Scale" if eff_ok else "Fix ad cost") if usable_conv >= a.conv_line else ("Fix listing" if eff_ok else "Fix first")
         if cov is not None and a.drop_coverage <= cov < a.min_coverage and usable_conv is not None:
             notes.append(f"market data covers {round(cov * 100)}% of spend")
+            note_codes.append({"code": "coverage", "pct": round(cov * 100)})
         if play == "Scale":
             if lead and lead != "SP" and (usable_conv is None or (card["acos_vs_account"] or 0) > 1.2):
                 card["scale_scope"] = {"SB": "Sponsored Brands", "SD": "Sponsored Display"}[lead] + " only"
                 notes.append(f"evidence is {lead} only")
+                note_codes.append({"code": "evidence_adtype", "ad": lead})
             if a.acos_goal and card["acos_14d"] and card["acos_14d"] > a.acos_goal:
                 play = "Keep"; card.pop("scale_scope", None)
                 notes.append(f"category ACOS {card['acos_14d']}% is above your {a.acos_goal:g}% goal: no raise until it is back under")
+                note_codes.append({"code": "acos_above_goal", "acos": card["acos_14d"], "goal": a.acos_goal})
             if card["converts_band"] == "close" and usable_conv is not None:
                 notes.append("check the page as you scale (close to market, not ahead)")
+                note_codes.append({"code": "close_to_market"})
             if card["stock_days_min_top2"] is not None and card["stock_days_min_top2"] < a.min_stock_days:
                 play = "Hold (stock)"; notes.append(f"main product: {card['stock_days_min_top2']:g} days of stock")
+                note_codes.append({"code": "low_stock", "days": card["stock_days_min_top2"]})
         if lead and card["peer_rows"][lead]["goal"] != "conversion" and card["peer_rows"][lead]["roas_position"] == "bottom quarter":
             pr = card["peer_rows"][lead]
             notes.append(f"{lead} ROAS {pr['roas']:.2f} is in peers' bottom 25% (median {pr['roas_p50']:.2f}): check before adding budget")
+            note_codes.append({"code": "roas_bottom", "ad": lead, "roas": round(pr["roas"], 2),
+                               "median": round(pr["roas_p50"], 2)})
         card["play"] = play; card["play_note"] = "; ".join(notes) or None
+        card["play_note_codes"] = note_codes
         ng = NEXT_GOAL.get(play)
         if not ng:
-            card["next"] = "-"
+            card["next"] = "-"; card["next_code"] = {"code": "none"}
         elif a.account == "vendor" or not market:
-            card["next"] = "sparkx-search-term-diagnosis (search terms; no SQP)" if play != "Scale" else "budget raises in change_list.csv"
+            if play != "Scale":
+                card["next"] = "sparkx-search-term-diagnosis (search terms; no SQP)"
+                card["next_code"] = {"code": "std_no_sqp"}
+            else:
+                card["next"] = "budget raises in change_list.csv"
+                card["next_code"] = {"code": "raises_in_csv"}
         else:
             card["next"] = f"sparkx-sqp-insight plan mode: {ng}"
+            card["next_code"] = {"code": "sqp_plan", "goal": ng}
         card["next_goal"] = ng
         if ev and ev["plan_only"]:
             when_before = "sparkx-promo-monitor (event in progress)" if ev["in_progress"] else f"before {fmt(ev['start'])} via sparkx-promo-prep"
             card["timing"] = {"Scale": f"plan only; {when_before}", "Fix listing": "now (page work)",
                               "Fix ad cost": f"from {fmt(ev['reset_from'])}", "Fix first": f"page now; ad cost from {fmt(ev['reset_from'])}",
                               "Hold (stock)": "refill now", "Keep": f"from {fmt(ev['reset_from'])}"}.get(play, "-")
+            _d, _s = fmt(ev["reset_from"]), fmt(ev["start"])
+            card["timing_code"] = {
+                "Scale": {"code": "plan_only_in_progress"} if ev["in_progress"] else {"code": "plan_only_before", "start": _s},
+                "Fix listing": {"code": "now_page"}, "Fix ad cost": {"code": "from_date", "date": _d},
+                "Fix first": {"code": "page_now_ads_from", "date": _d},
+                "Hold (stock)": {"code": "refill_now"}, "Keep": {"code": "from_date", "date": _d},
+            }.get(play, {"code": "none"})
         cards.append(card)
 
     with_peer = [c for c in cards if c["play_ad_type"]]

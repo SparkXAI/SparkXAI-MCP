@@ -60,7 +60,19 @@ def load(paths, label, split_at=None):
     for c in sqp_rows.CANON:
         if c not in sqp_rows.TEXT and c not in sqp_rows.FLAGS:
             df[c] = pd.to_numeric(df[c], errors="coerce")
-    return df, infos, weeks
+    # ABA lives on the WEEKLY marketSearchQuery rows and would be lost by the collapse above, so
+    # keep those raw rows - ALL of them, not only the ones that came back with a rank. Filtering
+    # here would make coverage read 100% whenever anything at all was returned.
+    aba_rows = [r for r in rows
+                if r.get("period") == label and r.get("source_kind") in sqp_rows.QUERY_KINDS
+                and r.get("week_end")]
+    aba = pd.DataFrame(aba_rows, columns=list(dict.fromkeys(
+        sqp_rows.CANON + ["source_kind", "period", "file"]))) if aba_rows else pd.DataFrame()
+    if len(aba):
+        for c in sqp_rows.CANON:
+            if c not in sqp_rows.TEXT and c not in sqp_rows.FLAGS:
+                aba[c] = pd.to_numeric(aba[c], errors="coerce")
+    return df, infos, weeks, aba
 
 
 def derive(df, notes):
@@ -341,6 +353,138 @@ def presets(df, min_clicks=5):
     return df
 
 
+# ---------------------------------------------------------------- ABA (Brand Analytics)
+ABA_BANDS = [(1, 1000), (1001, 5000), (5001, 20000), (20001, 100000), (100001, None)]
+
+
+def _band_label(lo, hi):
+    return f"{lo:,} - {hi:,}" if hi else f"{lo:,}+"
+
+
+def aba_section(df, own_asins=None, aba_status=None):
+    """ABA sits on WEEKLY marketSearchQuery rows only (never marketAsinQuery, never aggregate=true).
+    Everything here is market-side demand read against the store's own counts on the same term x week.
+
+    Rules kept in code so a report cannot get them wrong:
+      - abaRank is a RANK, not a volume: bands and direction only, never summed or averaged into
+        a number of searches, and never compared across marketplaces.
+      - click / conversion shares arrive ALREADY 0-100.
+      - the ABA top 3 are the most-clicked ASINs on the term. They are NOT automatically
+        competitors: they can be the store's own products or sibling variants, so every top-3
+        ASIN is checked against own_asins and the overlap is reported.
+    """
+    WHY_SHAPE = ("ABA is attached to weekly marketSearchQuery rows only - marketAsinQuery rows and "
+                 "aggregate=true rows never carry it. Pull factEntity=marketSearchQuery with "
+                 "aggregate=false to get it.")
+    if df is None or not len(df):
+        # No weekly market rows at all: the second pull was never made. Say that, do not go silent.
+        return {"status": "NOT_REQUESTED", "rows_with_aba": 0, "rows_total": 0,
+                "aba_status": aba_status,
+                "why": "No weekly marketSearchQuery rows in this run, so there was nothing ABA "
+                       "could be attached to. " + WHY_SHAPE}
+    rows_total = int(len(df))
+    d = df[df["aba_rank"].notna()] if "aba_rank" in df.columns else df.iloc[0:0]
+    if not len(d):
+        return {"status": "NOT_RETURNED", "rows_with_aba": 0, "rows_total": rows_total,
+                "aba_status": aba_status,
+                "why": f"{rows_total} weekly market rows came back, none of them with ABA columns. "
+                       + (f"The response reported abaStatus={aba_status}. " if aba_status else "")
+                       + WHY_SHAPE}
+    cov = len(d) / rows_total if rows_total else None
+    out = {"status": "INCLUDED", "rows_with_aba": int(len(d)), "rows_total": rows_total,
+           "aba_status": aba_status,
+           "coverage": round(cov, 4) if cov is not None else None,
+           "partial": bool(cov is not None and cov < 0.999),
+           "queries_total": int(df["query"].nunique()),
+           "queries_with_aba": int(d["query"].nunique()),
+           "weeks": sorted(x for x in d["week_end"].dropna().unique())}
+    if out["partial"]:
+        out["coverage_note"] = (f"ABA came back on {out['rows_with_aba']} of {rows_total} weekly market rows "
+                                f"({out['queries_with_aba']} of {out['queries_total']} searches). The rest have "
+                                "no ABA for those weeks; they are not zero and must not be read as low demand.")
+
+    # ---- rank bands: market demand tier vs what the store got there
+    bands = []
+    for lo, hi in ABA_BANDS:
+        b = d[(d["aba_rank"] >= lo) & ((d["aba_rank"] <= hi) if hi else True)]
+        if not len(b):
+            continue
+        impr_b, clk_b, pur_b = b["impr_brand"].sum(), b["clicks_brand"].sum(), b["purch_brand"].sum()
+        clk_m, pur_m = b["clicks_mkt"].sum(), b["purch_mkt"].sum()
+        bands.append({
+            "band": _band_label(lo, hi), "rank_from": lo, "rank_to": hi,
+            "queries": int(b["query"].nunique()), "rows": int(len(b)),
+            "market_cvr": round(pur_m / clk_m * 100, 2) if clk_m else None,
+            "brand_impressions": int(impr_b), "brand_clicks": int(clk_b), "brand_purchases": int(pur_b),
+            "brand_cvr": round(pur_b / clk_b * 100, 2) if clk_b else None,
+            "purchase_share": round(pur_b / pur_m * 100, 2) if pur_m else None,
+            "cvr_index": round((pur_b / clk_b) / (pur_m / clk_m), 3) if clk_b and clk_m and pur_m else None,
+        })
+    out["bands"] = bands
+
+    # ---- rank direction per query across the pulled weeks (a rank FALLING is demand RISING)
+    trend, wk = [], d.dropna(subset=["week_end"]).sort_values("week_end")
+    for qy, g in wk.groupby("query"):
+        if g["week_end"].nunique() < 2:
+            continue
+        first, last = float(g.iloc[0]["aba_rank"]), float(g.iloc[-1]["aba_rank"])
+        if not first:
+            continue
+        chg = (last - first) / first
+        trend.append({"query": qy, "rank_first": first, "rank_last": last,
+                      "direction": "up" if chg <= -0.10 else ("down" if chg >= 0.10 else "stable"),
+                      "weeks": int(g["week_end"].nunique()),
+                      "brand_purchases": int(g["purch_brand"].sum()),
+                      "purchase_share": round(g["purch_brand"].sum() / g["purch_mkt"].sum() * 100, 2)
+                      if g["purch_mkt"].sum() else None})
+    trend.sort(key=lambda r: r["rank_last"])
+    out["rank_trend"] = {
+        "note": "A rank getting SMALLER means the search got MORE popular. 'up' = demand rising.",
+        "up": sum(1 for r in trend if r["direction"] == "up"),
+        "down": sum(1 for r in trend if r["direction"] == "down"),
+        "stable": sum(1 for r in trend if r["direction"] == "stable"),
+        "rows": trend[:40]}
+
+    # ---- how concentrated each term is in its top 3 listings
+    if "aba_top3_click_share_total" in d.columns and d["aba_top3_click_share_total"].notna().any():
+        c = d.dropna(subset=["aba_top3_click_share_total"])
+        out["concentration"] = {
+            "note": "Shares are already 0-100. A high top-3 click share means a few listings own the term.",
+            "median_top3_click_share": round(float(c["aba_top3_click_share_total"].median()), 2),
+            "queries_over_50pct": int((c.groupby("query")["aba_top3_click_share_total"].max() >= 50).sum()),
+            "queries": int(c["query"].nunique())}
+
+    # ---- the top 3 are not automatically competitors
+    own = {str(x).upper() for x in (own_asins or []) if x}
+    seen, own_hits = {}, []
+    for col_a, col_c in (("aba_top1_asin", "aba_top1_click_share"),
+                         ("aba_top2_asin", "aba_top2_click_share"),
+                         ("aba_top3_asin", "aba_top3_click_share")):
+        if col_a not in d.columns:
+            continue
+        for _, r in d.dropna(subset=[col_a]).iterrows():
+            a = str(r[col_a]).upper()
+            e = seen.setdefault(a, {"asin": a, "queries": set(), "max_click_share": 0.0})
+            e["queries"].add(r["query"])
+            e["max_click_share"] = max(e["max_click_share"], float(r[col_c] or 0))
+    for a, e in seen.items():
+        # None, not False, when no own-ASIN list was passed: "unknown" must never render as
+        # "not ours". Calling the store's own listing a competitor is the mistake this prevents.
+        e["is_own_asin"] = (a in own) if own else None
+        e["queries"] = len(e["queries"])
+        if e["is_own_asin"]:
+            own_hits.append(a)
+    top = sorted(seen.values(), key=lambda x: (-x["queries"], -x["max_click_share"]))[:20]
+    out["top_asins"] = {
+        "note": "The ABA top 3 are the most-clicked ASINs on the search, which can include your own "
+                "products or sibling variants. Confirm identity before calling any of them a competitor."
+                + ("" if own else " No own-ASIN list was passed, so is_own_asin is unverified for every row."),
+        "own_asin_list_given": bool(own),
+        "own_asins_in_top3": own_hits,
+        "rows": top}
+    return out
+
+
 def use_cases(qv, min_volume, top, brand_terms=(), vocab_extra=(), competitor_terms=()):
     """Help-center use cases on query-grain rows (one row per query). Deterministic lists."""
     if qv is None or qv.empty or "search_volume" not in qv.columns:
@@ -383,7 +527,19 @@ def use_cases(qv, min_volume, top, brand_terms=(), vocab_extra=(), competitor_te
     # Another brand's name is not ours to protect: list it apart as conquest (won organically or by ads)
     cq = p[p["competitor_brand"].astype(bool)]
     p = p[~p["competitor_brand"].astype(bool)]
-    res["protect"] = {"rule": "purchase share >= 20%, volume floor, not another brand's name", "count": int(len(p)), "rows": _rec(p, cols, top)}
+    # S3: without --competitor-terms, competitor_brand is False for every row, so the filter above
+    # removes nothing. Say that in the rule instead of claiming a guarantee the run did not deliver.
+    _checked = bool(ct)
+    res["protect"] = {"rule": "purchase share >= 20%, volume floor"
+                              + (", not another brand's name" if _checked
+                                 else "; OTHER BRANDS NOT EXCLUDED - no --competitor-terms was passed, so this list"
+                                      " can contain another brand's name and must be read before it is used"),
+                      "competitor_check_ran": _checked,
+                      "count": int(len(p)), "rows": _rec(p, cols, top)}
+    if not _checked:
+        res.setdefault("warnings", []).append(
+            "protect: --competitor-terms was not passed, so competitor brand names were not filtered out."
+            " Check brand_segments.brand_candidates_to_confirm and rerun with --competitor-terms.")
     res["conquest"] = {"rule": "another brand's name where the store wins 20%+ of purchases; not a protect term",
                        "count": int(len(cq)), "rows": _rec(cq, cols, top)}
     # 3. Coverage gaps: big searches where the store is barely visible
@@ -580,9 +736,9 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     notes = []
 
-    cur, meta_c, weeks_c = load(a.current, "current", a.split_at)
+    cur, meta_c, weeks_c, aba_cur = load(a.current, "current", a.split_at)
     if a.prior:
-        pri, meta_p, weeks_p = load(a.prior, "prior")
+        pri, meta_p, weeks_p, _aba_pri = load(a.prior, "prior")
         pri["period"] = "prior"
     elif a.split_at:
         pri, meta_p, weeks_p = cur[cur["period"] == "prior"].copy(), [], weeks_c
@@ -726,6 +882,13 @@ def main():
         for line in open(a.vocab, encoding="utf-8"):
             vx |= {w for w in line.lower().split() if len(w) >= 3}
     summ["use_cases"] = use_cases(uq, a.min_volume, a.top, _terms(a.brand_terms), vx, _terms(a.competitor_terms))
+    # ABA: market demand tier, direction and listing concentration, read against our own counts
+    _own = sorted({str(x) for x in cur["asin"].dropna().unique()}) if "asin" in cur.columns else None
+    _astat = next((i.get("aba_status") for i in meta_c if i.get("aba_status")), None)
+    summ["aba"] = aba_section(aba_cur, _own, _astat)
+    # S3: a missing competitor check must reach the reader, not sit inside use_cases
+    for _w in summ["use_cases"].get("warnings") or []:
+        summ.setdefault("notes", []).append(_w)
     if cur_q is not None and "purch_brand" in cur_q.columns:
         top = cur_q.sort_values("purch_brand", ascending=False).head(a.top).copy()
         top["purch_share"] = top["purch_brand"] / top["purch_mkt"]

@@ -30,6 +30,8 @@ Rates are never read from the tool (they are percentages there, 3.2 = 3.2%): eve
 recomputed from counts by rates() below. Stdlib only, except openpyxl for .xlsx exports.
 """
 import json, math, os, re
+
+import codecs
 from collections import OrderedDict, defaultdict
 
 # ------------------------------------------------------------------ the column maps
@@ -52,7 +54,21 @@ TOOL_COLS = {
     "myBrandCvrLowSample": "ls_cvr_brand", "totalCtrLowSample": "ls_ctr_mkt",
     "totalCartAddRateLowSample": "ls_atcr_mkt", "totalCvrLowSample": "ls_cvr_mkt",
     "weekCount": "week_count", "marketWeekCount": "market_week_count",
+    # ABA (Brand Analytics), attached to WEEKLY marketSearchQuery rows only.
+    # marketAsinQuery rows and aggregate=true rows carry none of these.
+    "asinCount": "asin_count", "abaRank": "aba_rank",
+    "abaTop1Asin": "aba_top1_asin", "abaTop1ClickShare": "aba_top1_click_share",
+    "abaTop1ConversionShare": "aba_top1_conv_share",
+    "abaTop2Asin": "aba_top2_asin", "abaTop2ClickShare": "aba_top2_click_share",
+    "abaTop2ConversionShare": "aba_top2_conv_share",
+    "abaTop3Asin": "aba_top3_asin", "abaTop3ClickShare": "aba_top3_click_share",
+    "abaTop3ConversionShare": "aba_top3_conv_share",
+    "abaTop3TotalClickShare": "aba_top3_click_share_total",
+    "abaTop3TotalConversionShare": "aba_top3_conv_share_total",
 }
+# Shares above are ALREADY 0-100 - never multiply by 100 again.
+# abaRank is a rank, not a volume: it cannot be turned into a number of searches and ranks from
+# different marketplaces are not comparable.
 # SparkX SQP Analysis export headers.
 EXPORT_COLS = {
     "Search Query": "query", "Parent ASIN": "asin", "Search Volume": "search_volume",
@@ -79,8 +95,15 @@ CANON = ["query", "asin", "week_start", "week_end", "search_volume",
          "med_purch_price_mkt", "med_purch_price_brand",
          "ship_sameday_clicks", "ship_1d_clicks", "ship_2d_clicks", "ship_sameday_purch", "ship_1d_purch", "ship_2d_purch",
          "ls_ctr_brand", "ls_atcr_brand", "ls_cvr_brand", "ls_ctr_mkt", "ls_atcr_mkt", "ls_cvr_mkt",
-         "week_count", "market_week_count", "cvr_brand_rate", "cvr_mkt_rate"]
-TEXT = {"query", "asin", "week_start", "week_end"}
+         "week_count", "market_week_count", "cvr_brand_rate", "cvr_mkt_rate",
+         "asin_count", "aba_rank",
+         "aba_top1_asin", "aba_top1_click_share", "aba_top1_conv_share",
+         "aba_top2_asin", "aba_top2_click_share", "aba_top2_conv_share",
+         "aba_top3_asin", "aba_top3_click_share", "aba_top3_conv_share",
+         "aba_top3_click_share_total", "aba_top3_conv_share_total"]
+ABA_COLS = [c for c in CANON if c.startswith("aba_")]
+TEXT = {"query", "asin", "week_start", "week_end",
+        "aba_top1_asin", "aba_top2_asin", "aba_top3_asin"}
 FLAGS = {c for c in CANON if c.startswith("ls_")}
 BRAND_COUNTS = ["impr_brand", "clicks_brand", "atc_brand", "purch_brand"]
 MARKET_COUNTS = ["search_volume", "impr_mkt", "clicks_mkt", "atc_mkt", "purch_mkt",
@@ -163,7 +186,9 @@ def _tool_payload(obj):
 
 
 def load_tool_json(path, period="current", week_end=None):
-    with open(path, encoding="utf-8") as fh:
+    # utf-8-sig: _is_json() already tolerates a BOM, so the reader has to as well -
+    # Windows exports and some saved tool results carry one and json.load chokes on it.
+    with open(path, encoding="utf-8-sig") as fh:
         obj = json.load(fh)
     raw, data, meta = _tool_payload(obj)
     rows = []
@@ -178,6 +203,7 @@ def load_tool_json(path, period="current", week_end=None):
             "query_window": data.get("queryWindow"), "missing_week_ends": data.get("missingWeekEnds") or [],
             "truncated": bool(meta.get("truncated")), "row_limit": meta.get("limit"),
             "hint": meta.get("hint"), "term_matches": data.get("termMatches"),
+            "aba_status": data.get("abaStatus"),
             "aggregated": any(r["week_count"] is not None for r in rows),
             "columns_found": sorted({TOOL_COLS[k] for s in raw[:50] for k in s if k in TOOL_COLS})}
     return rows, info
@@ -253,12 +279,30 @@ def split_spec(spec):
     return (m.group(1), m.group(2)) if m else (spec, None)
 
 
+def _is_json(path):
+    """A JSON tool response starts with '{' or '[' whatever the file is called; .xlsx starts with 'PK'."""
+    if path.lower().endswith((".xlsx", ".xls")):
+        return False
+    try:
+        with open(path, "rb") as f:
+            head = f.read(4096).lstrip()
+    except OSError:
+        return path.lower().endswith(".json")
+    if head[:2] == b"PK":
+        return False
+    if head[:3] == codecs.BOM_UTF8:
+        head = head[3:].lstrip()
+    return head[:1] in (b"{", b"[")
+
+
 def load(paths, period="current"):
     """Load any mix of tool JSON and exports. Returns (rows, infos)."""
     rows, infos = [], []
     for spec in paths or []:
         path, wk = split_spec(spec)
-        if path.lower().endswith(".json"):
+        # S4: tool responses that exceed the context limit are saved as .txt, so routing on the
+        # extension sent them to the .xlsx reader. Sniff the first non-space byte instead.
+        if _is_json(path):
             r, i = load_tool_json(path, period, wk)
         else:
             r, i = load_export(path, period, wk)

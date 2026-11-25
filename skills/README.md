@@ -23,7 +23,7 @@
 | Skill | 版本 | 对应 MCP Tool | 所需 Scope | 用途 |
 |-------|------|---------------|------------|------|
 | [sparkx-manage-keyword-list](sparkx-manage-keyword-list/) | 1.0.0 | `get_keyword_list` / `create_keyword_list` / `update_keyword_list` / `delete_keyword_list` | `amazon_sa_keywords_list:write` | 管理词库：搜索、创建、编辑、共享和删除；活动、广告组、托管组按 ID 引用 |
-| [sparkx-query-market-data](sparkx-query-market-data/) | 1.0.0 | `get_market_search_perf` / `get_peer_benchmark` | `sqp:read`（SQP / ABA）+ `benchmark:read`（同行基准）—— **两个独立 scope**，各自还有对应的菜单权限 | 查询 SQP / ABA 周数据和品牌同行周、月基准；每次查询一个店铺 |
+| [sparkx-query-market-data](sparkx-query-market-data/) | 1.0.1 | `get_market_search_perf` / `get_peer_benchmark` | `sqp:read`（SQP / ABA）+ `benchmark:read`（同行基准）—— **两个独立 scope**，各自还有对应的菜单权限 | 查询 SQP / ABA 周数据和品牌同行周、月基准；每次查询一个店铺 |
 
 ## 可选 Skills
 
@@ -37,8 +37,8 @@
 | [sparkx-product-diagnosis](sparkx-product-diagnosis/) | 1.2.5 | 商品诊断：投放分层 + 独立的生命阶段（SP 投放时长 + 12 周总销售额趋势）、变体对比、问题商品诊断卡、去留优化建议 |
 | [sparkx-asin-deep-dive](sparkx-asin-deep-dive/) | 1.0.0 | **需与 `sparkx-query-market-data` 一起安装**（`sqp:read` + `benchmark:read`）；两个权限分别生效：缺 `sqp:read` 时 SQP / ABA 模块走替代路径，缺 `benchmark:read` 时只少同行背景，SQP / ABA 照常可用。 单 ASIN 深钻：流量与广告结构、子体、库存和 ACOS 机制；先用平台 SQP / ABA 和可用的竞品推荐数据，品牌同行基准只作背景，卖家精灵用于更广的比较 |
 | [sparkx-search-term-diagnosis](sparkx-search-term-diagnosis/) | 1.1.0 | 搜索词诊断：按出单、品牌 / 非品牌、关键词 / ASIN 给搜索词分类，给出花费分布、否词候选、扶正候选和投放碎片，门槛用店铺客单价和目标 ACOS 推导 |
-| [sparkx-sqp-insight](sparkx-sqp-insight/) | 1.0.0 | SQP 市场诊断和单类目增长或提效计划；诊断只读，计划仅经编辑 Skill 写入客户确认的行。需要 `sparkx-query-market-data` 和 Python 3 |
-| [sparkx-category-scorecard](sparkx-category-scorecard/) | 1.0.0 | 对照 SQP 和品牌同行基准检查每个类目，给出类目打法、同行目标区间和预算计划；只读，确认后交给 edit-ads 执行。需要 `sparkx-query-market-data` 和 Python 3 |
+| [sparkx-sqp-insight](sparkx-sqp-insight/) | 1.0.1 | SQP 市场诊断和单类目增长或提效计划；诊断只读，计划仅经编辑 Skill 写入客户确认的行。需要 `sparkx-query-market-data` 和 Python 3 |
+| [sparkx-category-scorecard](sparkx-category-scorecard/) | 1.0.1 | 对照 SQP 和品牌同行基准检查每个类目，给出类目打法、同行目标区间和预算计划；只读，确认后交给 edit-ads 执行。需要 `sparkx-query-market-data` 和 Python 3 |
 | [sparkx-promo-prep](sparkx-promo-prep/) | 1.0.1 | 大促前准备：检查库存够不够撑过大促、广告组合上限、平时就花光预算的活动和托管组排期；按客户给的大促预算定加码力度，给符合条件的 SP/SB 托管组建与角色匹配的排期（只有客户确认的主推组用“活动冲量”，其他组用“推动增长”或保持“订单稳定”），给托管组外的活动加预算、出价和顶部溢价，附产品线汇总、预览和改动记录 |
 | [sparkx-promo-monitor](sparkx-promo-monitor/) | 1.0.0 | 大促中盯盘：大促当天按小时对比平时的花费节奏和预算消耗，找出快花完预算的好活动、花钱不出单、超出上限、库存紧张和今天被暂停的对象，按客户当下的目标给出小步调整；也回答“这几个定向现在能停吗”“库存下周才到还能加预算吗” |
 | [sparkx-promo-reset](sparkx-promo-reset/) | 1.1.0 | 大促调整复位：从操作日志找出大促期间人为改过的出价、预算、广告位溢价和托管组设置及其大促前的值，按客户选择全部直接复位，或按大促后表现给出立即复位 / 分天回落 / 由客户决定的建议；也可以按客户上传的原值记录复位，确认后执行并回读 |

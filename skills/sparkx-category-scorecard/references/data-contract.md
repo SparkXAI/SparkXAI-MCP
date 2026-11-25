@@ -46,7 +46,26 @@ Fallback without the tool: the SparkX SQP "ASIN detail" export (`--export`, one 
 | File | Shape | From |
 |---|---|---|
 | `parent_spend.json` | the call 2 rows as returned | call 2 |
-| `parent_category.json` | `{parent: {"id": "<browse category id>", "name": "...", "path_ids": [root..leaf]}}` (`path_ids` optional) | call 6 `asinCategoryInfo` |
+| `parent_category.json` | `{parent: {"id": "<browse category id>", "name": "...", "path_ids": [root..leaf]}}` (`path_ids` optional) | call 6 `asinCategoryInfo`, **after the check below** |
+
+### `asinCategoryInfo` is not always a browse category
+
+The field carries whatever node Amazon attached to the ASIN, and on some accounts that is a
+promotional or merchandising node rather than a browse category. Observed values: `Standard`,
+`Kategorien`, `Iphone` (a Seller store on Amazon DE), `Bosch Holiday Deals`, `$20 off $100`
+(a Vendor store on Amazon US). Scoring on those produces categories that match nothing in the peer
+benchmark.
+
+Check before building `parent_category.json`: a usable value is a browse node with a numeric id,
+and its name should look like a category path, not a campaign or deal name. If most scored parents
+fail that check:
+
+1. Use the browse node that `get_peer_benchmark` itself resolved for the brand (`browseCategoryId`
+   on the returned rows) and map every scored parent to it.
+2. Say so in the report as a stated deviation - the categories are then one node, not the real
+   tree, so "top N categories" and the per-category split are coarser than they look.
+3. Never silently score on the polluted values, and never drop the affected parents: dropping them
+   would quietly shrink the ad spend the scorecard claims to cover.
 | `parent_meta.json` | `{parent: {"brand": "<asinBrand>"}}` | call 6 |
 | `asin_parent.json` | `{child asin: parent asin}` | call 6 |
 | `stock_days.json` | `{parent or asin: days}` | call 6 |

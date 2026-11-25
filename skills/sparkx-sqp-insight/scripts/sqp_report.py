@@ -139,9 +139,35 @@ UI = {
   "h_brand": "Brand",
   "b_gap": "Your brand names appear in only {a} searches in this export, while ads on your brand names drew {b} clicks in the same weeks: the export misses most branded searches. Size branded demand from the ad report or a branded SQP pull; the rates and prices above still hold.",
   "data": "Data", "print": "Print / PDF", "dark": "☾ Dark", "light": "☀ Light", "lang_label": "Language",
+  "aba_eyebrow": "Market demand", "aba_h": "How much the market wanted these searches",
+  "aba_band": "ABA rank band", "aba_q": "Searches", "aba_mcvr": "Market conversion",
+  "aba_impr": "Your impressions", "aba_clk": "Your clicks", "aba_pur": "Your orders",
+  "aba_cvr": "Your conversion", "aba_share": "Your purchase share",
+  "aba_trend": "Demand direction: {up} rising, {down} falling, {stable} flat (a rank getting smaller means the search got more popular).",
+  "aba_conc": "Median top-3 click share {v}% - {n} of {q} searches are more than half owned by three listings.",
+  "aba_own": "ABA top-3 ASINs seen: {n}. They are the most-clicked listings on the search, not automatically competitors{own}.",
+  "aba_own_unverified": " - no own-ASIN list was passed, so none has been checked against your own catalogue",
+  "aba_none": "No ABA in this pull. ABA is attached to weekly marketSearchQuery rows only; marketAsinQuery rows and aggregated rows never carry it.",
+  "aba_cov": "ABA covers {r} of {t} weekly market rows ({q} searches, {w} weeks).",
+  "aba_band_t": "By ABA rank band", "aba_asin_t": "Most-clicked ASINs on these searches",
+  "h_aba_asin": "ASIN", "h_aba_nq": "Searches", "h_aba_cs": "Top click share", "h_aba_own": "Yours?",
+  "aba_own_yes": "yours", "aba_own_no": "not yours", "aba_own_unknown": "unverified",
  },
  "zh": {
   "overview": "总览", "funnel": "漏斗", "searches": "搜索词", "ads": "广告与产品", "actions": "行动", "notes": "说明",
+  "aba_eyebrow": "市场需求", "aba_h": "市场对这些搜索词的需求有多大",
+  "aba_band": "ABA 排名区间", "aba_q": "词数", "aba_mcvr": "市场转化率",
+  "aba_impr": "我方曝光", "aba_clk": "我方点击", "aba_pur": "我方订单",
+  "aba_cvr": "我方转化率", "aba_share": "我方购买份额",
+  "aba_trend": "需求方向：{up} 个上升，{down} 个下降，{stable} 个持平（排名数字变小 = 这个词更热门了）。",
+  "aba_conc": "Top3 点击份额中位数 {v}%——{q} 个词里有 {n} 个被三个 listing 占去一半以上。",
+  "aba_own": "ABA Top3 里共出现 {n} 个 ASIN。它们只是该词上点击最多的 listing，不自动等于竞品{own}。",
+  "aba_own_unverified": "——本次没有传入自家 ASIN 清单，所以没有任何一个与自家商品做过比对",
+  "aba_none": "本次取数没有 ABA。ABA 只挂在周粒度的 marketSearchQuery 行上；marketAsinQuery 行和按周合并的行都不带。",
+  "aba_cov": "ABA 覆盖 {t} 行周度市场数据中的 {r} 行（{q} 个搜索词，{w} 周）。",
+  "aba_band_t": "按 ABA 排名区间", "aba_asin_t": "这些词上点击最多的 ASIN",
+  "h_aba_asin": "ASIN", "h_aba_nq": "出现词数", "h_aba_cs": "最高点击份额", "h_aba_own": "是自家吗",
+  "aba_own_yes": "自家", "aba_own_no": "非自家", "aba_own_unknown": "未核实",
   "at_glance": "一眼看懂", "look_next": "接下来看哪里", "open": "打开",
   "s_purch": "购买份额 · {c} 个搜索词共 {b} 笔购买中占 <b>{a}</b>",
   "s_click": "点击份额 · 曝光份额为 <b>{a}</b>",
@@ -225,6 +251,19 @@ UI = {
  },
  "ja": {
   "overview": "概要", "funnel": "ファネル", "searches": "検索語", "ads": "広告と商品", "actions": "アクション", "notes": "注記",
+  "aba_eyebrow": "市場需要", "aba_h": "これらの検索クエリに対する市場の需要",
+  "aba_band": "ABA順位帯", "aba_q": "クエリ数", "aba_mcvr": "市場転換率",
+  "aba_impr": "自社インプレッション", "aba_clk": "自社クリック", "aba_pur": "自社注文",
+  "aba_cvr": "自社転換率", "aba_share": "自社購入シェア",
+  "aba_trend": "需要の方向：上昇 {up}、下降 {down}、横ばい {stable}（順位の数値が小さいほど検索が増えています）。",
+  "aba_conc": "上位3商品のクリックシェア中央値 {v}% —— {q} クエリ中 {n} 件は3商品で半分以上を占有。",
+  "aba_own": "ABA上位3に登場したASINは {n} 件。これらは当該クエリで最もクリックされた商品であり、自動的に競合とは限りません{own}。",
+  "aba_own_unverified": "（自社ASINリストが渡されていないため、自社商品との照合は行われていません）",
+  "aba_none": "今回の取得にABAはありません。ABAは週次のmarketSearchQuery行にのみ付与されます。",
+  "aba_cov": "ABAは週次市場データ {t} 行のうち {r} 行（{q} クエリ、{w} 週）をカバー。",
+  "aba_band_t": "ABA順位帯別", "aba_asin_t": "これらのクエリで最もクリックされたASIN",
+  "h_aba_asin": "ASIN", "h_aba_nq": "出現クエリ数", "h_aba_cs": "最高クリックシェア", "h_aba_own": "自社商品か",
+  "aba_own_yes": "自社", "aba_own_no": "自社以外", "aba_own_unknown": "未確認",
   "at_glance": "ひと目でわかるポイント", "look_next": "次に見るところ", "open": "開く",
   "s_purch": "購入シェア · {c} 検索語の購入 {b} 件のうち <b>{a}</b>",
   "s_click": "クリックシェア · インプレッションシェアは <b>{a}</b>",
@@ -315,6 +354,12 @@ def esc(s):
 
 def pct(v, d=1):
     return "-" if v is None else f"{v * 100:.{d}f}%"
+
+
+def pct_raw(v, d=2):
+    """For values that are ALREADY 0-100 (every ABA share, and the rates aba_section computes).
+    Using pct() on them would multiply by 100 a second time."""
+    return "-" if v is None else f"{float(v):.{d}f}%"
 
 
 def num(v):
@@ -786,7 +831,7 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')hide()});window.addE
 """
 
 
-def render_body(s, n, brand, lang, ads=None, baseline=None, products=None, store_ads=None, names=None, csv_path=None, seg_ads=None, plan=None):
+def render_body(s, n, brand, lang, open_lang="en", ads=None, baseline=None, products=None, store_ads=None, names=None, csv_path=None, seg_ads=None, plan=None):
     T = UI[lang]
     _L["lang"] = lang
     pos = s.get("store_position") or {}
@@ -857,6 +902,45 @@ def render_body(s, n, brand, lang, ads=None, baseline=None, products=None, store
         sx += section(T["g_title"], table([T["h_search"], (T["h_vol"], "volume"), (T["h_ishare"], "impr_share"), (T["h_price"], "price"),
                                            (T["h_ads_today"], "roas"), T["h_today"]], rows, nums=(1, 2, 3, 4)),
                       tk.get("gaps") or T["g_note"].format(n=g["count"]), tip="gaps")
+    # ABA: the same figures the markdown carries, so both deliverables agree (reports.md)
+    aba = s.get("aba") or {}
+    ab = ""
+    if aba.get("status") == "INCLUDED":
+        head = [T["aba_band"], (T["aba_q"], "volume"), (T["aba_mcvr"], "cvr"), (T["aba_impr"], "volume"),
+                (T["aba_clk"], "volume"), (T["aba_pur"], "volume"), (T["aba_cvr"], "cvr"), (T["aba_share"], "share")]
+        brows = [[b["band"], num(b["queries"]), pct_raw(b["market_cvr"]), num(b["brand_impressions"]),
+                  num(b["brand_clicks"]), num(b["brand_purchases"]), pct_raw(b["brand_cvr"]),
+                  pct_raw(b["purchase_share"])] for b in aba.get("bands") or []]
+        if brows:
+            ab += section(T["aba_band_t"], table(head, brows, nums=(1, 2, 3, 4, 5, 6, 7)),
+                          aba.get("coverage_note") or T["aba_cov"].format(
+                              r=aba.get("rows_with_aba", 0), t=aba.get("rows_total", 0),
+                              q=aba.get("queries_with_aba", 0), w=len(aba.get("weeks") or [])))
+        tr = aba.get("rank_trend") or {}
+        cc = aba.get("concentration") or {}
+        bits = []
+        if tr:
+            bits.append(T["aba_trend"].format(up=tr.get("up", 0), down=tr.get("down", 0), stable=tr.get("stable", 0)))
+        if cc:
+            bits.append(T["aba_conc"].format(v=cc.get("median_top3_click_share"),
+                                             n=cc.get("queries_over_50pct", 0), q=cc.get("queries", 0)))
+        ta = aba.get("top_asins") or {}
+        if ta.get("rows"):
+            own_lab = {True: T["aba_own_yes"], False: T["aba_own_no"], None: T["aba_own_unknown"]}
+            arows = [[r["asin"], num(r["queries"]), pct_raw(r["max_click_share"]),
+                      own_lab.get(r.get("is_own_asin"), T["aba_own_unknown"])] for r in ta["rows"][:10]]
+            note = T["aba_own"].format(n=len(ta["rows"]),
+                                       own="" if ta.get("own_asin_list_given") else T["aba_own_unverified"])
+            ab += section(T["aba_asin_t"], table([T["h_aba_asin"], (T["h_aba_nq"], "volume"),
+                                                  (T["h_aba_cs"], "share"), T["h_aba_own"]],
+                                                 arows, nums=(1, 2)), note)
+        if bits:
+            ab = f'<p class="section-sub">{esc(" ".join(bits))}</p>' + ab
+    elif aba.get("status") in ("NOT_RETURNED", "NOT_REQUESTED"):
+        ab = f'<p class="section-sub">{esc(T["aba_none"])}</p>'
+    if ab:
+        sx += hero(T["aba_eyebrow"], T["aba_h"]) + ab
+
     searches = hero(T["s_eyebrow"], T["s_h"]) + sx
 
     ax = ""
@@ -913,20 +997,23 @@ def render_body(s, n, brand, lang, ads=None, baseline=None, products=None, store
     tabs = [("overview", overview), ("funnel", funnel), ("searches", searches), ("ads", ads_tab), ("actions", actions), ("notes", notes)]
     foot = f'{esc(title)} · {esc(store)} · {esc(period)} · {esc(T["data"])}: {esc(src)}'
     panels = "".join(f'<section class="tabpanel" data-tab="{k}" role="tabpanel">{b}<div class="footer">{foot}</div></section>' for k, b in tabs if b)
-    return f'<div class="lang-root" data-lang="{lang}"{"" if lang == "en" else " hidden"}>{panels}</div>', [k for k, b in tabs if b]
+    return f'<div class="lang-root" data-lang="{lang}"{"" if lang == open_lang else " hidden"}>{panels}</div>', [k for k, b in tabs if b]
 
 
-def render_health(s, n, brand, ads=None, baseline=None, products=None, store_ads=None, names=None, csv_path=None, seg_ads=None, plan=None):
+def render_health(s, n, brand, ads=None, baseline=None, products=None, store_ads=None, names=None, csv_path=None,
+                  seg_ads=None, plan=None, open_lang="en"):
+    """open_lang: the language the page opens in. The other two stay available in the switcher."""
     bodies, tab_keys = [], None
     for code, _ in LANGS:
-        b, keys = render_body(s, narrative_for(n, code), brand, code, ads, baseline, products, store_ads, names, csv_path, seg_ads, plan)
+        b, keys = render_body(s, narrative_for(n, code), brand, code, open_lang, ads, baseline, products, store_ads,
+                              names, csv_path, seg_ads, plan)
         bodies.append(b)
         tab_keys = tab_keys or keys
     title, store = n.get("title", "SQP Audit"), n.get("store", "")
-    T = UI["en"]
+    T = UI[open_lang]
     tabbar = "".join(f'<button class="tab" type="button" role="tab" data-tab="{k}">{esc(T[k])}</button>'
                      for k in ["overview", "funnel", "searches", "ads", "actions", "notes"])
-    langs = "".join(f'<button class="lang-btn" type="button" data-lang="{c}" aria-pressed="{str(c == "en").lower()}">{l}</button>' for c, l in LANGS)
+    langs = "".join(f'<button class="lang-btn" type="button" data-lang="{c}" aria-pressed="{str(c == open_lang).lower()}">{l}</button>' for c, l in LANGS)
     brand_name = f"SparkX · {title}" if brand == "sparkx" else f"{store} · {title}"
     labels = json.dumps({c: {k: UI[c][k] for k in ("overview", "funnel", "searches", "ads", "actions", "notes", "print", "dark", "light")}
                          for c, _ in LANGS}, ensure_ascii=False)
@@ -935,7 +1022,8 @@ def render_health(s, n, brand, ads=None, baseline=None, products=None, store_ads
         fn = (store.split("·")[0].strip().lower().replace(" ", "_") or "store") + "_sqp_searches.csv"
         csv_data = (f'<script type="text/csv" id="sqp-csv" data-name="{esc(fn)}">'
                     + open(csv_path, encoding="utf-8").read().replace("</", "<\\/") + "</script>")
-    return f"""<!doctype html><html lang="en" data-theme="light"><head><meta charset="utf-8">
+    js = JS.replace("let lang='en'", "let lang='" + open_lang + "'")
+    return f"""<!doctype html><html lang="{open_lang}" data-theme="light"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>{esc(title)} · {esc(store)}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600&family=Sora:wght@400;500&display=swap" rel="stylesheet">
@@ -944,7 +1032,205 @@ def render_health(s, n, brand, ads=None, baseline=None, products=None, store_ads
 <div class="top-actions"><div class="lang-switch" role="group" aria-label="Language">{langs}</div>
 <button class="btn-ghost" id="themeBtn" type="button">☾ Dark</button><button class="btn-ghost solid" id="printBtn" type="button">Print / PDF</button></div></div>
 <nav class="tabbar" role="tablist">{tabbar}</nav></header>
-<main>{"".join(bodies)}</main><div id="tip" role="tooltip"></div>{csv_data}<script type="application/json" id="ui-labels">{labels}</script><script>{JS}</script></body></html>"""
+<main>{"".join(bodies)}</main><div id="tip" role="tooltip"></div>{csv_data}<script type="application/json" id="ui-labels">{labels}</script><script>{js}</script></body></html>"""
+
+
+# --------------------------------------------------------------- markdown
+MD_L = {
+ "en": {"period": "Period", "store": "Store", "verdict": "Verdict", "position": "Where the store stands",
+        "metric": "Metric", "you": "You", "market": "Market", "share": "Your share",
+        "impr": "Impressions", "clicks": "Clicks", "purch": "Purchases", "cvr": "Conversion (purchases / clicks)",
+        "searches": "Searches covered", "with_purch": "Searches with a purchase of yours",
+        "leaks": "Where the orders go", "stage": "Stage", "orders": "Orders lost", "basis": "Basis",
+        "conv_stage": "After the click (conversion)", "click_stage": "Before the click",
+        "conv_basis": "at the market conversion rate (upper bound)",
+        "click_basis": "against the store own median CTR index, not the market CTR",
+        "top10": "The top 10 searches carry {pct:.0f}% of the loss.",
+        "groups": "Searches by group", "group": "Group", "n": "Searches", "sh": "Share of your purchases",
+        "g_fix_or_cut": "Fix or cut", "g_defend": "Defend", "g_fix_listing_risk": "Listing at risk",
+        "g_insufficient_sample": "Insufficient sample (listed, never dropped)",
+        "actions": "Actions", "action": "Action", "why": "Why", "owner": "Owner", "impact": "At stake",
+        "where": "Where", "measure": "How we check",
+        "aba": "Market demand (ABA)", "aba_band": "ABA rank band", "aba_q": "Searches",
+        "aba_mcvr": "Market conversion", "aba_impr": "Your impressions", "aba_clk": "Your clicks",
+        "aba_pur": "Your orders", "aba_cvr": "Your conversion", "aba_share": "Your purchase share",
+        "aba_trend": "Demand direction: {up} rising, {down} falling, {stable} flat (a rank getting smaller means the search got more popular).",
+        "aba_conc": "Median top-3 click share {v}% - {n} of {q} searches are more than half owned by three listings.",
+        "aba_own": "ABA top-3 ASINs seen: {n}. They are the most-clicked listings on the search, not automatically competitors{own}.",
+        "aba_own_unverified": " - no own-ASIN list was passed, so none of them has been checked against your own catalogue",
+        "aba_none": "No ABA columns in this pull. ABA is attached to weekly marketSearchQuery rows only; marketAsinQuery rows and aggregated rows never carry it.",
+        "aba_cov": "ABA covers {r} of {t} weekly market rows ({q} searches, {w} weeks).",
+        "limits": "What this report cannot see",
+        "src": "Computed by sqp_calc.py; every figure matches sqp_summary.json."},
+ "zh": {"period": "周期", "store": "店铺", "verdict": "结论", "position": "店铺在市场的位置",
+        "metric": "指标", "you": "本店", "market": "市场", "share": "本店占比",
+        "impr": "曝光", "clicks": "点击", "purch": "购买", "cvr": "转化率（购买 / 点击）",
+        "searches": "覆盖的搜索词", "with_purch": "出过单的搜索词",
+        "leaks": "订单丢在哪一环", "stage": "环节", "orders": "丢失订单", "basis": "口径",
+        "conv_stage": "点击之后（转化环节）", "click_stage": "点击之前",
+        "conv_basis": "按市场转化率折算，是上限",
+        "click_basis": "对比店铺自身 CTR 中位数，不是对比市场 CTR",
+        "top10": "前 10 个搜索词占全部流失的 {pct:.0f}%。",
+        "groups": "搜索词分组", "group": "分组", "n": "词数", "sh": "占本店购买",
+        "g_fix_or_cut": "修或砍", "g_defend": "守住", "g_fix_listing_risk": "页面有风险",
+        "g_insufficient_sample": "样本不足（照常列出，不丢弃）",
+        "actions": "行动项", "action": "动作", "why": "为什么", "owner": "负责人", "impact": "量级",
+        "where": "对象", "measure": "怎么验证",
+        "aba": "市场需求（ABA）", "aba_band": "ABA 排名区间", "aba_q": "词数",
+        "aba_mcvr": "市场转化率", "aba_impr": "我方曝光", "aba_clk": "我方点击",
+        "aba_pur": "我方订单", "aba_cvr": "我方转化率", "aba_share": "我方购买份额",
+        "aba_trend": "需求方向：{up} 个上升，{down} 个下降，{stable} 个持平（排名数字变小 = 这个词更热门了）。",
+        "aba_conc": "Top3 点击份额中位数 {v}%——{q} 个词里有 {n} 个被三个listing占去一半以上。",
+        "aba_own": "ABA Top3 里共出现 {n} 个 ASIN。它们只是该词上点击最多的listing，不自动等于竞品{own}。",
+        "aba_own_unverified": "——本次没有传入自家 ASIN 清单，所以没有任何一个与自家商品做过比对",
+        "aba_none": "本次取数没有 ABA 列。ABA 只挂在周粒度的 marketSearchQuery 行上；marketAsinQuery 行和按周合并的行都不带。",
+        "aba_cov": "ABA 覆盖 {t} 行周度市场数据中的 {r} 行（{q} 个搜索词，{w} 周）。",
+        "limits": "这份报告看不到什么",
+        "src": "由 sqp_calc.py 计算；所有数字与 sqp_summary.json 一致。"},
+ "ja": {"period": "期間", "store": "ストア", "verdict": "結論", "position": "市場における自社の位置",
+        "metric": "指標", "you": "自社", "market": "市場", "share": "自社シェア",
+        "impr": "インプレッション", "clicks": "クリック", "purch": "購入", "cvr": "転換率（購入 / クリック）",
+        "searches": "対象の検索クエリ", "with_purch": "購入が発生した検索クエリ",
+        "leaks": "注文が失われている段階", "stage": "段階", "orders": "失われた注文", "basis": "基準",
+        "conv_stage": "クリック後（転換段階）", "click_stage": "クリック前",
+        "conv_basis": "市場の転換率で換算した上限値",
+        "click_basis": "市場CTRではなく自社CTR指数の中央値との比較",
+        "top10": "上位10クエリが損失全体の {pct:.0f}% を占めます。",
+        "groups": "検索クエリのグループ", "group": "グループ", "n": "クエリ数", "sh": "自社購入に占める割合",
+        "g_fix_or_cut": "改善または停止", "g_defend": "維持", "g_fix_listing_risk": "商品ページに懸念",
+        "g_insufficient_sample": "サンプル不足（除外せず掲載）",
+        "actions": "アクション", "action": "アクション", "why": "理由", "owner": "担当", "impact": "規模",
+        "where": "対象", "measure": "確認方法",
+        "aba": "市場需要（ABA）", "aba_band": "ABA順位帯", "aba_q": "クエリ数",
+        "aba_mcvr": "市場転換率", "aba_impr": "自社インプレッション", "aba_clk": "自社クリック",
+        "aba_pur": "自社注文", "aba_cvr": "自社転換率", "aba_share": "自社購入シェア",
+        "aba_trend": "需要の方向：上昇 {up}、下降 {down}、横ばい {stable}（順位の数値が小さくなるほど検索が増えています）。",
+        "aba_conc": "上位3商品のクリックシェア中央値 {v}% —— {q} クエリ中 {n} 件は3商品で半分以上を占有。",
+        "aba_own": "ABA上位3に登場したASINは {n} 件。これらは当該クエリで最もクリックされた商品であり、自動的に競合とは限りません{own}。",
+        "aba_own_unverified": "（自社ASINリストが渡されていないため、自社商品との照合は行われていません）",
+        "aba_none": "今回の取得にABA列はありません。ABAは週次のmarketSearchQuery行にのみ付与され、marketAsinQuery行や集計行には含まれません。",
+        "aba_cov": "ABAは週次市場データ {t} 行のうち {r} 行（{q} クエリ、{w} 週）をカバーしています。",
+        "limits": "本レポートで分からないこと",
+        "src": "sqp_calc.py による算出。全ての数値は sqp_summary.json と一致します。"},
+}
+
+
+def _cell(v):
+    return str(v).replace("|", "\\|")
+
+
+def render_md(s, n, lang="en"):
+    """Markdown twin of the HTML page: the default deliverable, same numbers, no interactivity."""
+    M = MD_L.get(lang, MD_L["en"])
+    nn = narrative_for(n, lang)
+    sp = s.get("store_position") or {}
+    ff = s.get("fix_first") or {}
+    q = s.get("quadrants") or {}
+    qs = s.get("quadrant_purchase_share") or {}
+    tk = nn.get("takeaways") or {}
+    o = ["# " + nn.get("title", "SQP Audit"), ""]
+    if nn.get("store"):
+        o.append("**" + M["store"] + "**: " + str(nn["store"]) + "  ")
+    if nn.get("period"):
+        o.append("**" + M["period"] + "**: " + str(nn["period"]))
+    o += ["", "## " + M["verdict"], "", nn.get("headline", ""), ""]
+    if nn.get("subline"):
+        o += [nn["subline"], ""]
+
+    if sp:
+        def pc(v):
+            return "-" if v is None else "%.2f%%" % (v * 100)
+        o += ["## " + M["position"], "",
+              "| %s | %s | %s | %s |" % (M["metric"], M["you"], M["market"], M["share"]), "|---|---|---|---|",
+              "| %s | - | - | %s |" % (M["impr"], pc(sp.get("impression_share"))),
+              "| %s | - | - | %s |" % (M["clicks"], pc(sp.get("click_share"))),
+              "| %s | %s | %s | %s |" % (M["purch"], format(sp.get("brand_purchases") or 0, ",.0f"),
+                                         format(sp.get("market_purchases") or 0, ",.0f"),
+                                         pc(sp.get("purchase_share"))),
+              "| %s | %s | %s | x%.2f |" % (M["cvr"], pc(sp.get("cvr_brand")), pc(sp.get("cvr_market")),
+                                            sp.get("cvr_index") or 0),
+              "",
+              "%s: %s - %s: %s" % (M["searches"], format(sp.get("queries") or 0, ","),
+                                   M["with_purch"], format(sp.get("queries_with_brand_purchases") or 0, ",")),
+              ""]
+    if tk.get("funnel"):
+        o += [tk["funnel"], ""]
+
+    if ff:
+        o += ["## " + M["leaks"], "",
+              "| %s | %s | %s |" % (M["stage"], M["orders"], M["basis"]), "|---|---|---|",
+              "| %s | %.0f | %s |" % (M["conv_stage"], ff.get("lost_orders_conversion_stage") or 0, M["conv_basis"]),
+              "| %s | %.0f | %s |" % (M["click_stage"], ff.get("lost_orders_click_stage") or 0, M["click_basis"]), ""]
+        if ff.get("top10_share_of_loss"):
+            o += [M["top10"].format(pct=ff["top10_share_of_loss"] * 100), ""]
+        if tk.get("leaks"):
+            o += [tk["leaks"], ""]
+
+    if q:
+        o += ["## " + M["groups"], "", "| %s | %s | %s |" % (M["group"], M["n"], M["sh"]), "|---|---|---|"]
+        for k in ("fix_or_cut", "defend", "fix_listing_risk", "insufficient_sample"):
+            if k in q:
+                sh = qs.get(k)
+                o.append("| %s | %s | %s |" % (M["g_" + k], format(q[k], ","),
+                                               ("%.1f%%" % (sh * 100)) if sh is not None else "-"))
+        o.append("")
+        if tk.get("portfolio"):
+            o += [tk["portfolio"], ""]
+
+    aba = s.get("aba") or {}
+    if aba.get("status") == "INCLUDED":
+        o += ["## " + M["aba"], "",
+              M["aba_cov"].format(r=aba.get("rows_with_aba", 0), t=aba.get("rows_total", 0),
+                                  q=aba.get("queries_with_aba", 0), w=len(aba.get("weeks") or [])), ""]
+        if aba.get("bands"):
+            o += ["| %s | %s | %s | %s | %s | %s | %s | %s |" % (
+                      M["aba_band"], M["aba_q"], M["aba_mcvr"], M["aba_impr"], M["aba_clk"],
+                      M["aba_pur"], M["aba_cvr"], M["aba_share"]),
+                  "|---|---|---|---|---|---|---|---|"]
+            for b in aba["bands"]:
+                # same formatting as the HTML (pct_raw): the two deliverables must print
+                # the same figure, not the same number at different precision
+                f = lambda v, suf="": "-" if v is None else (("%.2f%s" % (float(v), suf)) if suf else "%s" % v)
+                o.append("| %s | %s | %s | %s | %s | %s | %s | %s |" % (
+                    b["band"], format(b["queries"], ","), f(b["market_cvr"], "%"),
+                    format(b["brand_impressions"], ","), format(b["brand_clicks"], ","),
+                    format(b["brand_purchases"], ","), f(b["brand_cvr"], "%"), f(b["purchase_share"], "%")))
+            o.append("")
+        tr = aba.get("rank_trend") or {}
+        if tr:
+            o += [M["aba_trend"].format(up=tr.get("up", 0), down=tr.get("down", 0),
+                                        stable=tr.get("stable", 0)), ""]
+        cc = aba.get("concentration") or {}
+        if cc:
+            o += [M["aba_conc"].format(v=cc.get("median_top3_click_share"),
+                                       n=cc.get("queries_over_50pct", 0), q=cc.get("queries", 0)), ""]
+        ta = aba.get("top_asins") or {}
+        if ta.get("rows"):
+            o += [M["aba_own"].format(n=len(ta["rows"]),
+                                      own="" if ta.get("own_asin_list_given") else M["aba_own_unverified"]), ""]
+    elif aba.get("status") == "NOT_RETURNED":
+        o += ["## " + M["aba"], "", M["aba_none"], ""]
+
+    acts = nn.get("actions") or []
+    if acts:
+        o += ["## " + M["actions"], "",
+              "| # | %s | %s | %s | %s | %s | %s |" % (M["action"], M["why"], M["owner"], M["impact"],
+                                                       M["where"], M["measure"]),
+              "|---|---|---|---|---|---|---|"]
+        for i, x in enumerate(acts, 1):
+            o.append("| %d | %s | %s | %s | %s | %s | %s |" % (
+                i, _cell(x.get("action", "")), _cell(x.get("why", "")), _cell(x.get("owner", "")),
+                _cell(x.get("impact", "-")), _cell(x.get("where", "-")), _cell(x.get("measure", "-"))))
+        o.append("")
+
+    lim = list(nn.get("limits") or [])
+    for extra in (s.get("notes") or []):
+        if extra not in lim:
+            lim.append(extra)
+    if lim:
+        o += ["## " + M["limits"], ""] + ["- " + str(x) for x in lim] + [""]
+    o += ["---", "", M["src"]]
+    return "\n".join(o) + "\n"
 
 
 def main():
@@ -953,7 +1239,11 @@ def main():
     ap.add_argument("--narrative", required=True)
     ap.add_argument("--template", default="health", choices=["health"])
     ap.add_argument("--brand", default="sparkx", choices=["sparkx", "none"])
-    ap.add_argument("--out", default="sqp_report.html")
+    ap.add_argument("--out", default=".",
+                    help="output DIRECTORY: writes sqp_report.md (the default deliverable) and sqp_report.html. "
+                         "A path ending in .html or .md writes only that one file.")
+    ap.add_argument("--lang", default="en", choices=[c for c, _ in LANGS],
+                    help="language the report is written and opened in; must match the narrative you wrote")
     ap.add_argument("--ads", help="JSON rows from get_ads_perf factEntity=searchTerm for the same weeks")
     ap.add_argument("--baseline-roas", type=float, help="store ROAS for the same weeks and ad type")
     ap.add_argument("--products", help="JSON rows: parent_asin, name, TotalSalesAmount, ROAS, children (same weeks)")
@@ -975,8 +1265,23 @@ def main():
     sa = json.load(open(a.store_ads, encoding="utf-8")) if a.store_ads else None
     nm = json.load(open(a.names, encoding="utf-8")) if a.names else None
     sg = json.load(open(a.segment_ads, encoding="utf-8")) if a.segment_ads else None
-    open(a.out, "w", encoding="utf-8").write(render_health(s, n, a.brand, load(a.ads), a.baseline_roas, load(a.products), sa, nm, a.actions_csv, sg, json.load(open(a.plan, encoding="utf-8")) if a.plan else None))
-    print(a.out)
+    plan = json.load(open(a.plan, encoding="utf-8")) if a.plan else None
+    html_doc = render_health(s, n, a.brand, load(a.ads), a.baseline_roas, load(a.products), sa, nm, a.actions_csv,
+                             sg, plan, open_lang=a.lang)
+    md_doc = render_md(s, n, a.lang)
+    low = a.out.lower()
+    written = []
+    if low.endswith(".html"):
+        open(a.out, "w", encoding="utf-8").write(html_doc); written = [a.out]
+    elif low.endswith(".md"):
+        open(a.out, "w", encoding="utf-8").write(md_doc); written = [a.out]
+    else:
+        os.makedirs(a.out, exist_ok=True)
+        for name, doc in (("sqp_report.md", md_doc), ("sqp_report.html", html_doc)):
+            fp = os.path.join(a.out, name)
+            open(fp, "w", encoding="utf-8").write(doc)
+            written.append(fp)
+    print(", ".join(written))
 
 
 if __name__ == "__main__":

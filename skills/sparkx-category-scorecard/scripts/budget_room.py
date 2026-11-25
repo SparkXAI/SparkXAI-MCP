@@ -81,9 +81,19 @@ def main(argv=None):
     ap.add_argument("--acos-goal", type=float, required=True); ap.add_argument("--budget", default="same", help="same / +10%% / -10%%")
     ap.add_argument("--goal", default="sales", choices=["sales", "efficiency", "traffic"])
     ap.add_argument("--window-days", type=float, default=14, help="length of the budgetUsage window in days")
+    # The spend in --campaigns comes from its own get_ads_perf window, which is 14 days by the data
+    # contract and is NOT the budgetUsage window. Keep the two apart: dividing spend by
+    # --window-days doubles the average daily spend whenever the usage window is shorter.
+    ap.add_argument("--spend-days", type=float, default=14,
+                    help="length of the --campaigns spend window in days (default 14; independent of --window-days)")
     ap.add_argument("--min-oob-hours", type=float, default=3.0, help="capped = out of budget at least this many hours a day on average")
     ap.add_argument("--max-lift", type=float, default=0.5); ap.add_argument("--budget-floor", type=float, default=10.0)
+    # C3: an absolute floor alone never fires on a small account, so the gate is the SMALLER of
+    # --min-lower-spend and --min-lower-share of the window's total ad spend. --min-lower-spend 0
+    # turns the absolute floor off; --min-lower-share 0 keeps the old absolute-only behaviour.
     ap.add_argument("--min-lower-spend", type=float, default=2000)
+    ap.add_argument("--min-lower-share", type=float, default=0.01,
+                    help="a campaign is big enough to act on at this share of the window's total ad spend (default 1%%)")
     ap.add_argument("--stock", help="{asin or parent: days of stock}"); ap.add_argument("--campaign-asins", help="{campaign id: [asins]}")
     ap.add_argument("--daily", help="[{campaign.campaignId_, date, Spend}] 30 days")
     ap.add_argument("--total-spend-14d", type=float, help="base for the +x%% budget (default: sum of --campaigns)")
@@ -124,8 +134,13 @@ def main(argv=None):
     tot14 = a.total_spend_14d or sum(fnum(g(c, "Spend")) or 0 for c in camps)
     pct = 0.0 if a.budget.strip().lower() == "same" else float(a.budget.replace("%", "")) / 100
     extra_allowed = pct * tot14 / 2  # a week
+    # C3: the smaller of the absolute floor and a share of the window's spend, so the gate scales
+    # with the account. 0 on either side turns that side off; both 0 means no size gate at all.
+    _gates = [x for x in (a.min_lower_spend, a.min_lower_share * tot14) if x > 0]
+    min_lower = min(_gates) if _gates else 0.0
 
     raises, lowers, flags, kept_sb, ai_managed, not_checked, held = [], [], [], [], [], [], []
+    too_small = []   # C2: over goal, but no campaign-level budget move is possible
     for c in camps:
         aid = str(g(c, "campaign.campaignId_", "campaignId_", "amazonCampaignId", "campaignId"))  # get_ads_perf ids are Amazon ids
         e = ents.get(aid) or {}
@@ -180,19 +195,42 @@ def main(argv=None):
                         "budget unchanged; lower bids at keyword level - see sparkx-sqp-insight plan mode"})
             flags.append(row)
         elif row["type"] == "SB" and acos is not None and G + 5 < acos <= G * (1.4 if a.goal == "efficiency" else 2.0) \
-                and spend >= a.min_lower_spend:
+                and spend >= min_lower:
             row["note"] = "SB banner inside the awareness allowance: kept; check creative and landing"
             kept_sb.append(row)
-        elif (acos is not None and acos > G + 5 or (acos is None and spend >= a.min_lower_spend)) and spend >= a.min_lower_spend and old:
-            avg_daily = spend / 14
+        elif (acos is not None and acos > G + 5 or (acos is None and spend >= min_lower)) and spend >= min_lower and old:
+            avg_daily = spend / a.spend_days
             nb = max(math.ceil(min(old, avg_daily) * 0.8), math.ceil(old * 0.5), math.ceil(a.budget_floor))
             if nb < old and nb < avg_daily:   # a cut that stays above the daily spend changes nothing
                 saving = max(min(old, avg_daily) - nb, 0) * 7
                 row.update({"move": "lower", "new_daily_budget": nb, "lift": round(nb / old - 1, 2),
                             "saving_per_week": round(saving), "sales_at_risk_per_week": round(saving * roas * 0.8),
+                            "reason_code": "lower", "reason_args": {"acos": acos, "goal": G, "hrs": round(hrs, 1)},
                             "reason": (f"ACOS {acos:.1f}% > goal {G:g} + 5" if acos is not None else "spend with no sales")
                             + f", not capped ({hrs:.1f} h a day): budget to 80% of the average daily spend"})
                 lowers.append(row)
+            else:
+                # C2: the cut would be a no-op (budget already at or under the floor, or under the
+                # average daily spend). Never drop the row - this is real waste the reader must see.
+                row.update({"move": "too small to act on", "new_daily_budget": None,
+                            "reason_code": "noop_cut",
+                            "reason_args": {"acos": acos, "goal": G, "budget": old,
+                                            "floor": a.budget_floor, "avg": round(avg_daily, 2)},
+                            "reason": (f"ACOS {acos:.1f}% > goal {G:g} + 5" if acos is not None else "spend with no sales")
+                            + f": a cut is a no-op - daily budget {old:g} against the {a.budget_floor:g} floor and"
+                            + f" {avg_daily:.2f} average daily spend. Lower bids at keyword level"
+                            + " (sparkx-sqp-insight plan mode) or pause the campaign."})
+                too_small.append(row)
+        elif acos is not None and acos > G + 5 and old:
+            # C2: over goal but under the size gate - listed, never dropped
+            row.update({"move": "too small to act on", "new_daily_budget": None,
+                        "reason_code": "under_gate",
+                        "reason_args": {"acos": acos, "goal": G, "spend": round(spend),
+                                        "days": a.spend_days, "gate": round(min_lower)},
+                        "reason": f"ACOS {acos:.1f}% > goal {G:g} + 5 but only {spend:.0f} spent in"
+                                  f" {a.spend_days:g} days, under the {min_lower:.0f} a budget move needs:"
+                                  " lower bids at keyword level (sparkx-sqp-insight plan mode) or pause the campaign."})
+            too_small.append(row)
 
     # holds that keep a row in the CSV but not ready
     def hold(r):
@@ -284,6 +322,7 @@ def main(argv=None):
         tacos["after"] = round(((a.ad_spend_all_14d or tot14) + a.dsp_spend_14d + add)
                                / (a.total_sales_14d + add_sales) * 100, 2)
     plan = {"acos_goal": G, "budget_mode": a.budget, "window_days": a.window_days,
+            "spend_days": a.spend_days,
             "capped_rule": f"out of budget >= {a.min_oob_hours:g} h a day on average (>= {round(min_oob_min):,} min in {a.window_days:g} days)",
             "extra_allowed_per_week": round(extra_allowed), "savings_per_week": round(savings),
             "raise_campaigns": len(raises), "raise_ready": sum(1 for r in raises if not r["hold"]),
@@ -293,6 +332,12 @@ def main(argv=None):
             "lower_spend_now_per_week": round(sum(r["spend_14d"] for r in lowers) / 2),
             "lower_sales_at_risk_per_week": round(sum(r["sales_at_risk_per_week"] for r in ready_lowers)),
             "flag_campaigns": len(flags), "sb_kept_banner": len(kept_sb), "ai_managed_campaigns": len(ai_managed),
+            "too_small_campaigns": len(too_small), "too_small_spend": round(sum(r["spend_14d"] for r in too_small)),
+            "min_lower_used": round(min_lower), "min_lower_share": a.min_lower_share,
+            "total_spend_window": round(tot14),
+            "ai_managed_spend": round(sum(r["spend_14d"] for r in ai_managed)),
+            "total_campaigns": len(camps),
+            "candidate_campaigns": len(camps) - len(ai_managed) - len(not_checked),
             "not_checked_campaigns": len(not_checked), "not_checked_spend_14d": round(sum(r["spend_14d"] for r in not_checked)),
             "fits_extra_per_week": round(used)}
     plan["not_placed_per_week"] = round(max(room - used, 0))
@@ -304,7 +349,8 @@ def main(argv=None):
         plan["event"] = {"name": ev["name"], "start": ev["start"].isoformat(), "end": ev["end"].isoformat(),
                          "plan_only": ev["plan_only"], "in_progress": ev["in_progress"], "moves_from": fd(ev["reset"])}
     out = {"plan": plan, "raises": sorted(raises, key=lambda r: -r["extra_per_week"]), "lowers": sorted(lowers, key=lambda r: -r["spend_14d"]),
-           "flags": flags, "sb_kept": kept_sb, "ai_managed": ai_managed, "not_checked": not_checked}
+           "flags": flags, "sb_kept": kept_sb, "ai_managed": ai_managed, "not_checked": not_checked,
+           "too_small": sorted(too_small, key=lambda r: -r["spend_14d"])}
     os.makedirs(a.out, exist_ok=True)
     with open(os.path.join(a.out, "budget_room.json"), "w", encoding="utf-8") as f:
         json.dump(out, f, indent=1, default=str)

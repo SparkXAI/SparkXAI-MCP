@@ -11,7 +11,7 @@ description: >-
   For an SQP audit, market-change explanation or one-category plan use sparkx-sqp-insight;
   for a cross-category budget scorecard use sparkx-category-scorecard.
 metadata:
-  version: 1.0.0
+  version: 1.0.1
 ---
 
 # Query Market and Peer Data
@@ -66,7 +66,16 @@ at most 90 days on both.
 
 **Market search data covers Seller profiles in US, CA, UK, DE, FR, IT, ES and JP only.**
 Anywhere else, or a Vendor profile, has no SQP / ABA data at all - that is a coverage gap, not
-a finding about the store.
+a finding about the store. **Coverage also depends on the tenant being onboarded for this data**:
+a Seller profile in a covered marketplace with ad spend can still return zero rows. An empty
+result on its own does not prove which of the two it is - the weeks, the terms or the ASINs asked
+for can also come back empty - so report it as "no data returned; tenant onboarding status to be
+confirmed" and name what would settle it, rather than asserting either "not onboarded" or "no
+demand" (`references/sqp-aba.md`, "Coverage limits").
+
+**ABA columns come only from weekly `marketSearchQuery` rows.** `marketAsinQuery` carries none,
+and neither does any aggregated row, so a run that needs both the per-ASIN view and ABA makes two
+calls. The field names and the `abaStatus` flag are in `references/sqp-aba.md`.
 
 **There is no daily grain.** If the user asks about one day, or compares two days, say so and
 answer with the week containing that day as background - do not silently present a week as if

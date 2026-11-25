@@ -12,7 +12,7 @@ description: >-
   (sparkx-search-term-diagnosis), search-level or price / pack moves (sparkx-sqp-insight) or
   one number (sparkx-query-market-data).
 metadata:
-  version: 1.0.0
+  version: 1.0.1
 ---
 
 # Category Scorecard
@@ -47,6 +47,31 @@ No MCP tool of its own. It reads with five tools and hands execution to one skil
 | [`references/calendar.md`](references/calendar.md) | Step 3: the next retail event |
 | [`references/which-skill.md`](references/which-skill.md) | The question is near the edge of this skill |
 | [`references/golden-tests.md`](references/golden-tests.md) | Before changing a rule |
+
+## Output Language: Always Match the User, Never Hard-Code Chinese or English
+
+**The worked examples and output templates below are written in English, but they are structural
+illustrations, not literal text to copy verbatim.** Generate the actual report in the user's
+language, including section headers and KPI labels.
+
+When calling `get_ads_perf`, also set the `language` parameter (`zh`/`en`/`ja`) to match the
+customer's language. **`get_entity_metadata` has no `language` parameter** - localize its enum
+values using the returned `{field}Text` companion fields, or `sparkx-query-entity-metadata`'s
+[`enum-i18n.md`](../sparkx-query-entity-metadata/references/enum-i18n.md) where an enum has no
+`Text` companion.
+
+This skill has a renderer, which the other report Skills do not, so one extra rule applies:
+**the markdown report is yours to write, the HTML one-pager is the script's.** Write the markdown
+in the user's language, copying every figure from the JSON the scripts produced - never recompute
+one, never round one again. When the user wants something to share, run the renderer with
+`--lang en|zh|ja` to match; it localizes its own headings, table headers, legend, chart labels,
+plays, peer positions and the reason behind each row, and it prints amounts in the store's
+currency (`--currency` overrides what it reads from the peer rows). Accept a confirmation in any
+language.
+
+`summary.json` is written in the same language as the report, and `--lang` must match it: the
+script picks its own wording, it never translates yours. Values that come from the data - campaign
+names, category names, peer level names - stay as they are.
 
 ## Requirements
 
@@ -96,7 +121,7 @@ python3 scripts/budget_room.py --campaigns camp14.json --entities campaign_meta.
   --recent-changes oplog.json --stock stock_days.json --campaign-asins campaign_asins.json \
   --acos-goal 25 --budget "+10%" --window-days 14 \
   [--daily daily30.json] [--total-sales-14d N --tacos-goal T] --event "<name>|<start>|<end>" --today <date> --out out/
-python3 scripts/render_scorecard.py --in out/category_scorecard.json --budget-room out/budget_room.json \
+python3 scripts/render_scorecard.py --in out/category_scorecard.json --budget-room out/budget_room.json   --lang en|zh|ja \
   --summary summary.json --store "<store>" --period "<windows>" --out out/
 ```
 
@@ -126,8 +151,16 @@ event and [sparkx-promo-monitor](../sparkx-promo-monitor/SKILL.md) during it.
 
 ### Step 4 - Report
 
-The model writes only `summary.json` (headline, at most three first actions, opportunity, challenge, action table,
-not-checked line); the renderer owns layout. Order:
+**The markdown report is yours, in the user's language** - the same deliverable every other report
+Skill produces. Take every figure from `category_scorecard.json` and `budget_room.json`; copy them,
+never recompute or re-round. `summary.json` (headline, at most three first actions, opportunity,
+challenge, action table, not-checked line) is written in that same language and feeds the renderer.
+
+**The HTML one-pager is the renderer's**, for when the user wants something to present, share,
+send or print: `render_scorecard.py --lang en|zh|ja` (matching `summary.json`) also writes
+`report.md` as a check that your figures and its own agree - the HTML is the artifact you hand over.
+
+Both follow this order:
 
 1. **Headline** - the answer in one sentence with its number (<= 25 words).
 2. **Four tiles** - extra money placed, sales from it, capped campaigns under goal, campaigns over goal.

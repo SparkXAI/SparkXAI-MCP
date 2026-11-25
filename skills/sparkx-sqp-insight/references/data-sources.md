@@ -38,6 +38,65 @@ Save each response as JSON (the whole response is fine) and pass the files to th
 `sqp_calc.py --current a.json b.json`, `sqp_plan.py --sqp a.json`. Column names are mapped in
 `scripts/sqp_rows.py` only.
 
+## 1b. ABA (Brand Analytics) - the second pull
+
+SQP says how the store did on a search. ABA says **how much the market wanted that search and
+who owns it**. Both arrive on the same row, but only in one query shape.
+
+| Pull | factEntity | aggregate | Carries ABA |
+|---|---|---|---|
+| The one this skill already makes | `marketAsinQuery` | false | **No** |
+| The ABA pull | `marketSearchQuery` | false | **Yes** |
+| Any pull | either | true | **No** |
+
+So ABA needs its own call, for the terms the first pull already surfaced (fix-first rows,
+quadrant rows, the protect list), at most 1000 in `exact` mode:
+
+```
+get_market_search_perf(profileIds=[<one>], factEntity="marketSearchQuery", aggregate=false,
+                       dateStart=<same Sunday>, dateEnd=<same Saturday>,
+                       searchQueries=[...], searchQueryMatchType="exact")
+```
+
+Pass that file to `sqp_calc.py --current` alongside the first one. The ABA columns are picked up
+automatically and land in `sqp_summary.json` under `aba`.
+
+### Columns
+
+`abaRank`; `abaTop1Asin` / `abaTop2Asin` / `abaTop3Asin` each with `ClickShare` and
+`ConversionShare`; `abaTop3TotalClickShare`; `abaTop3TotalConversionShare`; `asinCount` (how many
+ASINs the term had); and a response-level `abaStatus`.
+
+### Rules, all enforced in `aba_section`
+
+1. **`abaRank` is a rank, not a volume.** It cannot be turned into a number of searches, it is
+   never summed or averaged into one, and a rank of 1,000 in one marketplace is not comparable
+   with 1,000 in another. Report it as a band and as a direction only.
+2. **A rank getting smaller means the search got more popular.** Say "demand rising"; never
+   "rank up" or "rank down" on their own - readers split on what those mean.
+3. **Shares arrive already 0-100.** Never multiply by 100 again.
+4. **The ABA top 3 are not automatically competitors.** They are whatever took the most clicks
+   on that term, which can be the store's own products or sibling variants of the same parent.
+   `aba_section` checks each top-3 ASIN against the store's own ASINs and reports `is_own_asin`;
+   with no own-ASIN list it reports `null`, which means unknown and must never be rendered as
+   "not ours". Reporting an own listing as a competitor is the mistake this prevents.
+5. **The rank can be present on a row whose other ABA columns are thin** - it falls back to the
+   top-3 table when the term-level table has no row for that term and week. Its presence is not
+   proof the term-level data was complete.
+6. ABA aligns with the SQP week **end** date; aligning on the start date is off by a week.
+7. State coverage: `aba.rows_with_aba` of `aba.rows_total`. When the pull carried no ABA at all,
+   `aba.status` is `NOT_RETURNED` and the answer says the query shape was wrong - never "the
+   market has no data".
+
+### What it answers that SQP alone cannot
+
+- Which demand tier the store actually competes in: group terms by rank band and read market
+  conversion, own clicks, own orders and own purchase share side by side. A store can look
+  acceptable overall and still hold 0.07% of the purchases in the top demand band.
+- Whether a search is rising or fading, so a weak result on a fading term is not treated as a
+  listing problem.
+- How concentrated a term is: `abaTop3TotalClickShare` is how much of it three listings own.
+
 ## 2. Exports (fallback)
 
 Use only when the user supplies files or the tool is unavailable. From SparkX SQP Analysis ->

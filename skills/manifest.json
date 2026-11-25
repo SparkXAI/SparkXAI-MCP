@@ -87,7 +87,7 @@
     },
     {
       "name": "sparkx-query-market-data",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "required": false,
       "mcp_tools": ["get_market_search_perf", "get_peer_benchmark"],
       "scopes": ["sqp:read", "benchmark:read"],
@@ -150,7 +150,7 @@
     },
     {
       "name": "sparkx-sqp-insight",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "required": false,
       "mcp_tools": ["get_market_search_perf", "get_peer_benchmark", "get_ads_perf", "get_entity_metadata", "get_operation_log", "batch_update_ads", "create_sp_sb_campaign", "save_sp_sb_ai_managed_group", "edit_sd_ai_managed_group"],
       "scopes": ["sqp:read", "benchmark:read", "amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read", "amazon_sa_campaign_edit:write", "amazon_sa_campaign_create:write", "amazon_sa_managed_group:write"],
@@ -159,7 +159,7 @@
     },
     {
       "name": "sparkx-category-scorecard",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "required": false,
       "mcp_tools": ["get_market_search_perf", "get_peer_benchmark", "get_ads_perf", "get_entity_metadata", "get_operation_log"],
       "scopes": ["sqp:read", "benchmark:read", "amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read"],

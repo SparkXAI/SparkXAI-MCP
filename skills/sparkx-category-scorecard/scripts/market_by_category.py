@@ -135,9 +135,10 @@ def main(argv=None):
     for p in a.export:
         rows += export_rows(p)
         notes.append(f"export {os.path.basename(p)}: no week labels, read as one period")
-    amap = load(a.asin_parent) if a.asin_parent else {}
-    cmap = load(a.category_map)
-    spend_rows = load(a.spend)
+    # C4: every JSON input takes either a bare value or a whole tool response
+    amap = unwrap(load(a.asin_parent))[1] if a.asin_parent else {}
+    cmap = unwrap(load(a.category_map))[1]
+    spend_rows, _, _ = unwrap(load(a.spend))
     bt = [norm(x) for x in a.brand_terms.split(",") if x.strip()]
     ct = [norm(x) for x in a.competitor_terms.split(",") if x.strip()]
 

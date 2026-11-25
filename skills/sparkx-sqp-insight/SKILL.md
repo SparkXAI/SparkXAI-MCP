@@ -2,7 +2,7 @@
 name: sparkx-sqp-insight
 description: 'Amazon SQP read against the market, two modes. Diagnose (default, read-only): SQP audit, why store / category / brand sales or share dropped, KPI story for a client, fix-first, did a change work, launch traction, branded vs generic searches, role playbooks, one-page HTML report. Plan (one category): asks goal, budget and ACOS goal, sizes bid raises and cuts, new exact keywords, top of search, budgets and paused tests plus listing tasks; writes only confirmed rows via the edit skills. Use for "SQP", "market share", "why did sales drop", "explain to my client". Not for one SQP / ABA / peer number (sparkx-query-market-data), one ASIN (sparkx-asin-deep-dive), negatives or harvesting (sparkx-search-term-diagnosis), ASIN tiers (sparkx-product-diagnosis), recaps (weekly / monthly report), all-category budgets (sparkx-category-scorecard), promotions (sparkx-promo-prep).'
 metadata:
-  version: 1.0.0
+  version: 1.0.1
 ---
 
 # SQP Insight
@@ -40,6 +40,7 @@ end by offering Plan mode for one category.
 | What | Tool | Owning skill - read its rules there |
 |---|---|---|
 | SQP + ABA rows | `get_market_search_perf` | [sparkx-query-market-data](../sparkx-query-market-data/SKILL.md) (`references/sqp-aba.md`) |
+| ABA market demand: rank band, direction, top-3 concentration | `get_market_search_perf`, a SECOND pull with `factEntity: marketSearchQuery` and `aggregate: false` - `marketAsinQuery` carries no ABA | same (`references/data-sources.md` section 1b) |
 | Brand peer benchmark | `get_peer_benchmark` | [sparkx-query-market-data](../sparkx-query-market-data/SKILL.md) (`references/peer-benchmark.md`) |
 | Sales, sessions, ad results by campaign / keyword / target / search term / placement | `get_ads_perf` | [sparkx-query-ads-performance](../sparkx-query-ads-performance/SKILL.md) |
 | Internal ids, bids, states, categories, budgets and budget usage, AI groups, placements | `get_entity_metadata` | [sparkx-query-entity-metadata](../sparkx-query-entity-metadata/SKILL.md) |
@@ -85,10 +86,31 @@ the same rules (rates from summed counts, market counted once per search and wee
 plan rules as written), label the answer "computed by hand, not by sqp_calc / sqp_plan", keep
 it to a few searches, and give the script path so it can be rerun.
 
-## Output language
+## Output Language: Always Match the User, Never Hard-Code Chinese or English
 
-Skill documentation is in English. Answer in the user's language and pass the matching
-`language` to `get_ads_perf`. Accept a confirmation in any language.
+**The worked examples and output templates below are written in English, but they are structural
+illustrations, not literal text to copy verbatim.** Generate the actual report in the user's
+language, including section headers and KPI labels.
+
+When calling `get_ads_perf`, also set the `language` parameter (`zh`/`en`/`ja`) to match the
+customer's language. **`get_entity_metadata` has no `language` parameter** - localize its enum
+values using the returned `{field}Text` companion fields, or `sparkx-query-entity-metadata`'s
+[`enum-i18n.md`](../sparkx-query-entity-metadata/references/enum-i18n.md) where an enum has no
+`Text` companion.
+
+This skill has a renderer, which the other report Skills do not, so one extra rule applies:
+**the markdown report is yours to write, the HTML one-pager is the script's.** Write the markdown
+in the user's language, copying every figure from the JSON the scripts produced - never recompute
+one, never round one again. When the user wants something to share, run the renderer with
+`--lang en|zh|ja` to match; it localizes its own headings, table headers, legend, chart labels,
+plays, peer positions and the reason behind each row, and it prints amounts in the store's
+currency (`--currency` overrides what it reads from the peer rows). Accept a confirmation in any
+language.
+
+For the HTML, the narrative's top level stays English and `i18n` carries `zh` / `ja`
+(`references/reports.md`); a language with no `i18n` block renders as English prose under
+translated labels, so fill it or do not offer that language. `--lang` also decides which language
+the page opens in.
 
 ## Principles
 

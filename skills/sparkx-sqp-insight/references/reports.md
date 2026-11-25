@@ -1,9 +1,29 @@
-# Shareable reports
+# Reports
 
-When the user wants something to present, share or send ("make a report", "something I can
-show my client", "one-pager", "summary for the meeting"), produce a one-page HTML report with
-`scripts/sqp_report.py`. It is self-contained (no external files), readable on a phone, and
-prints to PDF from any browser.
+`scripts/sqp_report.py` writes both deliverables from the same numbers.
+
+## Delivery contract
+
+Same split as every other report Skill (`sparkx-weekly-ads-report`, `sparkx-monthly-ads-report`,
+`sparkx-product-diagnosis`, `sparkx-promo-reset`): **the markdown is written by the model in the
+user's language, the HTML is produced by the script.**
+
+| Deliverable | Who writes it | When |
+|---|---|---|
+| The markdown report | **You**, in the user's language, with every figure copied from `sqp_summary.json` | **Always** - it is the answer |
+| `sqp_report.html` | `sqp_report.py --lang` | When the user wants something to present, share, send or print ("make a report", "something I can show my client", "one-pager", "for the meeting") |
+
+`--out <dir>` also writes `sqp_report.md`. That file is the script's own rendering of the same
+numbers: use it to check your markdown against, or hand it over when the user wants the file
+rather than the answer. It is not a substitute for writing the answer.
+
+Both carry the same figures in the same order: verdict, where the store stands, where the orders
+go, searches by group, actions, limits. The HTML adds the charts, the tab bar, the glossary and
+the language switch; it is self-contained, readable on a phone and prints to PDF.
+
+Name the file for the customer when handing one over:
+`sqp-<store>-<period>-<YYYYMMDD-HHmm>.html`, matching `sparkx-promo-reset`. Never paste raw HTML
+into chat.
 
 ## Template
 
@@ -14,7 +34,13 @@ drill-down). For other shapes (share change, fix-first list) answer in chat.
 ## How to build one
 
 1. Run `sqp_calc.py` (see SKILL.md Step 3). Never type numbers into the report yourself.
-2. Write `narrative.json` (schema at the top of `sqp_report.py`) in the user's language:
+2. Write `narrative.json` (schema at the top of `sqp_report.py`). **The top level is English and
+   `i18n` holds `zh` and `ja`** - that is what the script reads, so do not write another language
+   at the top level. When the user speaks Chinese or Japanese, write the English top level AND the
+   matching `i18n` block, then pass `--lang zh` / `--lang ja`: the report is written and opens in
+   that language, with the other two still in the switcher. A language with no `i18n` block falls
+   back to the English narrative under translated labels, which reads as a half-translated page -
+   so either fill it or do not offer that language. Keys:
    - `headline`: the verdict in one sentence with its two or three key numbers, taken from
      `sqp_summary.json`. It must survive being read alone on a slide.
    - `subline`: one sentence of "why", no new numbers.
@@ -69,13 +95,17 @@ drill-down). For other shapes (share change, fix-first list) answer in chat.
      well above the others is an event week: label it, or move the window.
    Skip any part whose data is missing; the page drops that section.
 4. Render: `python sqp_report.py --summary sqp_summary.json --narrative narrative.json
-   --template health [--ads ads.json --baseline-roas 5.07] [--products products.json]
+   --template health --lang en|zh|ja [--ads ads.json --baseline-roas 5.07] [--products products.json]
    [--store-ads store_ads.json] [--names names.json] [--actions-csv sqp_actions.csv] [--plan plan.json]
-   --out <store>_sqp_health_<date>.html`. A worked narrative is in
-   `example-narrative-health.json` (synthetic numbers; replace `{store}` with the store name)
-5. Check before handing over: open it (or screenshot it) and confirm every number in the
-   headline, takeaways and actions appears in `sqp_summary.json`; no chart label is cut off.
-6. Deliver the file. In chat, one line on what it shows and one on what to do with it.
+   --out out/`. `--out` is a directory and writes `sqp_report.md` + `sqp_report.html`; a path ending
+   in `.md` or `.html` writes only that one file. `--lang` must match the narrative language you
+   wrote. A worked narrative is in `example-narrative-health.json` (synthetic numbers; replace
+   `{store}` with the store name)
+5. Check before handing over: confirm every number in the headline, takeaways and actions
+   appears in `sqp_summary.json`. For the HTML, open it (or screenshot it) and check that it opens
+   in the right language and no chart label is cut off.
+6. Deliver. Markdown by default; the HTML as well when the user wants something to show. In chat,
+   one line on what it says and one on what to do with it.
 
 ## Design
 

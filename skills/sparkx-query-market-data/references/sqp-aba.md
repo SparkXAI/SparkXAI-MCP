@@ -34,8 +34,9 @@ somewhere else: the user, the store's own search-term report, `suggestedKeyword`
 `contains` root search over terms the store already has.
 
 `aggregate: false` (default) returns one row per week. `aggregate: true` sums the weeks and
-recomputes rates from the summed counts - **aggregated rows carry no ABA columns**, so ask for
-weekly rows when the user wants the top-3 ASINs.
+recomputes rates from the summed counts - **aggregated rows carry no ABA columns**. Weekly rows
+alone are not enough either: ABA needs weekly rows AND `factEntity: marketSearchQuery`. See the
+grain table under "ABA columns" below.
 
 ⚠️ **On an aggregated row, check `weekCount` against `marketWeekCount` before quoting a share.**
 `weekCount` is how many weeks this store had own-ASIN SQP data; `marketWeekCount` is how many
@@ -113,9 +114,38 @@ evidence that nothing sold. Judge sales from the counts.
 
 ## ABA columns
 
-Attached to weekly rows: the top three ASINs on that term with each one's click share and
-conversion share, plus the top-3 totals. They answer "is this term concentrated in a few
-listings".
+### Which pulls carry them
+
+ABA is attached to **weekly `marketSearchQuery` rows only**. Ask for the wrong grain and the
+columns are simply absent - which reads like "this market has no ABA data" and is not.
+
+| `factEntity` | `aggregate` | ABA columns |
+|---|---|---|
+| `marketSearchQuery` | `false` | **Yes** |
+| `marketSearchQuery` | `true` | No - aggregated rows carry none |
+| `marketAsinQuery` | either | **No - never** |
+
+`marketAsinQuery` is the ASIN x term grain, and it carries no ABA at all. A run that needs both
+the per-ASIN view and ABA makes **two calls**: `marketAsinQuery` for the products and
+`marketSearchQuery` (weekly) for the demand side, over the same weeks.
+
+The response carries `abaStatus` at the data level (`INCLUDED` when ABA was attached). Read it
+before reporting coverage instead of inferring coverage from the rows.
+
+### The fields
+
+| Field | What it is |
+|---|---|
+| `abaRank` | ABA search frequency rank for that term and week. A **rank**, not a volume |
+| `abaTop1Asin` / `abaTop2Asin` / `abaTop3Asin` | The three most-clicked ASINs on that term |
+| `abaTop1ClickShare` / `abaTop2ClickShare` / `abaTop3ClickShare` | Each one's share of the term's clicks, already 0-100 |
+| `abaTop1ConversionShare` / `abaTop2ConversionShare` / `abaTop3ConversionShare` | Each one's share of the term's conversions, already 0-100 |
+| `abaTop3TotalClickShare` | The three together - how concentrated the term is |
+| `abaTop3TotalConversionShare` | The three together, on conversions |
+| `asinCount` | How many ASINs the term had that week (context for the shares above) |
+
+They answer "how much did the market want this search, which way is it moving, and is it owned
+by a few listings".
 
 ⚠️ **They are not automatically competitors.** The top three are whatever took the most clicks
 on that **search term**, which can include this store's own products, sibling variants of the
@@ -139,6 +169,19 @@ competitor. Reporting an own-brand ASIN as a competitor is the mistake this prev
 - At most **100 search terms per ASIN per week** are collected. Any "all terms" list is the
   top 100 per ASIN.
 - Only ASINs with recent ad spend are covered.
+- **The tenant has to be onboarded for this data, and that is a fourth condition on top of the
+  three above.** A Seller profile, in a covered marketplace, with ad spend, can still return zero
+  rows because the tenant it belongs to has no SQP / ABA ingestion. Observed in November 2026:
+  tenant 20442 returned data, while five Seller profiles under tenant 29291 across US, DE and UK
+  all returned zero rows while meeting every documented condition.
+
+  **An empty result does not by itself prove which cause applies.** The weeks, the terms or the
+  ASINs asked for can also legitimately return nothing. So when a store meets Seller + covered
+  marketplace + recent ad spend and still comes back empty on every profile tried, stop
+  re-querying and report it as **"no data returned; tenant onboarding status to be confirmed"** -
+  never as "no demand", and not as "not onboarded" either. Say what would settle it: a profile
+  under the same tenant that is known to return rows, a different week or term set on the same
+  profile, or the platform team's own ingestion status.
 - The own-ASIN roll-up to store level is a sum over the store's ASINs; it is **not** the
   platform's brand-level figure, and an ASIN counts if it appeared in any week of the window.
 - SQP purchases are attributed within 24 hours, ad orders within 7 or 14 days. Do not subtract
