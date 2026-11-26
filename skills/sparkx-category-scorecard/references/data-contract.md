@@ -55,11 +55,20 @@ explicit `asins` for the confirmed set, and complete Sunday-Saturday weeks insid
 period. SQP covers Seller profiles in US, CA, UK, DE, FR, IT, ES and JP, and only ASINs with
 recent ad spend, so partial coverage is normal.
 
-Read own purchases per click against the market's on the same rows. Recompute both from summed
-counts; never average the returned rates, and never add market counts across ASINs - the same
-term repeats across them. State the share of the confirmed scope the returned rows actually
-cover. Below roughly half, the market coordinate is not representative of the scope: say so and
-do not place the quadrant on it. A flagged low-sample row is not evidence either way.
+Read own purchases per click against the market's on the same rows, recomputing both from
+summed counts; never average the returned rates.
+
+**De-duplicate the market side by search term and week.** `marketAsinQuery` repeats a term's
+market counts once per ASIN that matched it, so summing the column double-counts. Count each
+term-week once, then sum across terms. Own-brand counts are the store's own and do sum across
+ASINs. If two rows carry different market counts for the same term and week, the market side is
+inconsistent: report that and do not place the quadrant.
+
+**Measure coverage by spend, not by ASIN count.** Coverage is the share of the confirmed
+scope's ad spend, in the same window, that belongs to ASINs with usable SQP rows. Half the
+products can be a small share of the money, and a market coordinate built on that does not
+represent the scope. Below 50% by spend, say so and do not place the quadrant. State the figure
+either way. A flagged low-sample row is not evidence in either direction.
 
 Market purchases are attributed within 24 hours and ad orders over 7 or 14 days, so the two
 sides are compared as directions, not as a subtraction.

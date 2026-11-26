@@ -162,7 +162,8 @@
       "version": "1.0.2",
       "required": false,
       "mcp_tools": ["get_peer_benchmark", "get_ads_perf", "get_entity_metadata", "get_operation_log"],
-      "scopes": ["benchmark:read", "amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read"],
+      "scopes": ["sqp:read",
+        "benchmark:read", "amazon_sa_performance_data:read", "amazon_sa_ads_configuration:read", "amazon_sa_ads_logs:read"],
       "path": "sparkx-category-scorecard",
       "description": "Read-only performance and matched brand peer ranges for one specified category or confirmed ASIN scope. Uses MCP only; no whole-store scoring or budget allocation."
     },

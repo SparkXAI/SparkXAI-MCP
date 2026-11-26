@@ -49,23 +49,40 @@ request is about what to do rather than what the numbers are. Otherwise name the
 missing and stop there. An unverified placement is the failure this gate exists for: a
 confident-looking verdict resting on an Unknown bucket or an account-level peer row.
 
+The quadrant is the only part that needs `sqp:read` and the `MCP_tool_SQP_ABA` permission.
+**Missing it skips the quadrant and nothing else** - own performance and any usable peer range
+are delivered as normal, and the report says the market axis was not accessible, which is a
+permission gap rather than a finding about demand. The same applies where SQP has no coverage:
+Vendor profiles and marketplaces outside US, CA, UK, DE, FR, IT, ES and JP have no market axis
+at all.
+
 - **x - shoppers buy vs market:** own purchases per click over the market's, from a
   `marketAsinQuery` pull for the confirmed ASINs over the same complete weeks (see the
   reference). Needs the confirmed ASIN scope; a category guess does not qualify. Line at 0.80x.
 - **y - ads vs peers:** the brand's value against the peers' median within one matched row,
   from a peer benchmark on a **verified** browse node. Account-level rows, default-node rows,
-  and nodes inferred from a BSR label or a product title do not qualify.
+  and nodes inferred from a BSR label or a product title do not qualify. **The goal picks the
+  metric** - conversion reads ROAS, consideration reads cost per click, awareness reads CPM -
+  so the comparison is decided before the row is read, never chosen from whichever number in
+  that row favours a conclusion. Lower is better for ROAS, worse for CPC and CPM; say which
+  direction is being read.
 
 |  | Ads at or better than peers' median | Ads worse than peers' median |
 |---|---|---|
 | **Buy >= 0.80x the market** | Scale | Fix ad cost |
 | **Buy < 0.80x the market** | Fix listing | Fix first |
 
+**The two axes must describe the same thing before they can be combined.** Align them first:
+the same complete weeks, and the same brand and node as the confirmed ASIN scope. Two axes that
+each have data are not a quadrant - an x built on four weeks of two products against a y built
+on one week of the brand's whole category would still land on `Scale` while describing two
+different businesses. **When they cannot be aligned, show the two readings side by side with
+their own periods and scopes, and attach no quadrant label.** There is no indicative placement.
+
 Give both coordinates, the weeks each covers, and the node the peer row came from. One scope is
 one point: say which quadrant it sits in and why; do not draw a chart of a single bubble. The
 placement reads two numbers - it is not an instruction and never authorizes a budget change,
-a bid change or any edit. Where the two axes cover different weeks or different ASIN sets, say
-so and treat the placement as indicative.
+a bid change or any edit.
 
 ## Report
 
