@@ -64,8 +64,10 @@ at all.
   and nodes inferred from a BSR label or a product title do not qualify. **The goal picks the
   metric** - conversion reads ROAS, consideration reads cost per click, awareness reads CPM -
   so the comparison is decided before the row is read, never chosen from whichever number in
-  that row favours a conclusion. Lower is better for ROAS, worse for CPC and CPM; say which
-  direction is being read.
+  that row favours a conclusion. **Each metric has its own direction, and the axis is "at or
+  better than the median" either way:** ROAS at or above the peers' median qualifies, cost per
+  click and CPM at or below it qualify. Say which metric and which direction is being read,
+  and never let a cost metric's "lower" be read as the losing side.
 
 |  | Ads at or better than peers' median | Ads worse than peers' median |
 |---|---|---|
