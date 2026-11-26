@@ -1,6 +1,6 @@
 {
   "name": "sparkx-ai-mcp",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Amazon Sponsored Ads intelligence for AI agents: query advertising data, manage AI managed groups, create SP/SB/SD campaigns and portfolios, and edit supported live ad entities via SparkX AI MCP.",
   "author": {
     "name": "SparkX AI"

@@ -276,7 +276,7 @@ If neither part turns up anything notable, write "no significant anomalies this 
 ### Step 6 · Generate Next-Week Action Recommendations (3-5 items)
 
 Auto-derive "what to do" from the data above, e.g.:
-- Found "high spend, zero orders" on an unmanaged campaign → recommend reviewing it (spent $Y, zero orders, `T` = $Z); if it is an auto / broad / phrase campaign, recommend running `sparkx-search-term-diagnosis` (if installed) to find the terms to negate. In a running managed group → name the group and its lever (target ACOS, negative-targeting switch) instead
+- Found "high spend, zero orders" on an unmanaged campaign → recommend reviewing it (spent Y, zero orders, `T` = Z, both in the store currency); if it is an auto / broad / phrase campaign, recommend running `sparkx-search-term-diagnosis` (if installed) to find the terms to negate. In a running managed group → name the group and its lever (target ACOS, negative-targeting switch) instead
 - Found "ACOS spike" → recommend investigating Campaign X, citing any human bid / budget / group-setting change from Step 4b in the same window (as correlation)
 - Found "sales-growth standout" → recommend "scale Campaign X's structure to similar campaigns"
 

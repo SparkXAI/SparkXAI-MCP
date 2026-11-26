@@ -66,7 +66,7 @@ won't enforce them, so you must. (Exact field names: `field-reference.md`.)
 ## Performance budget (按表现调预算) and budget reallocation (预算重新分配) are linked
 
 **按表现调预算** (`DYNAMIC_BUDGET`) - the value is an **increase cap on top of the current
-budget, NOT a target**. Mode `1`=percentage (`+num%`), `2`=fixed (`+$num`). **Fields by
+budget, NOT a target**. Mode `1`=percentage (`+num%`), `2`=fixed (`+num` in the store currency). **Fields by
 path:** SP/SB action space `budgetDynamicStatus`+`budgetNumType`+`budgetNum`; SD
 `budgetDynamicStatus`+`numType`+`num`; batch = per the `DYNAMIC_BUDGET` schema.
 

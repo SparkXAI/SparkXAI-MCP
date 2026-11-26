@@ -2,6 +2,18 @@
 
 本文件记录 SparkX AI MCP Skills 与配套文档的版本变化。
 
+## [1.4.1] - 2026-11-26
+
+### Changed
+
+- 发布版本 `v1.4.0` -> `v1.4.1`（Claude / Codex 插件清单）。`skills/manifest.json` 的 release 也改为 `v1.4.1`，此前一直停在 `v1.3.6`。
+- **`sparkx-sqp-insight` `1.0.0` -> `1.0.2`：改为只用 MCP、只读。** 去掉本地 Python 脚本，通过 `get_market_search_perf` 读取 SQP / ABA，`get_ads_perf` / `get_operation_log` 只作背景。诊断指定的搜索词或 ASIN（默认最近四个完整周）。**去掉计划模式**：不再测算出价、预算或首页溢价，也不再输出可直接写入的改动行；改广告请另行通过编辑类 Skill。
+- **`sparkx-category-scorecard` `1.0.0` -> `1.0.2`：改为只用 MCP、只读。** 去掉本地 Python 脚本。只看一个指定类目或一组已确认的 ASIN：自家广告表现，加上匹配的品牌同行区间（P25 / P50 / P75）。**去掉全店类目评分和预算方案。** 2×2 象限（Scale / Fix ad cost / Fix listing / Fix first）保留，但只有两根轴在同一批周、同一范围上都验证过才给出；市场轴需要 `sqp:read`，没有时报告其余部分照常给出。
+- `sparkx-query-market-data` `1.0.0` -> `1.0.1`：ABA 字段只出现在按周的 `marketSearchQuery` 行（`marketAsinQuery` 和汇总行都没有）；SQP 查不到数据时，写成「租户是否已开通待确认」，不直接判断为没有需求。
+- `sparkx-monthly-ads-report`、`sparkx-search-term-diagnosis`：指向上面两个 Skill 的说明改为新的适用范围；版本不变。
+- `sparkx-create-ai-group`、`sparkx-edit-ai-group`、`sparkx-weekly-ads-report`：`+$num`、`$Y` 这类占位符去掉 `$` 号，避免被当成环境变量；版本不变。
+- 全部 Skill 文件统一为 LF 换行，由 `.gitattributes` 约束。插件数量说明更新为 21 个 Skills。
+
 ## [1.4.0] - 2026-11-24
 
 ### Added

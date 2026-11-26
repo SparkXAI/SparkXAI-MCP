@@ -65,7 +65,7 @@ confirm the meaning first, then use the ad-type reference to pick the field.
     single campaign's daily budget cannot be set through the managed-group tools** (it's
     campaign-level - use the platform).
   - **按表现调预算 / performance (dynamic) budget** is an **increase cap on top of the
-    current budget, NOT a target** (fixed `+$num` or `+num%`); its scope depends on **预算
+    current budget, NOT a target** (fixed `+num` in the store currency, or `+num%`); its scope depends on **预算
     重新分配** (OFF = per enabled campaign; ON = whole group). See
     [`references/coupling-rules.md`](references/coupling-rules.md).
   - **预算重新分配 / budget reallocation** - a switch that also changes the scope of 按表现调预算.

@@ -66,7 +66,7 @@ won't enforce them, so you must. (Exact field names: `field-reference.md`.)
 ## Performance budget (按表现调预算) and budget reallocation (预算重新分配) are linked
 
 **按表现调预算** (`DYNAMIC_BUDGET`) - the value is an **increase cap on top of the current
-budget, NOT a target**. Mode `1`=percentage (`+num%`), `2`=fixed (`+$num`). **Fields by
+budget, NOT a target**. Mode `1`=percentage (`+num%`), `2`=fixed (`+num` in the store currency). **Fields by
 path:** SP/SB create uses `budgetDynamicStatus`+`budgetNumType`+`budgetNum`; SD
 **creation does not support this feature**. The SD edit/batch path is documented separately
 in the edit Skill; do not carry its `budgetDynamicStatus`+`numType`+`num` fields into create.
