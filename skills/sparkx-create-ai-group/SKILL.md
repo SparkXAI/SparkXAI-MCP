@@ -47,7 +47,7 @@ How to determine the ad type, in order of preference:
 > **Reads use the full signature.** Every `get_entity_metadata` call requires
 > `profileIds`, `entity`, and `userContext` -
 > `get_entity_metadata(profileIds=[<id>], entity='campaign', userContext='<why>')`.
-> The shorthand `get_entity_metadata(entity='campaign')` fails; always pass all three.
+> The shorthand `get_entity_metadata(entity='campaign')` fails; always send all three.
 
 ## Disambiguate before writing (when in doubt, ASK - don't guess)
 
@@ -103,7 +103,7 @@ confirm the meaning first, then use the ad-type reference to pick the field.
    - **Campaigns -> internal `campaignId`.** Look them up with
      `get_entity_metadata(profileIds=[...], entity='campaign', userContext='...')`.
      Each row has both `campaignId` (internal auto-increment int) and
-     `amazonCampaignId` (Amazon's long string ID). **Always pass `campaignId` into
+     `amazonCampaignId` (Amazon's long string ID). **Always send `campaignId` into
      `campaignIds`; never `amazonCampaignId`** - the Amazon ID is a ~20-digit value
      that overflows the int32 the tool expects and the call fails. The lookup also
      gives each campaign's `campaignType` (routing) and `aiGroupId` (conflict check).
@@ -179,7 +179,7 @@ confirm the meaning first, then use the ad-type reference to pick the field.
      changed), create with `aiStatus=0` and turn
      it on only after the edit is done, read back, and the user confirms - say so in the
      preview. The default-on rule applies only to a create that one call fully configures. SD
-     never needs a staged flow: pass the changed switch together with `templateId` in one
+     never needs a staged flow: send the changed switch together with `templateId` in one
      create. See [`references/template-guide.md`](references/template-guide.md) -> "Staged
      create -> edit flows".
    - **From a template**: name the template, its description and why it's set that way,
@@ -291,7 +291,7 @@ So when a user says "create the group and have it run this promo window":
 
 Two things to state up front rather than discovering mid-flow: schedules are **SP/SB only**
 (there is no SD schedule tool), and a **weekly** schedule (`timeType=2`) inherits
-`optimizeType` / `acos` / `aiPersonality` from the group - passing those on a weekly
+`optimizeType` / `acos` / `aiPersonality` from the group - sending those on a weekly
 schedule is rejected. A fixed-window schedule (`timeType=1`) carries its own values.
 
 ## Recommending a template (optional, never forced)
@@ -310,7 +310,7 @@ the matching template. Full rules: [`references/template-guide.md`](references/t
   description, and the "why" the guide gives for that template. Don't invent reasons.
 - **Always offer three choices**: use this template / pick another / set it up myself.
 - **Applying**: look the id up by exact name, read the detail (`isSystemTemplate=1` for a
-  system preset), pass the agreed `acos` explicitly, don't send `aiActionSettings`, and read
+  system preset), send the agreed `acos` explicitly, don't send `aiActionSettings`, and read
   the group back afterwards. On a new **SB** group the template's SP-only switches are turned
   off - see below.
 
@@ -320,10 +320,10 @@ A managed group **can** now be created from a platform template via `templateId`
 
 - **Read templates with `get_ai_group_template`** - no args returns the list (`searchName`
   for a fuzzy name match, `createdBy`, `page`, `pageLimit` default 50 / **max 200**, `applyFlag=1` to
-  include system presets); pass `templateId` to get one template's full detail. Note this
+  include system presets); send `templateId` to get one template's full detail. Note this
   read sits behind the **write** scope.
 - **System presets need `isSystemTemplate=1`.** Each list item carries `isSystemTemplate`
-  (1 = system preset, 0 = user template). Carry that value along: pass `isSystemTemplate=1`
+  (1 = system preset, 0 = user template). Carry that value along: send `isSystemTemplate=1`
   together with `templateId` both when reading the detail and when applying it. Without it a
   system template ID returns `Template_Not_Exist` (the error tells you to retry with
   `isSystemTemplate=1`). Omit it (or send 0) for user templates. Values other than 0/1 are
@@ -332,14 +332,14 @@ A managed group **can** now be created from a platform template via `templateId`
   (archived) can still be read, but applying it is rejected - pick an active one.
   `status` here is the template's own state (0 active / 1 paused / 2 archived), not an AI
   on/off value.
-- **Apply it** by passing `templateId` (>0) to `create_sd_ai_managed_group` or
+- **Apply it** by sending `templateId` (>0) to `create_sd_ai_managed_group` or
   `save_sp_sb_ai_managed_group`. The template supplies defaults for `acos`, `optimizeType`,
   `campaignNameSign`, `targetHarvestStatus`, `budgetRedistributeStatus`,
   `aiPersonality`, plus the action-space and automation config. For SP/SB it may also
   supply dynamic-budget settings. For SD, a template whose `budgetDynamicStatus` is
   non-zero is incompatible and the tool rejects it; choose another template or update
   that template in the platform rather than trying to override it through MCP.
-- **Anything you pass explicitly wins over the template value.** Fields you omit fall back
+- **Anything you send explicitly wins over the template value.** Fields you omit fall back
   to the template. So "use template X but with a 25% ACOS target" is one call: `templateId`
   plus `acos: 25`.
 - **You still supply the identity and membership yourself**: `profileId`,
@@ -350,7 +350,7 @@ A managed group **can** now be created from a platform template via `templateId`
   `status=1`), the call is rejected - this tool cannot carry those bindings. The error names the
   offending rules. The check runs on the **merged** rules, so there are three ways out: apply the
   template in the platform UI, pick a template whose rules 4 / 5 apply to the current campaign, or
-  switch off just that rule by passing it as `0` (`targetHarvestRuleStatus` /
+  switch off just that rule by sending it as `0` (`targetHarvestRuleStatus` /
   `negativeTargetRuleStatus`) - **the template's other rules still apply**. Confirm skipping a
   rule with the user first. Rule mode itself is no longer a reason for rejection.
 - **SP/SB template create carries the template's automation rules as-is, Rule mode
@@ -358,7 +358,7 @@ A managed group **can** now be created from a platform template via `templateId`
   `aiAutomation` is applied unchanged - a rule
   with `status=1` lands as a **Rule-mode** rule with its condition/action (e.g. the Budget Daypart
   rule 13 in system templates 12 and 13). Templates are the only way this tool writes Rule-mode
-  config. Say so in the preview ("this template sets Budget Daypart to Rule mode"). Rules you pass
+  config. Say so in the preview ("this template sets Budget Daypart to Rule mode"). Rules you send
   in `aiAutomation` (only `0`, AI mode, is accepted) **replace the template's rule of the same
   ruleType and nothing else** - the rules you did not name keep coming from the template. So
   naming one rule no longer switches the template's automation off; work out the merged result
@@ -386,7 +386,7 @@ A managed group **can** now be created from a platform template via `templateId`
   zero-fills `targetHarvestStatus`, `negativeTargetStatus` and `targetPausedAddStatus` on a normal
   create only. If the template detail has no target-optimization config, a switch you leave out is
   not forced off and the downstream default (on) applies. Read the template detail, state the
-  resulting target switches in the preview, and pass an explicit `0` for any the user wants off
+  resulting target switches in the preview, and send an explicit `0` for any the user wants off
   (your value overlays the template without replacing its action space). ⚠️ **`targetPausedAddStatus` is the exception: it is SP-only.** On an SB group the server forces it to `0` on every create and edit path, so it never lands on - do not tell an SB customer that all three switches came on.
 - **Templates are read-only through MCP.** You cannot create, edit, or delete a template,
   and you cannot save a group's settings back as one - that's platform-only. Say so rather
@@ -400,7 +400,7 @@ SB alike (template `status` is not inherited); send `0` explicitly if the user w
 
 **Target ACOS with a template.** Show the template's `acos` in the preview and ask whether to
 keep it or use the user's own target - a template's value is a generic starting point and may
-not fit the user's margin. Pass the agreed value as `acos` explicitly. This holds whether you
+not fit the user's margin. Send the agreed value as `acos` explicitly. This holds whether you
 recommended the template or the user named it.
 
 ## AI on vs off at creation
@@ -436,7 +436,7 @@ don't start": send `0` (`aiStatus` on SP/SB, `status` on SD).
 `aiPersonality` and the `aiActionSettings` switches are closed enums.
 Use only the values listed in
 [`references/field-reference.md`](references/field-reference.md) - do not invent or
-infer values. Passing an unlisted value makes the call fail, and the error comes back
+infer values. Sending an unlisted value makes the call fail, and the error comes back
 generic (no field-level hint), so validate against the dictionary **before** sending
 rather than relying on the error to tell you what was wrong. For mapping the user's
 Chinese wording to these codes (and back), use
