@@ -69,9 +69,12 @@ own-product detail. Keep requests small; narrow a truncated response rather than
   not requested, no rows returned, and partial evidence. A smaller `abaRank` is better
   relative rank, not proof that absolute demand rose. Use returned search volume to establish
   that. Shares are already percentages.
-- Amazon collects at most 100 search terms per ASIN per week. Any list is the top 100 per ASIN
-  for those weeks, so a term absent for an ASIN is not proof nobody searched it, and a set of
-  terms is never a complete market. Say "the terms returned", not "all terms".
+- The 100-term cap is about own-ASIN collection, not about the market. Amazon collects at most
+  100 search terms per ASIN per week, so the own-brand side - `marketAsinQuery` rows and the own
+  columns on `marketSearchQuery` - is the top 100 for each ASIN and week. A term missing there
+  was not collected for that ASIN; it does not mean the term has no demand, and it does not
+  bound a market read of terms you named or an ABA pull. Say "the terms returned for these
+  ASINs", not "all terms", and never turn a gap in own coverage into a finding about the market.
 - Rates are ratios, so they do not average. Read a rate from the row whose counts produced it:
   the aggregate row for a period total, the weekly row for that week. Never take the mean of
   weekly rates, and never carry a rate across a differently covered period. When only counts
