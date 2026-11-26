@@ -79,6 +79,5 @@ so and treat the placement as indicative.
 
 Do not provide a whole-store ranking, inferred category map, an unverified or multi-category
 2-by-2, budget allocation, projected TACOS, proposed execution amounts, or a write-ready
-change list. This Skill never
-writes and does not request confirmation to execute. Use the owning edit Skill only for a
+change list. This Skill never writes and does not request confirmation to execute. Use the owning edit Skill only for a
 separate, explicitly specified edit request.
