@@ -1,0 +1,8 @@
+# Skill files must keep LF line endings: the Claude plugin directory rejects
+# SKILL.md front matter with Windows line endings.
+*.md   text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml  text eol=lf
+*.py   text eol=lf
+*.png  binary
