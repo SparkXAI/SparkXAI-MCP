@@ -66,8 +66,16 @@ Use a few named candidates only, not an account-wide metadata pull. For example:
 ```
 
 Replace the identifiers and dates. **Both budget usage dates and the `budgetUsage`
-field in an explicit `select` are required for this read.** Follow pages until complete
-for the selected candidates. Use `budgetUsage.outOfBudgetMinutes` as an approximate
+field in an explicit `select` are required for this read.**
+
+**Budget usage has its own window and it is not the report's.** The dates must start no
+earlier than 30 days ago, end no later than tomorrow, and span at most 30 days. A request
+about a historical month, or any range beyond 30 days, cannot be answered here: passing the
+report dates through is refused by the service. Check recent budget usage as dated
+background instead, say which days it covers, and never present it as budget evidence for
+the older window being reported.
+
+Follow pages until complete for the selected candidates. Use `budgetUsage.outOfBudgetMinutes` as an approximate
 duration; null means not checked, not zero. If discovering currently active candidates,
 filter `campaignState` to `enabled`; do not drop a named paused campaign from a
 requested status check. Use `get_operation_log` only if change history is relevant.

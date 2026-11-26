@@ -28,13 +28,17 @@ Report in the user's language; keep tool labels, search terms, and ASINs intact.
    label it a store-wide ranking. For broad scope,
    a successful recent-spend check can avoid unnecessary SQP calls; see the reference.
 3. Honor user-specified dates for both periods. Compare only complete Sunday-Saturday
-   weeks contained in each requested range. If only the current period is given, use as
-   many consecutive complete prior weeks as are included in the current comparison, ending
-   the day before its first included week. Do not build a baseline from the originally
-   requested day count or include service-expanded boundary weeks in the comparison.
-   If either period contains no complete weeks, show covering-week context only and do
-   not report a period-over-period change. Only when neither period is supplied, default
-   to the last four complete weeks and, for a change question, the preceding four.
+   weeks contained in each requested range. **Pull a baseline only when the question is
+   about change** - a drop, a lift, a comparison, "did it work", "versus last month". A
+   question about a level in a stated period ("conversion on these five terms for Nov 1-14")
+   is answered from that period alone; a second pull there is wasted and invites a
+   comparison nobody asked for. When a change question gives only the current period, use
+   as many consecutive complete prior weeks as are included in the current comparison,
+   ending the day before its first included week. Do not build a baseline from the
+   originally requested day count or include service-expanded boundary weeks in the
+   comparison. If either period contains no complete weeks, show covering-week context only
+   and do not report a period-over-period change. Only when neither period is supplied,
+   default to the last four complete weeks and, for a change question, the preceding four.
    Show requested and analyzed dates when they differ. Respect the 90-day cap and
    coverage checks in the reference. Prefer one aggregate per term per matched period;
    use weekly rows for ABA or when the actual weekly pattern matters.
