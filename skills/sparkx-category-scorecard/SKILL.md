@@ -42,15 +42,43 @@ Default to a short Markdown report in the user's language.
    or check inventory signals for named products. Their evidence is separate from the
    category totals. Report data gaps and suggest what a human should verify next.
 
+## Quadrant placement, only when both axes are verified
+
+Offer the 2-by-2 only when **both** coordinates rest on verified data, and only when the
+request is about what to do rather than what the numbers are. Otherwise name the axis that is
+missing and stop there. An unverified placement is the failure this gate exists for: a
+confident-looking verdict resting on an Unknown bucket or an account-level peer row.
+
+- **x - shoppers buy vs market:** own purchases per click over the market's, from a
+  `marketAsinQuery` pull for the confirmed ASINs over the same complete weeks (see the
+  reference). Needs the confirmed ASIN scope; a category guess does not qualify. Line at 0.80x.
+- **y - ads vs peers:** the brand's value against the peers' median within one matched row,
+  from a peer benchmark on a **verified** browse node. Account-level rows, default-node rows,
+  and nodes inferred from a BSR label or a product title do not qualify.
+
+|  | Ads at or better than peers' median | Ads worse than peers' median |
+|---|---|---|
+| **Buy >= 0.80x the market** | Scale | Fix ad cost |
+| **Buy < 0.80x the market** | Fix listing | Fix first |
+
+Give both coordinates, the weeks each covers, and the node the peer row came from. One scope is
+one point: say which quadrant it sits in and why; do not draw a chart of a single bubble. The
+placement reads two numbers - it is not an instruction and never authorizes a budget change,
+a bid change or any edit. Where the two axes cover different weeks or different ASIN sets, say
+so and treat the placement as indicative.
+
 ## Report
 
 - **Category and scope:** store, dates, confirmed ASINs or count, and mapping gaps.
 - **Own performance:** returned metrics and optional leading ASINs within that scope.
 - **Peer comparison:** matched range and own benchmark metric, or why peers are not comparable.
+- **Quadrant:** only if both axes were verified - the quadrant, both coordinates and their
+  weeks. Otherwise one line naming the axis that could not be verified.
 - **Next check:** up to three evidence-backed observations or follow-ups. Ask no question if
   the available evidence answers the request.
 
-Do not provide a whole-store ranking, inferred category map, 2-by-2 score, budget allocation,
-projected TACOS, proposed execution amounts, or a write-ready change list. This Skill never
+Do not provide a whole-store ranking, inferred category map, an unverified or multi-category
+2-by-2, budget allocation, projected TACOS, proposed execution amounts, or a write-ready
+change list. This Skill never
 writes and does not request confirmation to execute. Use the owning edit Skill only for a
 separate, explicitly specified edit request.

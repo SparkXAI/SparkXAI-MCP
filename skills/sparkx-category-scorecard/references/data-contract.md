@@ -47,6 +47,23 @@ and do not describe a brand sitting at ACOS P25 as behind its peers. CPC and CPM
 ACOS: lower is cheaper, which is not automatically better. Name the metric, the direction
 and the level every time a percentile is quoted.
 
+## Market side of the quadrant
+
+Only for a quadrant placement, and only with a confirmed ASIN scope. Use
+`get_market_search_perf` with one authorized profile, `factEntity: "marketAsinQuery"`,
+explicit `asins` for the confirmed set, and complete Sunday-Saturday weeks inside the analyzed
+period. SQP covers Seller profiles in US, CA, UK, DE, FR, IT, ES and JP, and only ASINs with
+recent ad spend, so partial coverage is normal.
+
+Read own purchases per click against the market's on the same rows. Recompute both from summed
+counts; never average the returned rates, and never add market counts across ASINs - the same
+term repeats across them. State the share of the confirmed scope the returned rows actually
+cover. Below roughly half, the market coordinate is not representative of the scope: say so and
+do not place the quadrant on it. A flagged low-sample row is not evidence either way.
+
+Market purchases are attributed within 24 hours and ad orders over 7 or 14 days, so the two
+sides are compared as directions, not as a subtraction.
+
 ## Optional campaign check
 
 Use a few named candidates only, not an account-wide metadata pull. For example:
