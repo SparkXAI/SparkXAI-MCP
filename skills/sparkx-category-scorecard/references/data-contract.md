@@ -40,6 +40,13 @@ candidate node but does not prove it matches. `sdCategory` may help look up a kn
 node; never synthesize an ID or assume it maps from a BSR name. Never average peer
 percentiles or treat a brand-level row as a campaign benchmark.
 
+Read each percentile in its own direction. For ROAS, CTR and conversion, a higher
+percentile is better. **ACOS percentiles are already derived from reversed ROAS
+percentiles, so P25 is the good end and P75 the expensive one** - do not re-invert them,
+and do not describe a brand sitting at ACOS P25 as behind its peers. CPC and CPM read like
+ACOS: lower is cheaper, which is not automatically better. Name the metric, the direction
+and the level every time a percentile is quoted.
+
 ## Optional campaign check
 
 Use a few named candidates only, not an account-wide metadata pull. For example:

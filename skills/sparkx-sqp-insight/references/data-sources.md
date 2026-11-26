@@ -69,6 +69,18 @@ own-product detail. Keep requests small; narrow a truncated response rather than
   not requested, no rows returned, and partial evidence. A smaller `abaRank` is better
   relative rank, not proof that absolute demand rose. Use returned search volume to establish
   that. Shares are already percentages.
+- Amazon collects at most 100 search terms per ASIN per week. Any list is the top 100 per ASIN
+  for those weeks, so a term absent for an ASIN is not proof nobody searched it, and a set of
+  terms is never a complete market. Say "the terms returned", not "all terms".
+- Rates are ratios, so they do not average. Read a rate from the row whose counts produced it:
+  the aggregate row for a period total, the weekly row for that week. Never take the mean of
+  weekly rates, and never carry a rate across a differently covered period. When only counts
+  line up, state the counts.
+- Own and market click-through rates do not share a denominator: the market rate is over all
+  impressions on the term, the brand rate only over impressions the store's advertised ASINs
+  received. One is not a bar for the other. Judge click-through against the store's own usual
+  level across its terms, and say that is the comparison being made. Conversion rates do share
+  a denominator shape (purchases over clicks) and can be compared with the market directly.
 - Report permission errors as access gaps. An empty eligible pull does not confirm whether
   the tenant is onboarded. Never turn null counts or low-sample rates into zero or a verdict.
 
