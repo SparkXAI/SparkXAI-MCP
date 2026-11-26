@@ -22,27 +22,21 @@ Report in the user's language; keep tool labels, search terms, and ASINs intact.
 1. Resolve one authorized store with `get_user_authorized_context`. Use the store and scope
    already provided; only ask if several authorized stores match or none can be resolved.
    SQP covers Seller profiles in US, CA, UK, DE, FR, IT, ES and JP, subject to data coverage.
-2. Use the user's terms or ASINs first. For a broad audit, sample up to 10 actual shopper
-   queries from spend-ranked ad rows, with bounded paging if the first page is mostly
-   product-page traffic. Exclude product-page ASIN values; show the sample scope and never
-   label it a store-wide ranking. For broad scope,
-   a successful recent-spend check can avoid unnecessary SQP calls; see the reference.
-3. Honor user-specified dates for both periods. Compare only complete Sunday-Saturday
-   weeks contained in each requested range. **Pull a baseline only when the question is
-   about change** - a drop, a lift, a comparison, "did it work", "versus last month". A
-   question about a level in a stated period ("conversion on these five terms for Nov 1-14")
-   is answered from that period alone; a second pull there is wasted and invites a
-   comparison nobody asked for. When a change question gives only the current period, use
-   as many consecutive complete prior weeks as are included in the current comparison,
-   ending the day before its first included week. Do not build a baseline from the
-   originally requested day count or include service-expanded boundary weeks in the
-   comparison. If either period contains no complete weeks, show covering-week context only
-   and do not report a period-over-period change. Only when neither period is supplied,
-   default to the last four complete weeks and, for a change question, the preceding four.
-   Show requested and analyzed dates when they differ. Respect the 90-day cap and
-   coverage checks in the reference. Prefer one aggregate per term per matched period;
-   use weekly rows for ABA or when the actual weekly pattern matters.
-4. Lead with a finding, then a short table of the returned metrics, an evidence-backed next
+2. Honor user-specified windows. Work with complete Sunday-Saturday weeks contained in
+   the request; if it contains no complete week, show covering-week context only and make
+   no period-change claim. Default to the last four complete weeks when no current window
+   is given. Respect the 90-day cap in the reference.
+3. Use the user's terms or ASINs first. For a broad audit, choose 8-10 shopper queries
+   from spend-ranked ad rows; stop when the sample is sufficient. Follow the reference
+   for ASIN-like values, at most three pages, and the recent-spend check.
+4. **Read the current period first.** Reuse that result for coverage; do not make a separate
+   routine probe. Pull a baseline only for a change question. Preserve a user-specified
+   baseline; otherwise anchor the baseline on the first complete week actually included
+   in the comparable current block. A missing trailing week can shorten that block;
+   counts alone cannot identify weeks, and a gap in the middle is not a shorter continuous
+   window. Use the reference to verify the week sets before making change claims. Show the
+   requested, aligned, and usable periods when they differ.
+5. Lead with a finding, then a short table of the returned metrics, an evidence-backed next
    check, and data gaps. Give a partial result first if it is useful. Ask a single focused
    follow-up only when missing scope or evidence would change the answer.
 

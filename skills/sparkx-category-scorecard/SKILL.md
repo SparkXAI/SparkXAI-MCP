@@ -2,8 +2,9 @@
 name: sparkx-category-scorecard
 description: >-
   Compare advertising performance and available brand peer ranges for one specified
-  Amazon category or a confirmed set of ASINs. Read-only and scoped; not a whole-store
-  category ranking, budget allocation, or advertising edit.
+  Amazon category or a confirmed set of ASINs. For a broad store request, start with
+  the advertised products and propose a scope. Read-only; no whole-store category
+  ranking, budget allocation, or advertising edit.
 metadata:
   version: 1.0.2
 ---
@@ -18,10 +19,13 @@ Default to a short Markdown report in the user's language.
 
 ## Start with what can be verified
 
-1. Resolve one authorized store with `get_user_authorized_context`. Reuse the user's
-   category and any ASIN scope already confirmed. When needed, inspect relevant ASIN
-   metadata in a bounded query to propose a mapping; do not equate a BSR label, deal node,
-   or word in a product title with a verified browse-category assignment.
+1. Resolve one authorized store with `get_user_authorized_context`. Reuse any confirmed
+   category or ASIN scope. If the request is broad ("look at this store", "show all ASINs"),
+   start with [store discovery](references/data-contract.md#store-discovery-before-category-selection):
+   show spend-ranked products and candidate product groups, then ask at most one question
+   if choosing a group would help. If the user explicitly requests a catalog inventory, follow
+   the separate catalog path in the reference; do not substitute the paid-ASIN overview.
+   Do not call either overview a category scorecard until the category scope is verified.
 2. If the ASIN scope is confirmed, query aggregate ad performance for it with `get_ads_perf`;
    use the requested dates within the tool limit, or the last 14 complete store-local days
    if none were given. For a request over 90 days, report a dated, clearly partial subperiod
@@ -34,10 +38,10 @@ Default to a short Markdown report in the user's language.
    Give P25/P50/P75 with the node/level, brand, ad type, goal, and latest complete returned
    period. Show the brand's own benchmark value next to its matched peer range; keep local
    ASIN-scope ad metrics separate when their coverage differs. No valid match: finish the
-   self-performance report and explain the gap. Account/default-node data is context only
-   unless the returned node is verified as the requested category.
-   If the peer period does not match the requested dates, label any available peer row as
-   separate background; do not imply it covers the requested period.
+   self-performance report and explain the gap. If useful, a default-node row may be shown
+   separately as brand peer background, using the row's own brand value and peer range.
+   Show which complete weeks were expected, which were returned and usable, and which are
+   missing. Do not treat background data or an available subperiod as full-period evidence.
 4. Only if relevant, check a few named campaigns for budget usage or recent budget changes,
    or check inventory signals for named products. Their evidence is separate from the
    category totals. Report data gaps and suggest what a human should verify next.
@@ -89,12 +93,17 @@ a bid change or any edit.
 ## Report
 
 - **Category and scope:** store, dates, confirmed ASINs or count, and mapping gaps.
+  In discovery mode, label store totals, sampled products, and candidate groups separately;
+  use "read N unique ASINs" unless catalog completeness is established.
 - **Own performance:** returned metrics and optional leading ASINs within that scope.
 - **Peer comparison:** matched range and own benchmark metric, or why peers are not comparable.
+  Label default-node comparisons as brand background with their own scope and dates.
 - **Quadrant:** only if both axes were verified - the quadrant, both coordinates and their
   weeks. Otherwise one line naming the axis that could not be verified.
-- **Next check:** up to three evidence-backed observations or follow-ups. Ask no question if
-  the available evidence answers the request.
+- **Next check:** up to three evidence-backed observations or follow-ups. A brand peer gap
+  is not a diagnosis of one campaign; a low product ACOS is not a reason on its own to raise
+  budget. Check the relevant ad setup, sales sample, stock, or scope before recommending
+  further investigation. Ask no question if the available evidence answers the request.
 
 Do not provide a whole-store ranking, inferred category map, an unverified or multi-category
 2-by-2, budget allocation, projected TACOS, proposed execution amounts, or a write-ready
